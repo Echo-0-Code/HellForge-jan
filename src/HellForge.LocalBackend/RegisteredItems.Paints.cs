@@ -70,26 +70,53 @@ public sealed partial class RegisteredItems
     // The paints offered on a weapon of the plan, for mods' patterns copying one of them.
     static IEnumerable<uint> PaintedOffering(uint paint, IReadOnlyList<uint> painted) => GamePaints.Contains(paint) ? painted : [];
 
-    // Each weapon's paint children, at the end of its run (the client links a child to the run before it).
-    static void AddPaints(JsonArray catalogue, IReadOnlyList<uint> weapons)
+    // Each weapon's paint children, at the end of its run (the client links a child to the run before it). A support
+    // weapon is its stratagem's child: the client links an entry whose parent differs from the one before to the entry
+    // right before it (0x136EC00), so its paints follow it, and only where it ends its stratagem's run.
+    void AddPaints(JsonArray catalogue, IReadOnlyList<uint> weapons)
     {
         if (weapons.Count == 0) return;
         var known = catalogue.Select(i => Id(i, "mixId")).ToHashSet();
         var index = new CatalogueIndex(catalogue);
         var (runEnd, _) = Places(catalogue);
+        var supports = SupportPlaces(catalogue, runEnd);
         List<(int After, JsonObject Entry)> inserts = [];
-        foreach (var weapon in weapons.Where(runEnd.ContainsKey))
-            foreach (var paint in GamePaints)
-            {
-                var mixId = WeaponChild(paint, weapon);
-                if (!index.ChildOfItem.TryGetValue(paint, out var template) || !known.Add(mixId)) continue;
-                var child = template.DeepClone().AsObject();
-                child["mixId"] = mixId;
-                child["parentId"] = weapon;
-                inserts.Add((runEnd[weapon], child));
-            }
+        foreach (var weapon in weapons)
+            if (PaintPlace(weapon, runEnd, supports) is { } at)
+                foreach (var paint in GamePaints)
+                {
+                    var mixId = WeaponChild(paint, weapon);
+                    if (!index.ChildOfItem.TryGetValue(paint, out var template) || !known.Add(mixId)) continue;
+                    var child = template.DeepClone().AsObject();
+                    child["mixId"] = mixId;
+                    child["parentId"] = at.Parent;
+                    inserts.Add((at.After, child));
+                }
         foreach (var group in inserts.Select((x, n) => (x.After, x.Entry, n)).GroupBy(x => x.After).OrderByDescending(g => g.Key))
             foreach (var x in group.OrderByDescending(x => x.n)) catalogue.Insert(group.Key + 1, x.Entry);
+    }
+
+    // Where a weapon's paints go and the parent they name; null, said once, for a support weapon with items after it.
+    (int After, uint Parent)? PaintPlace(uint weapon, Dictionary<uint, int> runEnd, Dictionary<uint, (int After, uint Parent)> supports)
+    {
+        if (runEnd.TryGetValue(weapon, out var end)) return (end, weapon);
+        if (!supports.TryGetValue(weapon, out var support)) return null;
+        if (support.After >= 0) return support;
+        lock (reported)
+            if (reported.Add(weapon ^ 0x5C0A7u)) Log($"weapon {weapon} gets no paints: its stratagem has items after it.");
+        return null;
+    }
+
+    // Support weapons (a stratagem's child, progressionCategory 10) by their itemId: where they are and their mixId,
+    // After -1 when more of the stratagem's items follow.
+    static Dictionary<uint, (int After, uint Parent)> SupportPlaces(JsonArray catalogue, Dictionary<uint, int> runEnd)
+    {
+        Dictionary<uint, (int, uint)> places = [];
+        for (var i = 0; i < catalogue.Count; i++)
+            if (catalogue[i] is JsonObject entry && Id(entry, "progressionCategory") == 10 && Id(entry, "parentId") is { } parent &&
+                Id(entry, "itemId") is { } item && Id(entry, "mixId") is { } mixId)
+                places.TryAdd(item, (runEnd.GetValueOrDefault(parent) == i ? i : -1, mixId));
+        return places;
     }
 
     // Each weapon's paint package. Its 25 levels stay, so the armory's level display reads what it reads for a primary.
@@ -137,12 +164,20 @@ public sealed partial class RegisteredItems
         }
     }
 
-    // The paints of each weapon the inventory holds, each weapon's whole or none, while the game's entries hold them.
-    static void AddPaintsHeld(JsonArray held, HashSet<uint?> have, IReadOnlyList<uint> weapons, int keeps)
+    // The paints of each weapon the inventory holds, each weapon's whole or none, while the game's entries hold them. A
+    // support weapon counts as held with its stratagem; its own item is held too, as the client links its paints to it.
+    static void AddPaintsHeld(JsonArray held, HashSet<uint?> have, IReadOnlyList<uint> weapons, int keeps, Vanilla? game)
     {
-        foreach (var weapon in weapons.Where(w => have.Contains(w)))
+        foreach (var weapon in weapons)
         {
-            List<uint> paints = [.. GamePaints.Select(p => WeaponChild(p, weapon)).Where(m => !have.Contains(m))];
+            List<uint> paints = [];
+            if (!have.Contains(weapon))
+            {
+                if (game is null || !game.StratagemItems.TryGetValue(weapon, out var stratagem) || !have.Contains(stratagem) ||
+                    game.ItemChildren.GetValueOrDefault(weapon) is not [var own]) continue;
+                paints.Add(own);
+            }
+            paints.AddRange(GamePaints.Select(p => WeaponChild(p, weapon)).Where(m => !have.Contains(m)));
             if (held.Count + paints.Count > keeps) continue;
             foreach (var mixId in paints)
                 if (have.Add(mixId)) held.Add((JsonNode?)new JsonObject { ["mixId"] = mixId, ["amount"] = 1, ["isDiscovered"] = true });

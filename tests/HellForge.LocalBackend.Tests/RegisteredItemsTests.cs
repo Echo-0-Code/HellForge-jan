@@ -87,6 +87,7 @@ static class RegisteredItemsTests
 
         Patterns(file, fixtures, check);
         Paints(file, fixtures, check);
+        SupportPaints(file, fixtures, check);
 
         // A stratagem a code mod adds (stratagems.c): a copy of the Orbital Airburst Strike's item (stable id 1560416221)
         // and its child, the child's itemId being the new stable id. An entry whose base is not known yet waits.
@@ -251,6 +252,31 @@ static class RegisteredItemsTests
         var inventory = JsonNode.Parse(items.Apply("/Progression/inventory", held).GetRawText())!["items"]!.AsArray().Select(i => (uint)i!["mixId"]!).ToList();
         check(RegisteredItems.GamePaints.All(p => inventory.Contains(RegisteredItems.WeaponChild(p, Stim)) && inventory.Contains(RegisteredItems.WeaponChild(p, Copy))) &&
             inventory.Contains(RegisteredItems.WeaponChild(Tiger, Copy)), "The paints are not held with their weapons.");
+    }
+
+    // A support weapon is its stratagem's child (the M-105 Stalwart under its stratagem): its paints come right after it,
+    // children of it, and are held with it when the stratagem is. The APW-1, which its stratagem lists more after, gets none.
+    static void SupportPaints(string file, Dictionary<string, JsonElement> fixtures, Action<bool, string> check)
+    {
+        const uint Stalwart = 14345846, StalwartItem = 1978117092, StalwartStratagem = 3063635537, Amr = 2207713849;
+        File.WriteAllText(file, $$"""{"format":1,"items":[],"paintItems":[{{Stalwart}},{{Amr}}]}""");
+        var log = new List<string>();
+        var items = new RegisteredItems(file) { Source = path => fixtures.TryGetValue(path, out var body) ? body : null, Log = log.Add };
+        var entries = ((JsonArray)JsonNode.Parse(items.Apply("/Progression/items", fixtures["/Progression/items"]).GetRawText())!).OfType<JsonObject>().ToList();
+        var at = entries.FindIndex(e => (uint?)e["mixId"] == StalwartItem);
+        var paints = RegisteredItems.GamePaints.Select(p => RegisteredItems.WeaponChild(p, Stalwart)).ToList();
+        var after = entries.Skip(at + 1).Take(paints.Count).ToList();
+        check(at > 0 && after.Select(e => (uint)e["mixId"]!).ToHashSet().SetEquals(paints) && after.All(e => (uint?)e["parentId"] == StalwartItem) &&
+            (at + 1 + paints.Count == entries.Count || entries[at + 1 + paints.Count]["parentId"] == null),
+            "The Stalwart's paints are not its children right after it, before the next stratagem.");
+        check(!entries.Any(e => (uint?)e["mixId"] == RegisteredItems.WeaponChild(RegisteredItems.GamePaints[0], Amr)) && log.Any(l => l.Contains($"weapon {Amr} gets no paints")),
+            "The APW-1 got paints, or that it got none was not said.");
+        var held = JsonSerializer.SerializeToElement(new { items = new object[] { new { mixId = StalwartStratagem, amount = 1, isDiscovered = true } } });
+        var inventory = JsonNode.Parse(items.Apply("/Progression/inventory", held).GetRawText())!["items"]!.AsArray().Select(i => (uint)i!["mixId"]!).ToList();
+        check(inventory.Contains(StalwartItem) && paints.All(inventory.Contains), "The Stalwart and its paints are not held with its stratagem.");
+        var none = JsonSerializer.SerializeToElement(new { items = Array.Empty<object>() });
+        inventory = JsonNode.Parse(items.Apply("/Progression/inventory", none).GetRawText())!["items"]!.AsArray().Select(i => (uint)i!["mixId"]!).ToList();
+        check(!inventory.Contains(StalwartItem) && !inventory.Contains(paints[0]), "The Stalwart's paints are held without its stratagem.");
     }
 
     // Patterns a mod adds (patterns.c): a weapon pattern, a copy of Arctic Camo (1561483157) offered on every weapon
