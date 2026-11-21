@@ -255,7 +255,8 @@ static class RegisteredItemsTests
     }
 
     // A support weapon is its stratagem's child (the M-105 Stalwart under its stratagem): its paints come right after it,
-    // children of it, and are held with it when the stratagem is. The APW-1, which its stratagem lists more after, gets none.
+    // children of it, and are held with it when the stratagem is. The APW-1, which its stratagem lists more after, moves
+    // behind those items, still under its stratagem, and its paints follow it.
     static void SupportPaints(string file, Dictionary<string, JsonElement> fixtures, Action<bool, string> check)
     {
         const uint Stalwart = 14345846, StalwartItem = 1978117092, StalwartStratagem = 3063635537, Amr = 2207713849;
@@ -269,8 +270,15 @@ static class RegisteredItemsTests
         check(at > 0 && after.Select(e => (uint)e["mixId"]!).ToHashSet().SetEquals(paints) && after.All(e => (uint?)e["parentId"] == StalwartItem) &&
             (at + 1 + paints.Count == entries.Count || entries[at + 1 + paints.Count]["parentId"] == null),
             "The Stalwart's paints are not its children right after it, before the next stratagem.");
-        check(!entries.Any(e => (uint?)e["mixId"] == RegisteredItems.WeaponChild(RegisteredItems.GamePaints[0], Amr)) && log.Any(l => l.Contains($"weapon {Amr} gets no paints")),
-            "The APW-1 got paints, or that it got none was not said.");
+        var amr = entries.FindIndex(e => (uint?)e["itemId"] == Amr && (uint?)e["progressionCategory"] == 10);
+        var amrParent = amr < 0 ? null : (uint?)entries[amr]["parentId"];
+        var amrPaints = RegisteredItems.GamePaints.Select(p => RegisteredItems.WeaponChild(p, Amr)).ToList();
+        var amrRun = amr < 0 ? [] : entries.Skip(amr + 1).Take(amrPaints.Count).ToList();
+        check(amr > 0 && amrParent != null && entries.FindIndex(e => (uint?)e["mixId"] == amrParent) is var top && top >= 0 &&
+            entries.Skip(top + 1).Take(amr - top - 1).All(e => (uint?)e["parentId"] == amrParent) &&
+            amrRun.Select(e => (uint)e["mixId"]!).ToHashSet().SetEquals(amrPaints) && amrRun.All(e => (uint?)e["parentId"] == (uint?)entries[amr]["mixId"]) &&
+            !log.Any(l => l.Contains($"weapon {Amr} gets no paints")),
+            "The APW-1 is not last under its stratagem with its paints right after it.");
         var held = JsonSerializer.SerializeToElement(new { items = new object[] { new { mixId = StalwartStratagem, amount = 1, isDiscovered = true } } });
         var inventory = JsonNode.Parse(items.Apply("/Progression/inventory", held).GetRawText())!["items"]!.AsArray().Select(i => (uint)i!["mixId"]!).ToList();
         check(inventory.Contains(StalwartItem) && paints.All(inventory.Contains), "The Stalwart and its paints are not held with its stratagem.");

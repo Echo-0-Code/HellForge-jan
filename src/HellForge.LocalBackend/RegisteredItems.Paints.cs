@@ -78,8 +78,7 @@ public sealed partial class RegisteredItems
         if (weapons.Count == 0) return;
         var known = catalogue.Select(i => Id(i, "mixId")).ToHashSet();
         var index = new CatalogueIndex(catalogue);
-        var (runEnd, _) = Places(catalogue);
-        var supports = SupportPlaces(catalogue, runEnd);
+        var (runEnd, supports) = PlacesAfterMoves(catalogue, weapons);
         List<(int After, JsonObject Entry)> inserts = [];
         foreach (var weapon in weapons)
             if (PaintPlace(weapon, runEnd, supports) is { } at)
@@ -94,6 +93,40 @@ public sealed partial class RegisteredItems
                 }
         foreach (var group in inserts.Select((x, n) => (x.After, x.Entry, n)).GroupBy(x => x.After).OrderByDescending(g => g.Key))
             foreach (var x in group.OrderByDescending(x => x.n)) catalogue.Insert(group.Key + 1, x.Entry);
+    }
+
+    // A support weapon with more of its stratagem's items after it moves behind them, so its paints can follow it and every
+    // entry's link (0x136EC00) still finds its parent: the siblings link to the stratagem, the weapon to it through them.
+    static bool MoveSupportsLast(JsonArray catalogue, IReadOnlyList<uint> weapons, Dictionary<uint, int> runEnd,
+        Dictionary<uint, (int After, uint Parent)> supports)
+    {
+        var moved = false;
+        foreach (var weapon in weapons)
+        {
+            if (runEnd.ContainsKey(weapon) || !supports.TryGetValue(weapon, out var support) || support.After >= 0) continue;
+            var at = IndexOfMixId(catalogue, support.Parent);
+            if (at < 0 || catalogue[at] is not JsonObject entry || Id(entry, "parentId") is not { } stratagem) continue;
+            var end = Places(catalogue).RunEnd.GetValueOrDefault(stratagem, -1);
+            if (end <= at) continue;
+            catalogue.RemoveAt(at);
+            catalogue.Insert(end, entry);
+            moved = true;
+        }
+        return moved;
+    }
+
+    static (Dictionary<uint, int> RunEnd, Dictionary<uint, (int After, uint Parent)> Supports) PlacesAfterMoves(JsonArray catalogue, IReadOnlyList<uint> weapons)
+    {
+        var runEnd = Places(catalogue).RunEnd;
+        if (!MoveSupportsLast(catalogue, weapons, runEnd, SupportPlaces(catalogue, runEnd))) return (runEnd, SupportPlaces(catalogue, runEnd));
+        runEnd = Places(catalogue).RunEnd;
+        return (runEnd, SupportPlaces(catalogue, runEnd));
+    }
+
+    static int IndexOfMixId(JsonArray catalogue, uint mixId)
+    {
+        for (var i = 0; i < catalogue.Count; i++) if (Id(catalogue[i], "mixId") == mixId) return i;
+        return -1;
     }
 
     // Where a weapon's paints go and the parent they name; null, said once, for a support weapon with items after it.
