@@ -727,7 +727,7 @@ public sealed partial class RegisteredItems(string path)
                 if (have.Add(mixId)) held.Add((JsonNode?)new JsonObject { ["mixId"] = mixId, ["amount"] = 1, ["isDiscovered"] = true });
             AddMirrored(held, have, mirrored, item);
         }
-        AddPaintsHeld(held, have, current.Painted, keeps);
+        AddPaintsHeld(held, have, current.Painted, keeps, Game());
         AddPatternsHeld(held, have, current.Patterns, keeps);
     }
 
