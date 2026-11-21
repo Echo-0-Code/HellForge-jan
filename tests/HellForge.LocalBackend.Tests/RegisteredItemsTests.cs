@@ -260,7 +260,8 @@ static class RegisteredItemsTests
     static void SupportPaints(string file, Dictionary<string, JsonElement> fixtures, Action<bool, string> check)
     {
         const uint Stalwart = 14345846, StalwartItem = 1978117092, StalwartStratagem = 3063635537, Amr = 2207713849;
-        File.WriteAllText(file, $$"""{"format":1,"items":[],"paintItems":[{{Stalwart}},{{Amr}}]}""");
+        const uint Tiger = 0x7163E501, ArcticCamo = 1561483157;
+        File.WriteAllText(file, $$"""{"format":1,"items":[],"paintItems":[{{Stalwart}},{{Amr}}],"patterns":[{"mixId":{{Tiger}},"copyOf":{{ArcticCamo}},"kind":"weapon","weapons":[]}]}""");
         var log = new List<string>();
         var items = new RegisteredItems(file) { Source = path => fixtures.TryGetValue(path, out var body) ? body : null, Log = log.Add };
         var entries = ((JsonArray)JsonNode.Parse(items.Apply("/Progression/items", fixtures["/Progression/items"]).GetRawText())!).OfType<JsonObject>().ToList();
@@ -285,6 +286,13 @@ static class RegisteredItemsTests
         var none = JsonSerializer.SerializeToElement(new { items = Array.Empty<object>() });
         inventory = JsonNode.Parse(items.Apply("/Progression/inventory", none).GetRawText())!["items"]!.AsArray().Select(i => (uint)i!["mixId"]!).ToList();
         check(!inventory.Contains(StalwartItem) && !inventory.Contains(paints[0]), "The Stalwart's paints are held without its stratagem.");
+        // a mod's pattern of a game paint goes on no support weapon: the catalogue has no place for its child there
+        var packages = (JsonArray)JsonNode.Parse(items.Apply("/Progression/ProgressionPackages", fixtures["/Progression/ProgressionPackages"]).GetRawText())!;
+        var stalwartRewards = packages.OfType<JsonObject>().Where(p => (uint?)p["id32"] == RegisteredItems.PaintPackage(Stalwart))
+            .SelectMany(p => p["levels"]!.AsArray()).SelectMany(l => l!["rewards"]!.AsArray()).Select(r => (uint)r!["id32"]!).ToList();
+        check(stalwartRewards.Count == RegisteredItems.GamePaints.Length - 1 && !stalwartRewards.Contains(RegisteredItems.WeaponChild(Tiger, Stalwart)) &&
+            !entries.Any(e => (uint?)e["itemId"] == Tiger && (uint?)e["parentId"] == StalwartItem),
+            "A mod's pattern is a reward of the Stalwart's paint package, which leaves an empty customize card.");
     }
 
     // Patterns a mod adds (patterns.c): a weapon pattern, a copy of Arctic Camo (1561483157) offered on every weapon
