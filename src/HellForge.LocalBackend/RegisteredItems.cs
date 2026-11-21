@@ -316,7 +316,10 @@ public sealed partial class RegisteredItems(string path)
     // while it takes another mod's pattern.
     List<uint> WeaponsFor(ModPattern p, Vanilla? game, IReadOnlyList<Item> admitted, Dictionary<uint, int> perWeapon, int perWeaponCap, IReadOnlyList<uint> painted)
     {
-        var offering = Offering(game, p.CopyOf, admitted).Concat(PaintedOffering(p.CopyOf, painted)).Distinct().ToList();
+        // Not a support weapon: the client links a paint to its root's run, which is the stratagem's, so the catalogue
+        // has no place for the child, and a reward with no held item leaves the customize screen an empty card.
+        var offering = Offering(game, p.CopyOf, admitted).Concat(PaintedOffering(p.CopyOf, painted))
+            .Where(w => game?.StratagemItems.ContainsKey(w) != true).Distinct().ToList();
         var candidates = p.Weapons.Count == 0 ? offering : game == null ? p.Weapons : [.. p.Weapons.Where(offering.Contains)];
         foreach (var w in p.Weapons.Where(w => game != null && !offering.Contains(w)))
             ReportPattern(p, $"weapon {w} does not offer its base paint {p.CopyOf}");

@@ -417,6 +417,10 @@ On `dev`, since 0.4.0-beta.
   package rewarded items the catalogue lacked and its customize screen had empty cards. Its paints now follow it in
   the catalogue and are held with its stratagem. A support weapon its stratagem lists more items after, such as the
   APW-1, moves behind them first.
+- **A crash reopening a support weapon's customize screen.** Mods' patterns were rewards of support weapons' paint
+  packages, but the catalogue has no place for their items there, so each left an empty card. The card kept the last
+  build's item, freed by then, and about the third reopening crashed. Support weapons now take no mods' patterns, and
+  each build of a customize screen starts with an empty card list.
 - **A crash opening a weapon's customize screen.** A card left with no item or type, as can happen right after the
   Armory unloads packages, is skipped where it is drawn and sorted last, instead of crashing the game (#27).
 - **Copies of a secondary share one paint record.** Several mods' copies of one secondary, such as three of the P-11,

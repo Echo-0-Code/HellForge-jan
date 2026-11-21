@@ -181,8 +181,9 @@ be one mod, or one of them loses its layers.
 - **Weapons.** The pattern's card is in the pattern slot of each weapon it is on, a reward of the weapon's first
   mastery level as the game's first paints are. Mods' copies of a weapon offering the base take it too.
 - **Secondaries and support weapons.** The game gives them no paints. HellForge gives each one the game's 12 paints,
-  held from the start, and a paint package with them as its only rewards. So each takes a weapon pattern as a primary
-  does. Mods' copies take them too, each with a package of its own.
+  held from the start, and a paint package with them as its only rewards. So a secondary takes a weapon pattern as a
+  primary does, and so do mods' copies, each with a package of its own. A support weapon takes none: the game links a
+  paint to its stratagem, so a mod's pattern there would be an empty card.
 - **The hangar.** Ship Management's Vehicle Customization lists the Pelican, the hellpod and every vehicle, each with
   its patterns.
 - **Picks.** A pick saves as the game's patterns do and is kept across sessions. Without the mod, the weapon or vehicle
