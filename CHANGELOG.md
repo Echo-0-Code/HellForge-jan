@@ -415,7 +415,8 @@ On `dev`, since 0.4.0-beta.
 
 - **Support weapons' paints had no catalogue items.** A support weapon is its stratagem's child, so its paint
   package rewarded items the catalogue lacked and its customize screen had empty cards. Its paints now follow it in
-  the catalogue and are held with its stratagem. A support weapon its stratagem lists more items after gets none.
+  the catalogue and are held with its stratagem. A support weapon its stratagem lists more items after, such as the
+  APW-1, moves behind them first.
 - **A crash opening a weapon's customize screen.** A card left with no item or type, as can happen right after the
   Armory unloads packages, is skipped where it is drawn and sorted last, instead of crashing the game (#27).
 - **Copies of a secondary share one paint record.** Several mods' copies of one secondary, such as three of the P-11,
