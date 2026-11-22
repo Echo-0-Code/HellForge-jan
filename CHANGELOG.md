@@ -28,7 +28,8 @@ On `dev`, since 0.4.0-beta.
   the game's own call, so the pick is saved and reaches friends with the loadout
   (#30, [content](docs/modding/content.md#ammunition-of-your-own)).
 - **Feed belts and hoses of your own.** A data spec's `model` takes `ragdoll`, a game unit whose ragdoll profile the
-  model gets under its own name, so a backpack's chain unit can be a model ([models](docs/modding/models.md)).
+  model gets under its own name, so a backpack's chain unit can be a model ([models](docs/modding/models.md)). Its
+  `cullMargin` grows the model's cull boxes, so a belt stretched to the weapon stays drawn with the pack out of view.
 - **Paints on secondaries.** Every secondary, the game's and mods' copies of them, has a customize screen with the
   game's 12 paints, and takes mods' weapon patterns ([patterns](docs/modding/patterns.md#where-it-shows)). Its
   package offers the Default paint as a free unlockable, because the Armory shows CUSTOMIZE only for a package with

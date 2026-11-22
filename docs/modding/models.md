@@ -32,6 +32,7 @@ No game model is copied. This page lists what HellForge reads from the file and 
 | `physics` | a game unit whose physics (collision) the unit takes under its own name |
 | `animationsFrom` | a game unit whose animations the unit plays |
 | `ragdoll` | a game unit whose ragdoll profile the unit takes under its own name |
+| `cullMargin` | metres every cull box grows by each way (above 0, at most 50); default 0 |
 
 The file is part of the spec, so changing it rebuilds the data and changes the modlist code. HellForge writes the
 whole unit itself, so mod sync treats it as content ([data specs](data.md#data-specs)). A weapon names the unit in its
@@ -106,12 +107,16 @@ follow joints by name, so the model needs the same joints, at the same rest pose
 (`TwoPointChainComponentData`) is such a unit: the Maxigun's belt is `0x9BA9F700137C6325`, with joints `boss`,
 `chain_01` to `chain_12` and `end`. Give a belt of your own `"ragdoll"` and `"animationsFrom"` that unit.
 
+A belt is culled by its rest pose's box, at the pack. Stretched to a weapon, it vanishes once the pack is out of view.
+Give it a `"cullMargin"` of its reach, such as `1.5`.
+
 ## Limits
 
 - Each vertex is rigid on one joint or weighted on up to four. A model with weighted vertices is written in the game's
   skinned layout (four half weights), as the Recoilless Rifle's backpack straps are. Vertices are written with three UV
   sets (the first repeated when the file has fewer), as most of the game's weapons have them.
-- Cull boxes are the rest pose's. Geometry that a clip bends far outside them can be culled early.
+- Cull boxes are the rest pose's. Geometry that a clip or ragdoll moves far outside them can be culled early; grow
+  them with `cullMargin`.
 - The unit has no lights.
 - A weapon's attachments (magazine, muzzle, optic) are still its base's units, drawn at your `attach_` joints.
 

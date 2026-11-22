@@ -22,8 +22,9 @@ public static class UnitWriter
     // A mesh drawn at one LOD (Shadow: the shadow caster), placed by its joint.
     public sealed record Mesh(string Name, int Lod, bool Shadow, IReadOnlyList<Part> Parts, int Joint = 0);
     // LodSizes: where each LOD gives way to the next, as the share of the screen the unit covers (1 > a > b > ...).
+    // CullMargin: metres every cull box grows by each way, for geometry a ragdoll or clip moves far from its rest pose.
     public sealed record Model(IReadOnlyList<Joint> Joints, IReadOnlyList<Mesh> Meshes, IReadOnlyDictionary<string, ulong> Materials,
-        IReadOnlyList<double> LodSizes, ulong Bones = 0, ulong StateMachine = 0);
+        IReadOnlyList<double> LodSizes, ulong Bones = 0, ulong StateMachine = 0, double CullMargin = 0);
 
     // The LOD sizes most of the game's weapons use.
     public static readonly double[] WeaponLodSizes = [1.0, 0.486, 0.243, 0.097, 0.049];
@@ -55,7 +56,7 @@ public static class UnitWriter
         main.Section(0x34, w => WriteJoints(w, model.Joints, world));
         main.Section(0x58, w => WriteSkeletonMaps(w, maps));
         main.Section(0x5C, w => WriteLayouts(w, layouts, meshes));
-        main.Section(0x64, w => WriteMeshes(w, meshes, layouts));
+        main.Section(0x64, w => WriteMeshes(w, meshes, layouts, model.CullMargin));
         main.Section(0x70, w => WriteMaterials(w, slots, model.Materials));
         main.Section(0x60, w => w.U32((uint)meshes.Count));
         main.Patch64(0x08, model.Bones);
@@ -229,7 +230,7 @@ public static class UnitWriter
             foreach (var i in own) w.U32((uint)i);
         }
         w.Patch(table + 4 * lods, (uint)(w.Pos - at));
-        var (lo, hi) = Box(meshes.Where(m => !m.Shadow).SelectMany(m => UnitSpace(m, model)));
+        var (lo, hi) = Grow(Box(meshes.Where(m => !m.Shadow).SelectMany(m => UnitSpace(m, model))), model.CullMargin);
         foreach (var c in lo.Concat(hi)) w.F32(c);
         w.F32(Distance(lo, hi) / 2); w.U32(0); w.F32(1); w.U32(0); w.U32(uint.MaxValue);
     }
@@ -309,7 +310,7 @@ public static class UnitWriter
         w.Patch(at + 416, l.VbOffset); w.Patch(at + 420, l.VbSize); w.Patch(at + 424, l.IbOffset); w.Patch(at + 428, l.IbSize);
     }
 
-    static void WriteMeshes(Writer w, List<Mesh> meshes, List<Layout> layouts)
+    static void WriteMeshes(Writer w, List<Mesh> meshes, List<Layout> layouts, double margin)
     {
         var section = w.Pos;
         w.U32((uint)meshes.Count);
@@ -320,18 +321,18 @@ public static class UnitWriter
         {
             w.Patch(table + 4 * i, (uint)(w.Pos - section));
             var layout = layouts.FindIndex(l => l.Ranges.ContainsKey(i));
-            WriteMesh(w, meshes[i], i, layouts[layout], layout);
+            WriteMesh(w, meshes[i], i, layouts[layout], layout, margin);
         }
     }
 
-    static void WriteMesh(Writer w, Mesh mesh, int index, Layout layout, int layoutIndex)
+    static void WriteMesh(Writer w, Mesh mesh, int index, Layout layout, int layoutIndex, double margin)
     {
         var at = w.Pos;
         var materials = mesh.Parts.Select(p => p.Material).Distinct().ToList();
-        var (lo, hi) = Box(mesh.Parts.SelectMany(p => p.Vertices).Select(v => v.Position));
+        var (lo, hi) = Grow(Box(mesh.Parts.SelectMany(p => p.Vertices).Select(v => v.Position)), margin);
         w.Bytes(new byte[0x80]);
         for (var k = 0; k < 3; k++) { w.PatchF(at + 8 + 4 * k, lo[k]); w.PatchF(at + 20 + 4 * k, hi[k]); }
-        w.PatchF(at + 0x20, mesh.Parts.SelectMany(p => p.Vertices).Max(v => Distance([0, 0, 0], v.Position)));
+        w.PatchF(at + 0x20, mesh.Parts.SelectMany(p => p.Vertices).Max(v => Distance([0, 0, 0], v.Position)) + margin * Math.Sqrt(3));
         w.Patch(at + 0x24, mesh.Shadow ? ShadowMesh : RenderMesh);
         w.Patch(at + 0x28, EngineHash.Id32(mesh.Name));
         w.Patch(at + 0x2C, (uint)mesh.Joint); w.Patch(at + 0x30, (uint)mesh.Joint);
@@ -360,6 +361,9 @@ public static class UnitWriter
         foreach (var p in points) for (var k = 0; k < 3; k++) { lo[k] = Math.Min(lo[k], p[k]); hi[k] = Math.Max(hi[k], p[k]); }
         return (lo, hi);
     }
+
+    static (double[] Lo, double[] Hi) Grow((double[] Lo, double[] Hi) box, double margin) =>
+        ([.. box.Lo.Select(c => c - margin)], [.. box.Hi.Select(c => c + margin)]);
 
     static double Distance(double[] a, double[] b) => Math.Sqrt(Enumerable.Range(0, 3).Sum(k => (a[k] - b[k]) * (a[k] - b[k])));
 
