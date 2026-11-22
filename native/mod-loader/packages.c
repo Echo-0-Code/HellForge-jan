@@ -59,6 +59,10 @@ static HeldPackage g_held[PKG_MAX_HELD];
 typedef struct ModPackage { RefPackage ref; char name[96]; int session; } ModPackage;
 static ModPackage g_modPackages[PKG_MAX_HELD];
 static int g_modPackageCount;
+/* The game packages the mods' data specs patch (the plan's archive lines): known to load_package, kept apart so they
+ * never take the room of the mods' own packages, whose count the plan checks. */
+static ModPackage g_patchedPackages[PKG_MAX_HELD];
+static int g_patchedCount;
 static int g_modPackagesWanted;         /* the session ones were asked for (ModPackagesTick) */
 static int g_heldCount;
 static SRWLOCK g_packagesLock = SRWLOCK_INIT;
@@ -149,11 +153,20 @@ static int PackageResident(uint64_t id)
     return PKG_WAITING;
 }
 
-static const RefPackage* CataloguePackage(uint64_t id)
+/* A catalogue package or a mod's own. */
+static const RefPackage* OwnOrCataloguePackage(uint64_t id)
 {
     for (size_t i = 0; i < sizeof kRefPackages / sizeof kRefPackages[0]; i++) if (kRefPackages[i].id == id) return &kRefPackages[i];
     for (int i = 0; i < g_modPackageCount; i++) if (g_modPackages[i].ref.id == id) return &g_modPackages[i].ref;
     return NULL;
+}
+
+/* Any package load_package takes: the catalogue's, a mod's own, or one a mod's data spec patches. */
+static const RefPackage* CataloguePackage(uint64_t id)
+{
+    const RefPackage* known = OwnOrCataloguePackage(id);
+    for (int i = 0; known == NULL && i < g_patchedCount; i++) if (g_patchedPackages[i].ref.id == id) known = &g_patchedPackages[i].ref;
+    return known;
 }
 
 /* archive <mod id> <id hex>: a game package the mod's data spec patches. It is real (the patch was built from it) and
@@ -162,8 +175,8 @@ static int ArchivePlanLine(char** f, int n)
 {
     char* end = NULL;
     uint64_t id = n == 3 && strlen(f[2]) == 16 ? strtoull(f[2], &end, 16) : 0;
-    if (id == 0 || end == NULL || *end || CataloguePackage(id) != NULL || g_modPackageCount == PKG_MAX_HELD) return 1;
-    ModPackage* p = &g_modPackages[g_modPackageCount++];
+    if (id == 0 || end == NULL || *end || CataloguePackage(id) != NULL || g_patchedCount == PKG_MAX_HELD) return 1;
+    ModPackage* p = &g_patchedPackages[g_patchedCount++];
     snprintf(p->name, sizeof p->name, "a game package %s patches", f[1]);
     p->ref.id = id;
     p->ref.name = p->name;
@@ -181,7 +194,7 @@ static int PackagePlanLine(char** f, int n)
     uint64_t id = n == 4 && strlen(f[2]) == 16 ? strtoull(f[2], &end, 16) : 0;
     int session = n == 4 && !strcmp(f[3], "session");
     if (id == 0 || end == NULL || *end || (!session && strcmp(f[3], "request"))) return 1;
-    if (CataloguePackage(id) != NULL || g_modPackageCount == PKG_MAX_HELD) return 1; /* known already, or no room */
+    if (OwnOrCataloguePackage(id) != NULL || g_modPackageCount == PKG_MAX_HELD) return 1; /* known already, or no room */
     ModPackage* p = &g_modPackages[g_modPackageCount++];
     snprintf(p->name, sizeof p->name, "%s's package", f[1]);
     p->ref.id = id;

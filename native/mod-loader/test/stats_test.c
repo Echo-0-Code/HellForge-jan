@@ -2605,10 +2605,19 @@ static void RefsFixture(void)
     char archive[] = "archive\tmod.a\t49fd919a67a5db66", badArchive[] = "archive\tmod.a\t49fd919a", catalogueArchive[80];
     snprintf(catalogueArchive, sizeof catalogueArchive, "archive\tmod.a\t%016llx", (unsigned long long)kRefPackages[0].id);
     assert(ApiLoadPackage(mod, 0x49FD919A67A5DB66ull) == 0);
-    assert(PlanLine(archive) == 0 && PlanLine(badArchive) == 0 && PlanLine(catalogueArchive) == 0 && g_modPackageCount == 3);
+    assert(PlanLine(archive) == 0 && PlanLine(badArchive) == 0 && PlanLine(catalogueArchive) == 0 && g_modPackageCount == 2 && g_patchedCount == 1);
     ModPackagesTick(); assert(g_heldCount == held + 2);
     assert(ApiLoadPackage(mod, 0x49FD919A67A5DB66ull) == HF_PACKAGE_LOADING && g_heldCount == held + 3);
-    g_modPackageCount = 0; g_modPackagesWanted = 0;
+    /* patched packages never take the room of the mods' own: a full patched list leaves a later own package known */
+    for (int i = g_patchedCount; i < PKG_MAX_HELD; i++)
+    {
+        char line[64];
+        snprintf(line, sizeof line, "archive\tmod.b\t%016llx", 0x7700000000000000ull + (unsigned long long)i);
+        assert(PlanLine(line) == 0);
+    }
+    char ownAfter[] = "package\tmod.c\t00000000abcdef04\trequest";
+    assert(g_patchedCount == PKG_MAX_HELD && PlanLine(ownAfter) == 0 && g_modPackageCount == 3 && CataloguePackage(0xABCDEF04ull) != NULL);
+    g_modPackageCount = 0; g_modPackagesWanted = 0; g_patchedCount = 0;
 
     g_statCount = 0;
     for (int i = 0; i < g_fakeRecordCount; i++) free(g_fakeRecords[i].bytes);
