@@ -525,7 +525,7 @@ public sealed partial class RegisteredItems(string path)
         {
             case "/Progression/items" when node is JsonArray catalogue:
                 AddCatalogue(catalogue, items, current.Attachments);
-                AddPaints(catalogue, current.Painted);
+                AddPaints(catalogue, current.Painted, items);
                 AddPatterns(catalogue, current.Patterns);
                 break;
             case "/Progression/ProgressionPackages" when node is JsonArray packages:
@@ -730,7 +730,7 @@ public sealed partial class RegisteredItems(string path)
                 if (have.Add(mixId)) held.Add((JsonNode?)new JsonObject { ["mixId"] = mixId, ["amount"] = 1, ["isDiscovered"] = true });
             AddMirrored(held, have, mirrored, item);
         }
-        AddPaintsHeld(held, have, current.Painted, keeps, Game());
+        AddPaintsHeld(held, have, current.Painted, keeps, Game(), current.Admitted);
         AddPatternsHeld(held, have, current.Patterns, keeps);
     }
 

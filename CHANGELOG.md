@@ -27,6 +27,8 @@ On `dev`, since 0.4.0-beta.
   secondaries. The Armory lists no support weapons, so a mod must show them for the customize screen to be reached (#24).
 - **Mods' patterns on support weapons.** A weapon pattern goes on support weapons too, after their paints, and is held
   with the stratagem (#36, [patterns](docs/modding/patterns.md#where-it-shows)).
+- **Paints on mods' support weapons.** A stratagem's weapon made with `add_entity` and `own_all` gets the customize
+  screen with the game's paints and mods' patterns, as a vanilla support weapon has ([patterns](docs/modding/patterns.md#where-it-shows)).
 - **Paints on more weapon bodies.** A unit `edit` with `slots` renames a game unit's material slots, so a support
   weapon whose body has a slot of its own, such as the Stalwart, takes the game's paints on `m_weapon`
   ([data](docs/modding/data.md#edit)).

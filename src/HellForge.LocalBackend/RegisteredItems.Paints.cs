@@ -52,7 +52,7 @@ public sealed partial class RegisteredItems
         List<uint> painted = [];
         foreach (var weapon in candidates.Where(w => !game.Mastery.ContainsKey(w)))
         {
-            var cost = GamePaints.Count(p => !game.Ids.Contains(WeaponChild(p, weapon)));
+            var cost = GamePaints.Count(p => !game.Ids.Contains(WeaponChild(p, weapon))) + (Itemless(game, admitted, weapon) ? 1 : 0);
             if (cost > room - used || packageRoom < 1)
             {
                 lock (reported)
@@ -67,16 +67,29 @@ public sealed partial class RegisteredItems
         return painted;
     }
 
+    // A painted weapon with no catalogue item, the game's or an arsenal copy's: a mod's entity copy of a support weapon
+    // (HfEntity.own_all), which the mod loader gives a paint package of its own. It gets an item, held from the start,
+    // as the customize screen finds a paint by its root item (0x1493770); its stratagem's item names another id.
+    static bool Itemless(Vanilla? game, IReadOnlyList<Item> admitted, uint weapon) =>
+        game is not null && !game.Ids.Contains(weapon) && !game.StratagemItems.ContainsKey(weapon) && admitted.All(i => i.MixId != weapon);
+
+    static JsonObject WeaponItem(uint weapon) => new()
+    {
+        ["itemId"] = weapon, ["mixId"] = weapon, ["isConsumable"] = false, ["requiredLevel"] = 0, ["progressionCategory"] = 1,
+        ["tags"] = new JsonArray(), ["requiredItems"] = new JsonArray(), ["buyPrice"] = new JsonArray(), ["sellPrice"] = new JsonArray(),
+    };
+
     // The paints offered on a weapon of the plan, for mods' patterns copying one of them.
     static IEnumerable<uint> PaintedOffering(uint paint, IReadOnlyList<uint> painted) => GamePaints.Contains(paint) ? painted : [];
 
     // Each weapon's paint children, at the end of its run (the client links a child to the run before it). A support
     // weapon is its stratagem's child: the client links an entry whose parent differs from the one before to the entry
     // right before it (0x136EC00), so its paints follow it, and only where it ends its stratagem's run.
-    void AddPaints(JsonArray catalogue, IReadOnlyList<uint> weapons)
+    void AddPaints(JsonArray catalogue, IReadOnlyList<uint> weapons, IReadOnlyList<Item> admitted)
     {
         if (weapons.Count == 0) return;
         var known = catalogue.Select(i => Id(i, "mixId")).ToHashSet();
+        AddWeaponItems(catalogue, weapons, admitted, known);
         var index = new CatalogueIndex(catalogue);
         var (runEnd, supports) = PlacesAfterMoves(catalogue, weapons);
         List<(int After, JsonObject Entry)> inserts = [];
@@ -93,6 +106,12 @@ public sealed partial class RegisteredItems
                 }
         foreach (var group in inserts.Select((x, n) => (x.After, x.Entry, n)).GroupBy(x => x.After).OrderByDescending(g => g.Key))
             foreach (var x in group.OrderByDescending(x => x.n)) catalogue.Insert(group.Key + 1, x.Entry);
+    }
+
+    // The items of the painted weapons that have none (Itemless), at the end: each starts a run of its own.
+    void AddWeaponItems(JsonArray catalogue, IReadOnlyList<uint> weapons, IReadOnlyList<Item> admitted, HashSet<uint?> known)
+    {
+        foreach (var weapon in weapons.Where(w => Itemless(Game(), admitted, w) && known.Add(w))) catalogue.Add((JsonNode?)WeaponItem(weapon));
     }
 
     // A support weapon with more of its stratagem's items after it moves behind them, so its paints can follow it and every
@@ -197,19 +216,23 @@ public sealed partial class RegisteredItems
         }
     }
 
+    // What a painted weapon needs held besides its paints: nothing when it is held; its own item when it has one of
+    // ours (Itemless) or is held with its stratagem; null when it is not held.
+    static List<uint>? HeldItem(HashSet<uint?> have, uint weapon, Vanilla? game, IReadOnlyList<Item> admitted)
+    {
+        if (have.Contains(weapon)) return [];
+        if (Itemless(game, admitted, weapon)) return [weapon];
+        return game is not null && game.StratagemItems.TryGetValue(weapon, out var stratagem) && have.Contains(stratagem) &&
+            game.ItemChildren.GetValueOrDefault(weapon) is [var own] ? [own] : null;
+    }
+
     // The paints of each weapon the inventory holds, each weapon's whole or none, while the game's entries hold them. A
     // support weapon counts as held with its stratagem; its own item is held too, as the client links its paints to it.
-    static void AddPaintsHeld(JsonArray held, HashSet<uint?> have, IReadOnlyList<uint> weapons, int keeps, Vanilla? game)
+    static void AddPaintsHeld(JsonArray held, HashSet<uint?> have, IReadOnlyList<uint> weapons, int keeps, Vanilla? game, IReadOnlyList<Item> admitted)
     {
         foreach (var weapon in weapons)
         {
-            List<uint> paints = [];
-            if (!have.Contains(weapon))
-            {
-                if (game is null || !game.StratagemItems.TryGetValue(weapon, out var stratagem) || !have.Contains(stratagem) ||
-                    game.ItemChildren.GetValueOrDefault(weapon) is not [var own]) continue;
-                paints.Add(own);
-            }
+            if (HeldItem(have, weapon, game, admitted) is not { } paints) continue;
             paints.AddRange(GamePaints.Select(p => WeaponChild(p, weapon)).Where(m => !have.Contains(m)));
             if (held.Count + paints.Count > keeps) continue;
             foreach (var mixId in paints)
