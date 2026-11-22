@@ -852,6 +852,13 @@ static class DataBuilderTests
                 try { DataSpecs.Load(folder); throw new Exception("Accepted: " + bad); }
                 catch (InvalidDataException error) { check(error.Message.Contains(reason), "Refused for another reason: " + error.Message); }
             }
+            // the game packages a spec patches are named to the loader too (its code may need them resident), once each
+            Spec("""{"archives":["49fd919a67a5db66"],"resources":[""" + material + """]},{"archives":["49fd919a67a5db66","dbd9381f9ea9788f"],"resources":[{"type":"texture","include":["0x2222"]}]}""");
+            var patched = ModCatalog.Load(mods).Mods.Single();
+            check(patched.PatchedArchives.SequenceEqual([0x49fd919a67a5db66ul, 0xdbd9381f9ea9788ful]), "The patched archives are not read once each.");
+            var patchedPlan = ModLoaderPlan.Text([patched with { Packages = [new("test/mod/pkg", 1, true)] }], Path.Combine(root, "package-archives"), EntityProfile.Current, "25480438");
+            check(patchedPlan.Contains("archive\ttest.package\t49fd919a67a5db66\n") && patchedPlan.Contains("archive\ttest.package\tdbd9381f9ea9788f\n"),
+                "The plan does not name the patched archives: " + patchedPlan);
             Spec("""{"package":"test/mod/pkg","resources":[""" + material + """]},{"package":"test/mod/later","load":"request","resources":[{"type":"texture","include":["0x2222"]}]}""");
             var id = EngineHash.Murmur64A("test/mod/pkg"u8).ToString("x16");
             var later = EngineHash.Murmur64A("test/mod/later"u8).ToString("x16");

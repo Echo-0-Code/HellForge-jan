@@ -2600,6 +2600,14 @@ static void RefsFixture(void)
     assert(g_modPackagesWanted && g_heldCount == held + 1 && g_held[held].id == 0xABCDEF02ull && g_held[held].own);
     ModPackagesTick(); assert(g_heldCount == held + 1); /* once */
     assert(ApiLoadPackage(mod, 0xABCDEF01ull) == HF_PACKAGE_LOADING && g_heldCount == held + 2);
+    /* a game package a mod's data spec patches (the plan's archive lines): known to load_package, never asked for itself;
+     * a catalogue one or a malformed line adds nothing */
+    char archive[] = "archive\tmod.a\t49fd919a67a5db66", badArchive[] = "archive\tmod.a\t49fd919a", catalogueArchive[80];
+    snprintf(catalogueArchive, sizeof catalogueArchive, "archive\tmod.a\t%016llx", (unsigned long long)kRefPackages[0].id);
+    assert(ApiLoadPackage(mod, 0x49FD919A67A5DB66ull) == 0);
+    assert(PlanLine(archive) == 0 && PlanLine(badArchive) == 0 && PlanLine(catalogueArchive) == 0 && g_modPackageCount == 3);
+    ModPackagesTick(); assert(g_heldCount == held + 2);
+    assert(ApiLoadPackage(mod, 0x49FD919A67A5DB66ull) == HF_PACKAGE_LOADING && g_heldCount == held + 3);
     g_modPackageCount = 0; g_modPackagesWanted = 0;
 
     g_statCount = 0;

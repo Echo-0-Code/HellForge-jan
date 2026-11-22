@@ -55,6 +55,9 @@ public sealed record ModManifest(string Id, string Name, string Version, string 
     public bool HasDataSpec { get; init; }
     // Its data spec's own packages, which the loader may load (the plan's package lines).
     public IReadOnlyList<ModDataPackage> Packages { get; init; } = [];
+    // The game packages its data spec patches ("archives"): real packages its code may need resident, so load_package
+    // takes them too (the plan's archive lines), not only the catalogue's.
+    public IReadOnlyList<ulong> PatchedArchives { get; init; } = [];
     // Why HellForge does not check all of the data spec's output (DataSpecs.Unchecked: a "replace", or a type outside the
     // reviewed ones), or null: mod sync takes such a spec as raw data (ModSets.ClassOf).
     public string? UncheckedSpec { get; init; }
@@ -291,7 +294,7 @@ public static partial class ModCatalog
         // "url": where players get the mod; one that is not an https:// address (WebAddress) is left out
         var url = root.TryGetProperty("url", out var urlElement) && urlElement.ValueKind == JsonValueKind.String ? WebAddress(urlElement.GetString()) : null;
         var manifest = new ModManifest(id, name, version, description, gameplay, Path.GetFullPath(folder), types, writes, data)
-            { CodeDll = code, HasSource = source, Live = live, HasDataSpec = spec, Packages = dataSpec?.Patches.Select(p => p.Package).OfType<ModDataPackage>().ToList() ?? [], UncheckedSpec = dataSpec == null ? null : DataSpecs.Unchecked(dataSpec), Stats = stats, Icon = icon, Lua = lua, Url = url,
+            { CodeDll = code, HasSource = source, Live = live, HasDataSpec = spec, Packages = dataSpec?.Patches.Select(p => p.Package).OfType<ModDataPackage>().ToList() ?? [], PatchedArchives = dataSpec?.Patches.SelectMany(p => p.Archives).Distinct().Select(a => Convert.ToUInt64(a, 16)).ToList() ?? [], UncheckedSpec = dataSpec == null ? null : DataSpecs.Unchecked(dataSpec), Stats = stats, Icon = icon, Lua = lua, Url = url,
               CoopLevel = ReadCoopLevel(root), Premium = PremiumList(root), AssetOutputs = assets.Outputs, AssetsPending = assets.Pending ?? PastBuildsPending(folder, dataSpec) };
         return manifest with { Coop = DecideTier(root, manifest, new(code, source, data, lua, spec, stats, types, writes)) };
     }
@@ -991,7 +994,7 @@ public static class ModLoaderPlan
     }
 
     // A mod's lines of the plan: the mod ("live": SDK 16, it may be taken out while the game runs), a code mod's version,
-    // its stats edits, its network field types and its own packages.
+    // its stats edits, its network field types, its own packages and the game packages it patches.
     static IEnumerable<string> ModLines(ModManifest mod)
     {
         if (mod.HasCode && mod.DllPath == null) throw new InvalidDataException($"{mod.Id} is a source mod that was not built for this session.");
@@ -1001,6 +1004,7 @@ public static class ModLoaderPlan
         foreach (var e in StatsData.Edits(mod)) yield return "stat\t" + string.Join('\t', StatFields(mod, e));
         foreach (var t in mod.NetworkFieldTypes) yield return "nettype\t" + string.Join('\t', NetFields(mod, t));
         foreach (var p in mod.Packages) yield return $"package\t{mod.Id}\t{p.Id:x16}\t{(p.Session ? "session" : "request")}";
+        foreach (var a in mod.PatchedArchives) yield return $"archive\t{mod.Id}\t{a:x16}";
     }
 
     static string Field(string value) => value.Contains('\t') || value.Contains('\n') || value.Contains('\r')
