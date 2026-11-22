@@ -28,9 +28,6 @@ On `dev`, since 0.4.0-beta.
 - **Paints on more weapon bodies.** A unit `edit` with `slots` renames a game unit's material slots, so a support
   weapon whose body has a slot of its own, such as the Stalwart, takes the game's paints on `m_weapon`
   ([data](docs/modding/data.md#edit)).
-- **Camouflage shapes of your own.** A data spec can add layers to one of the game's array textures after its own
-  (a texture `edit` with `layers`). A LUT cell takes `[r, g, b, a]`, so a weapon paint can pick any camouflage layer,
-  the game's or a mod's ([patterns](docs/modding/patterns.md#camouflage-shapes-on-weapons)).
 - **Vehicles with a model of their own.** A unit copy's `mesh` takes `"parts": true`: each object of the OBJ rides the
   unit joint it is named after, so a vehicle's wheels steer and turn under a body of the mod's own. The copy keeps its
   base's joints, so seats, damage zones and the gun mount still fit. The `vehicle-model` example is an M-102 under a
@@ -54,8 +51,30 @@ On `dev`, since 0.4.0-beta.
 - **Skinned models bend.** A mod model's skinned glTF mesh keeps up to four weighted joints per vertex, in the
   game's own skinned layout, so belts, straps and cables bend between joints as clips move them
   (#3, [models](docs/modding/models.md#meshes-lods-and-shadows)). Models without weights build as before.
+- **Enemies' death explosions in the editor.** A Hulk's burst and final blast, a Rocket Devastator's backpack, the
+  turrets', tanks', Factory Striders' and spore and bile bugs' death explosions are on their enemy pages. Pick another
+  explosion (a mod's too) or none, for that enemy only. Stats mods take them as well, and in co-op the host's choice is
+  what everyone sees ([stats mods](docs/modding/stats-mods.md#death-explosions), #525).
+- **The launcher says when a newer HellForge is out.** On start it checks HellForge's GitHub releases; when one is
+  newer, the sidebar shows "HellForge X is out" above the version, and pressing it opens the release page. Nothing is
+  downloaded: you still install the new version by hand. Settings, UPDATES has a switch to turn the check off
+  ([roadmap](docs/roadmap.md#launcher-updates), #387).
 - **48 mod paints a weapon.** A weapon's customize screen lists up to 127 cards instead of 64, so mods' paints go up to
-  48 on one weapon instead of 16. Only on game build 25480438; otherwise the limit stays 16.
+  48 on one weapon instead of 16. Only on game build 25480438; otherwise the limit stays 16 (#498).
+- **Languages in Settings.** A Languages card lists the language packs pinned for the build and adds one to the game
+  copy. Steam downloads it from the console command the card shows, or on Windows HellForge does after a sign-in in
+  the Steam app. Remove takes a pack out again ([troubleshooting](docs/troubleshooting.md#playing-in-a-language-other-than-english),
+  #491).
+- **Seven more languages.** German, French, Italian, both Spanish packs, Portuguese (Brazil) and Chinese voices can
+  be added to the game copy, as Japanese could. The check before a session looks at the voice only: every text
+  language plays without a pack (#491).
+- **Camouflage shapes of your own.** A data spec can add layers to one of the game's array textures after its own
+  (a texture `edit` with `layers`). A LUT cell takes `[r, g, b, a]`, so a weapon paint can pick any camouflage layer,
+  the game's or a mod's ([patterns](docs/modding/patterns.md#camouflage-shapes-on-weapons), #499).
+- **The in-game editor in other languages.** The editor shows its text from a word list in its `translations`
+  folder, chosen on its settings page or by Windows' display language. Chinese, Japanese and Korean text uses a
+  Windows font that has the characters ([translating the editor](docs/editor-translations.md)). The word-list format
+  follows YEYINGSHENZI's Chinese localization of the editor (#425, #426).
 - **Missile spread in the editor.** Every seeking missile's page has a Spread group: whether its missiles veer off
   their launch line, how far and which way, the curve they fly after, and how fast they swing back onto the target.
   The W.A.S.P., the Missile Pistol and the Warrant have it on; the Spear, the Commando and the others can turn it on.
@@ -288,6 +307,14 @@ On `dev`, since 0.4.0-beta.
 
 - **Up to 256 packages.** HellForge holds up to 256 packages a session instead of 64, so mods with many packages are
   no longer refused while the game has room. Friends' packages leave 64 of them for your own (#13).
+- **Explosions have readable names.** 310 of the game's 422 explosion types now have a plain name, such as "Hulk and
+  turret death blast" or "Rocket Devastator backpack explosion". Many showed a code name, a wrong owner or a number
+  before. The names show in the editor's pickers and pages, stats files and the SDK's comments. Each comes from what
+  fires that explosion. Old labels still work in stats files, and the SDK's constants keep their names (#524).
+- **The game offers only the voices in the game copy.** Steam answered the game for the player's own install, so a voice
+  whose pack the copy lacked was offered and crashed the game. HellForge now answers from the copy
+  ([Steam Cloud](docs/steam-cloud.md#the-stand-in), #493). Engine bump with the next build.
+
 - **Hellpod / Call-in opens every stratagem's page in the editor.** Support weapons had it last, under all of the
   weapon's own sections; now it comes first, as on every other stratagem.
 - **Big enemy counts run faster.** With 950 to 1,100 enemies alive, a mission ran at 34.5 fps instead of 27.0, and the
@@ -353,11 +380,11 @@ On `dev`, since 0.4.0-beta.
   list, in its order, as the game reads ownership from them. It checks every reply that gives an item last: the
   inventory, purchases (mod warbonds' too), warbond pages, mastery and mission rewards (#386).
 - **A premium weapon's mastery levels and attachments need the weapon.** They were sold and earned without it (#386).
-- **A synced snapshot is signed by your PC and lasts 14 days.** Only administrator or root code holds the signing key:
-  Windows' key storage (the TPM where there is one), or a systemd service on Linux. The capture signs only what
-  Arrowhead's API sent. Sync once after updating, then every 14 days to keep premium content. A HellForge you build
-  yourself signs the same way. On Linux, premium content needs systemd
-  ([premium content is locked](docs/troubleshooting.md#premium-content-is-locked)) (#404).
+- **A synced snapshot is signed by your PC.** Only administrator or root code holds the signing key: Windows' key
+  storage (the TPM where there is one), or a systemd service on Linux. The capture signs only what Arrowhead's API
+  sent. Sync once after updating to keep premium content; the seal then holds until your next sync replaces it.
+  A HellForge you build yourself signs the same way. On Linux, premium content needs systemd
+  ([premium content is locked](docs/troubleshooting.md#premium-content-is-locked)) (#404, #446).
 - **Mods' registered items can no longer name paid items.** An entry whose id, or a child's id, is the game's or a paid
   item's is refused, and the backend's log names the mod. Copies of premium patterns and attachments are locked like
   weapons, and a copy of another mod's weapon follows its original, up to 8 copies deep (#386).
@@ -431,8 +458,26 @@ On `dev`, since 0.4.0-beta.
   game build 25480438, so `function` and `hook_function` answered "not a mapped function" for the rest, `UnitWorldPose`,
   `UnitNode` and `LightSetEnabled` among them. It now has room for 1,024, and a mappings update that outgrows that fails
   the build (#10).
+- **Premium content on Linux with Proton in the Steam Linux Runtime.** The sync worked, but every session said "This
+  PC has no snapshot signer yet. Sync again." and unlocked no premium warbonds: the signer's public key is in
+  `/var/lib/hellforge`, which the runtime's container does not show. Sessions now share that folder with the container,
+  read-only, so the backend reads the same root-owned file. If it still cannot see it, the message says so instead of
+  asking for another sync ([account sync on Linux](docs/linux-account-sync.md#when-premium-content-stays-locked)).
+- **Items the live game gave you alone are yours in HellForge too.** An item of a premium warbond held without the
+  warbond itself, such as the Killzone weapons some players got for free, was locked with the rest of its warbond.
+  Once synced it is served on every profile; only that item, never the rest of the warbond
+  ([premium content](docs/troubleshooting.md#premium-content-is-locked), #368).
+- **Sync Inventory with a Windows system proxy on.** With a proxy set in Windows' Internet Settings (a proxy app on
+  `127.0.0.1:7897`, say), the game never got past its first request: the capture sent the proxy's CONNECT to
+  Arrowhead's API, which answered 400. The capture now always goes straight to the API (#346).
+- **A capture that crashes as it starts says why.** It wrote nothing when it crashed before it was listening; its
+  `proxy.log` now has the error (#436).
 - **40,960 catalogue items again.** The larger entity table made the game state's arrays stay in place, so the game
-  kept 4,096 catalogue items and the backend refused mod paints past them. Both now grow the same block together.
+  kept 4,096 catalogue items and the backend refused mod paints past them. Both now grow the same block together (#497).
+- **A sandboxed game with DLSS on closes at the first ALT-F4.**
+  NVIDIA's telemetry service `NvTelemetryAPI64.dll` could not succeed inside a low integrity session and would continuously
+  retry a connection during play which caused an infinite hang on ALT-F4. HellForge now refuses offending DLL allowing for clean exits
+  and shaders to be saved cleanly. DLSS retains functionality. (#477, #478)
 - **Windows: HellForge started from Steam as a non-Steam game finds Steam.** Steam gives such a shortcut an app id of
   its own, and the Steam check and the game inherited it, so they asked Steam about the shortcut instead of
   HELLDIVERS 2. The launcher and the CLI now drop the shortcut's ids as they start (#434).
@@ -454,6 +499,8 @@ On `dev`, since 0.4.0-beta.
 - **No more crash at about 400 enemies alive.** The AI's navmesh edge queries ran out of their 256 places and
   overwrote the HUD, which crashed the game at `game.dll+0x1449D76`. They now have room for 4,096 moving enemies, and
   the game ran past 550 alive ([performance fixes](docs/performance.md#edge-batch)).
+- **A kept Steam sign-in works more than once.** The Mods page keeps the Steam app sign-in so the next fetch needs no
+  phone. Logging on with it told Steam not to remember it, so Steam revoked it and every fetch asked for the QR code (#492).
 - **Level 11 no longer hangs in the drop when a mod is slow to start.** Level 11 enlarged the game's map buffers only
   after every mod had set itself up, so a slow mod could let the game make them first. A level-11 map then ran over
   them, the hellpod never landed, and players in one lobby could get different maps. HellForge now enlarges them before
@@ -478,6 +525,20 @@ On `dev`, since 0.4.0-beta.
 - **Decal shaders stay on screen far away.** A mod's `decal` shader vanished once the player was about 90 m from it,
   however large its box was: the game judges draw distance by the box's unscaled 1 m size. The decal host's unit now
   counts as 128 m across, so a decal shows as far as the player can see it ([shaders](docs/modding/shaders.md)).
+- **A synced starter profile says why its warbonds are locked.** Some profiles buy the premium warbonds you own with
+  Forge Credits: starter, and the first profile of older installations. There the card beside PLAY said "Profile
+  synced" while those warbonds stayed locked, and players took it for a sync that failed. It now says they open once
+  bought with Forge Credits, and that a new live-like profile has them open at once (#262, #282).
+- **A sync that reads nothing says why.** It said "pass the title screen" after ten minutes for every stall. The
+  launcher now reads the capture's log while the game runs and says within seconds where the login stopped. The game
+  never reached the sync (a VPN or DNS tool), or the sync could not reach the servers (a firewall, a proxy). Or
+  something showed its own certificate (an antivirus's HTTPS scanning), the game refused the sync's certificate, or the
+  servers refused the login ([troubleshooting](docs/troubleshooting.md)). The Linux launcher's port check no longer shows in the log as a failed
+  TLS handshake.
+- **Sync Inventory says at once when Windows ignores its hosts line.** A VPN, DNS changer or ad blocker that answers
+  name lookups itself sent the game straight to its servers. The sync saw nothing for ten minutes, and the launcher
+  asked to pass the title screen. The capture now checks that the API's name leads to it before the game
+  opens; when it does not, it stops and says what to turn off ([troubleshooting](docs/troubleshooting.md)).
 - **SteamOS: Sync Inventory no longer stops at "Wine could not confirm the capture CA".** With Proton Experimental,
   Wine's `reg export` failed after the certificate was in place, and the sync stopped before the game opened. The
   prefix's `system.reg`, which the game loads, is now the proof; a failed export is logged
@@ -488,6 +549,11 @@ On `dev`, since 0.4.0-beta.
   copies the service's log, state and certificate to `/run/hellforge/capture-evidence` for the launcher. The next
   sync asks to install the updated helper once
   ([the snapshot signer](docs/linux-account-sync.md#the-snapshot-signer)).
+- **Fedora and Bazzite: Sync Inventory gets past SELinux.** With SELinux enforcing, systemd could not start the
+  snapshot signer, so the sync stopped and premium content stayed locked. The helper's installer now labels the
+  signer's program so that systemd may start it. A sync SELinux still blocks says so and names the denial. The next
+  sync asks to install the updated helper once
+  ([SELinux](docs/linux-account-sync.md#selinux-fedora-bazzite-and-nobara)) (#487).
 - **Steam Deck: Sync Inventory with steamapps on the microSD card.** A `steamapps` folder linked to the card's library
   crashed the launcher with "Linked/reparse paths are not supported". HellForge now follows that link and still
   refuses a link at the game folder or inside it. A Steam library HellForge cannot read stops the sync with a message
@@ -662,6 +728,18 @@ On `dev`, since 0.4.0-beta.
   on), `url` and `icon`. A source mod also has its `build`: built, failed to compile (with the compiler's message) or
   due at the next session. The tags add `native`, `premium` and `unsupported`
   ([source mod builds](docs/external-launchers.md#source-mod-builds), #390).
+- **The CLI reaches the war options and mod sync.** `settings` takes `--deal-subfactions`, `--deal-seaf` and
+  `--war-seed`, and the Sharing card's switches `--share-mods`, `--list-public`, `--show-edited-stats` and
+  `--host-stats`. The new `mod-sync` lists the trusted, blocked and downloaded mods, and untrusts, blocks, unblocks or
+  deletes the downloads. Both check every option before they change anything, so a refused call has changed
+  nothing ([profiles and settings](docs/external-launchers.md#profiles-and-settings),
+  [mod sync lists](docs/external-launchers.md#mod-sync-lists), #391).
+- **The CLI reaches weapon levels and the MOD SYNC prompt.** `weapon-levels` reads and sets a profile's weapon mastery
+  levels between sessions, as the profile page does. `mod-sync-offer` shows the running session's MOD SYNC offer, with
+  each mod's TRUST warning and the answers that apply to it, and sends the player's answer, as the Play page's card
+  does. It is cheap to poll, shows only the running session's offer, and leaves the answer to the game when the game
+  shows the prompt itself
+  ([weapon levels](docs/external-launchers.md#weapon-levels), [the MOD SYNC prompt](docs/external-launchers.md#the-mod-sync-prompt), #392).
 
 ## 0.4.0-beta (2026-11-05)
 

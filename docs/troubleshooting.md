@@ -188,21 +188,27 @@ have. On Linux, Proton's own builtin runtimes serve, and nothing is checked or i
 
 ### Playing in a language other than English
 
-The copy setup makes holds English only: every other language of HELLDIVERS 2 is a free DLC of its own, which Steam
-installs beside the game but setup does not copy yet. A copy without your language crashes when you switch the game to
-it. Before each session HellForge checks the game's text and voice language: one whose pack is not in the copy is set
-back to English, and the session log says so.
+Every text language is in the copy setup makes. A voice other than English is a free DLC of its own, which Steam
+installs beside the game, and a copy without it crashes when the game plays that voice. Before each session HellForge
+checks the game's voice language: one whose pack is not in the copy is set back to English, and the session log says so.
 
-Until setup offers it, add the language with the command-line tool, `<installation>\app\cli\HellForge.Cli.exe`. Japanese is
-the only language HellForge has pinned so far; more follow.
+Add a voice in **Settings > Languages**, then choose it in the game's options. HellForge pins German, French,
+Italian, Spanish (Spain), Spanish (Latin America), Portuguese (Brazil), Japanese and Chinese.
 
-1. Run `HellForge.Cli.exe languages`. It lists the pinned languages and, for each, a `download_depot` command.
-2. Open Steam's console (`steam://open/console` in a browser or the Run dialog), paste that command and wait for
-   "Depot download complete".
-3. Close HellForge, then run `HellForge.Cli.exe language-add --name japanese`. It copies the language into the game copy,
-   checks every file, and deletes Steam's download.
+The game's voice options list only the voices in the copy: HellForge answers the game's question to Steam from the copy.
+A voice added while the game runs appears from the next session.
 
-`languages` then shows `"inCopy": true` for it. Your live game is never touched.
+- **Steam's own download:** the card shows a `download_depot` command. Paste it into Steam's console
+  (`steam://open/console`) and wait for "Depot download complete". Then press **Add**: it copies the pack, checks every
+  file and deletes Steam's download.
+- **HellForge's download (Windows):** press **Download through HellForge** and approve the sign-in in the Steam app.
+  HellForge keeps that sign-in, as the Mods page does, so the next **Download** needs no code. **Sign out of Steam**
+  deletes it.
+
+**Remove** deletes a pack's files from the copy again; a game left in that language starts in English.
+
+Both wait while a session runs. The command-line tool does the same: `HellForge.Cli.exe languages` lists the packs and
+their commands, and `language-add --name japanese` adds one from Steam's download. Your live game is never touched.
 
 ### The network block
 
@@ -245,6 +251,18 @@ Cases HellForge already recognises:
   | "... kept the hosts file (...) open, so the sync could not change it" | The program it names keeps the hosts file open; it is usually a security program. Allow the capture in it. |
   | "The capture has not got ready after a minute; still waiting." | A security program is usually checking or holding the capture. It goes on if it is let through. |
   | "The capture could not reach HELLDIVERS 2's servers" | Check the internet connection. |
+  | "Windows does not follow the sync's line in the hosts file (... still leads to ...)" | A VPN, DNS changer or ad blocker answers name lookups itself, so the game would go past the sync. Turn it off while you sync. |
+
+  Once the game runs, the launcher reads the capture's `proxy.log` and says where the game's login stopped, without
+  waiting out the ten minutes:
+
+  | Message | What to do |
+  | --- | --- |
+  | "HELLDIVERS 2 never contacted the sync" | A VPN, DNS changer or ad blocker sent the game past the sync. Turn it off while you sync. |
+  | "... the sync could not reach HELLDIVERS 2's servers (...)" | A firewall, VPN or network filter blocks the capture. Allow it, or turn the filter off while you sync. |
+  | "Something on this PC stepped into the sync's connection ... and showed its own certificate" | An antivirus's HTTPS or web scanning. Turn it off while you sync. |
+  | "HELLDIVERS 2 reached the sync but did not accept its certificate" | A security program guards Windows' trusted certificates. Allow `HellForge.CaptureProxy.exe` in it. |
+  | "HELLDIVERS 2's servers refused the game's login (HTTP ...)" | The servers may be down: check that the normal game logs in, then sync again. |
 
   A capture is left running when the launcher closed during a sync. The next sync stops it itself, along with its hosts
   line and certificate: restarting the PC is not needed for that.
@@ -482,16 +500,20 @@ first.
 
 ### Premium content is locked
 
-Premium warbonds, Superstore items and DLC gear come from your last Sync Inventory. This PC's snapshot signer seals it
-for 14 days. Profile > Account sync says why a snapshot gives none:
+Premium warbonds, Superstore items and DLC gear come from your last Sync Inventory. This PC's snapshot signer seals it,
+and the seal holds until your next sync replaces it. Profile > Account sync says why a snapshot gives none:
 
 | Message | What to do |
 |---|---|
-| "The snapshot is older than 14 days. Sync again." | Run Sync Inventory again. |
 | "This snapshot was sealed by an older HellForge. Sync again." | Run Sync Inventory once after updating HellForge. |
 | "This PC has no snapshot signer yet. Sync again." | Run Sync Inventory: the capture makes the signer, with administrator rights on Windows and the helper on Linux. |
+| "The snapshot signer's key is on this PC (...) but not visible inside the Steam Linux Runtime..." (Linux) | Syncing again does not help: update HellForge ([when premium content stays locked](linux-account-sync.md#when-premium-content-stays-locked)). |
 | "This snapshot was sealed on another PC, or before this PC's snapshot signer changed. Sync again." | The snapshot came from another PC, or the signer's key was removed. Run Sync Inventory on this PC. |
 | "The capture could not open this PC's snapshot signer..." | Sync again. On Linux, premium content needs systemd ([the snapshot signer](linux-account-sync.md#the-snapshot-signer)). |
+| "...SELinux blocked the snapshot signer..." or "...systemd could not start the snapshot signer..." (Linux) | Sync again, and accept the helper install if the launcher offers it: it labels the signer. If it stays, send the message and `sudo ausearch -m avc -ts recent` ([SELinux](linux-account-sync.md#selinux-fedora-bazzite-and-nobara)). |
+
+An item the live game gave you on its own, without its premium warbond (a free reward, such as the Killzone weapons
+some players got), is yours on every profile once synced. The rest of that warbond stays locked until you own it.
 
 ## Playing with friends
 

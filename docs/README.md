@@ -9,6 +9,8 @@ Every HellForge document, by who it is for, and what an installation holds. To i
 - [Troubleshooting](troubleshooting.md): problems players hit (Steam, setup, antivirus, the network block, sessions that
   fail), how to collect logs and where to ask.
 - [Using mods](mods.md): adding and removing mods, the Mods page, load order and playing with friends.
+- [Translating the in-game editor](editor-translations.md): showing the editor (F8) in another language, and writing a
+  word list for one.
 - [Lua mods](lua-bridge.md): Bingus Shared Loader, HD2Runtime and their mods on HellForge, and the Lua bridge behind them.
 - [The HellForge war](hellforge-war.md): the war every HellForge player shares, its server and its mission reports.
 - [War scripts](war-script.md): your own major orders, dispatches, reward mail and planet modifiers on top of the war.
@@ -85,6 +87,8 @@ Reference and related pages:
   the engine, and how a shared effect reaches the other machines.
 - [How attachment values and weapon picks work](internals-customization.md): how an attachment's own values join its
   copied deltas, and how `set_weapon_pick` goes through the game's own customization call.
+- [Moved arrays and longer lists](internals-arrays.md): how the game state's progression arrays move, and how a
+  weapon's customize screen holds more than 64 cards.
 - [Performance fixes in the engine](performance.md): what the mod loader changes so the game and HellForge do less
   work, and how to turn a fix off.
 - [Performance fixes in level generation](performance-loading.md): the fixes that make the game's level generation
