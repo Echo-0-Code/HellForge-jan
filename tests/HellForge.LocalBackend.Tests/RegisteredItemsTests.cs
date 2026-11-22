@@ -255,7 +255,7 @@ static class RegisteredItemsTests
     }
 
     // A support weapon is its stratagem's child (the M-105 Stalwart under its stratagem): its paints come right after it,
-    // children of it, and are held with it when the stratagem is. The APW-1, which its stratagem lists more after, moves
+    // children of it, then mods' patterns, all held with it when the stratagem is. The APW-1, which its stratagem lists more after, moves
     // behind those items, still under its stratagem, and its paints follow it.
     static void SupportPaints(string file, Dictionary<string, JsonElement> fixtures, Action<bool, string> check)
     {
@@ -269,8 +269,8 @@ static class RegisteredItemsTests
         var paints = RegisteredItems.GamePaints.Select(p => RegisteredItems.WeaponChild(p, Stalwart)).ToList();
         var after = entries.Skip(at + 1).Take(paints.Count).ToList();
         check(at > 0 && after.Select(e => (uint)e["mixId"]!).ToHashSet().SetEquals(paints) && after.All(e => (uint?)e["parentId"] == StalwartItem) &&
-            (at + 1 + paints.Count == entries.Count || entries[at + 1 + paints.Count]["parentId"] == null),
-            "The Stalwart's paints are not its children right after it, before the next stratagem.");
+            (at + 2 + paints.Count == entries.Count || entries[at + 2 + paints.Count]["parentId"] == null),
+            "The Stalwart's paints and its pattern are not its children right after it, before the next stratagem.");
         var amr = entries.FindIndex(e => (uint?)e["itemId"] == Amr && (uint?)e["progressionCategory"] == 10);
         var amrParent = amr < 0 ? null : (uint?)entries[amr]["parentId"];
         var amrPaints = RegisteredItems.GamePaints.Select(p => RegisteredItems.WeaponChild(p, Amr)).ToList();
@@ -286,13 +286,24 @@ static class RegisteredItemsTests
         var none = JsonSerializer.SerializeToElement(new { items = Array.Empty<object>() });
         inventory = JsonNode.Parse(items.Apply("/Progression/inventory", none).GetRawText())!["items"]!.AsArray().Select(i => (uint)i!["mixId"]!).ToList();
         check(!inventory.Contains(StalwartItem) && !inventory.Contains(paints[0]), "The Stalwart's paints are held without its stratagem.");
-        // a mod's pattern of a game paint goes on no support weapon: the catalogue has no place for its child there
+        // a mod's pattern of a game paint follows the support weapon's paints, under its entry, held with its stratagem,
+        // and is a reward of its paint package; every reward of a paint package has its catalogue item
         var packages = (JsonArray)JsonNode.Parse(items.Apply("/Progression/ProgressionPackages", fixtures["/Progression/ProgressionPackages"]).GetRawText())!;
         var stalwartRewards = packages.OfType<JsonObject>().Where(p => (uint?)p["id32"] == RegisteredItems.PaintPackage(Stalwart))
             .SelectMany(p => p["levels"]!.AsArray()).SelectMany(l => l!["rewards"]!.AsArray()).Select(r => (uint)r!["id32"]!).ToList();
-        check(stalwartRewards.Count == RegisteredItems.GamePaints.Length - 1 && !stalwartRewards.Contains(RegisteredItems.WeaponChild(Tiger, Stalwart)) &&
-            !entries.Any(e => (uint?)e["itemId"] == Tiger && (uint?)e["parentId"] == StalwartItem),
-            "A mod's pattern is a reward of the Stalwart's paint package, which leaves an empty customize card.");
+        var tiger = RegisteredItems.WeaponChild(Tiger, Stalwart);
+        check(stalwartRewards.Count == RegisteredItems.GamePaints.Length && stalwartRewards.Contains(tiger) &&
+            entries.FindIndex(e => (uint?)e["mixId"] == tiger) == at + 1 + paints.Count && entries[at + 1 + paints.Count]["parentId"] is { } tigerParent &&
+            (uint)tigerParent == StalwartItem, "The Stalwart's pattern is not a reward of its paint package right after its paints.");
+        var amrTiger = RegisteredItems.WeaponChild(Tiger, Amr);
+        check(entries.FindIndex(e => (uint?)e["mixId"] == amrTiger) is var amrTigerAt && amrTigerAt == amr + 1 + amrPaints.Count &&
+            (uint?)entries[amrTigerAt]["parentId"] == (uint?)entries[amr]["mixId"], "The APW-1's pattern does not follow its paints.");
+        var catalogued = entries.Select(e => (uint?)e["mixId"]).ToHashSet();
+        var orphans = packages.OfType<JsonObject>().Where(p => (uint?)p["id32"] == RegisteredItems.PaintPackage(Stalwart) || (uint?)p["id32"] == RegisteredItems.PaintPackage(Amr))
+            .SelectMany(p => p["levels"]!.AsArray()).SelectMany(l => l!["rewards"]!.AsArray()).Count(r => !catalogued.Contains((uint?)r!["id32"]));
+        check(orphans == 0, $"{orphans} rewards of a support weapon's paint package have no catalogue item, an empty customize card.");
+        inventory = JsonNode.Parse(items.Apply("/Progression/inventory", held).GetRawText())!["items"]!.AsArray().Select(i => (uint)i!["mixId"]!).ToList();
+        check(inventory.Contains(tiger), "The Stalwart's pattern is not held with its stratagem.");
     }
 
     // Patterns a mod adds (patterns.c): a weapon pattern, a copy of Arctic Camo (1561483157) offered on every weapon
