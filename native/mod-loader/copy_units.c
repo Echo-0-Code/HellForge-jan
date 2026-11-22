@@ -3,7 +3,9 @@
  * ([[game + 0x3326308] + 8] + 8) named by ThrowerComponentData +0x00. An add_entity copy's id names no unit, so the
  * engine drew its missing-unit placeholder. So each copy's id gets a "unit" resource override (live_data.c) to the unit
  * its record names; the engine follows override chains (exe 0x5F2E80). Weapons need none: their id is their unit's
- * name. Rechecked each second for live changes and late unit edits; copies live all session, so nothing is cleared. */
+ * name. Rechecked each second for live changes and late unit edits; copies live all session, so nothing is cleared.
+ * Set on the game thread (packages.c TickDetour): from another thread, while the game brings packages online,
+ * set_resource_override writes through a null pointer (exe +0x669DEB). */
 
 #define CU_CHECK_MS 1000u
 
@@ -44,7 +46,7 @@ static void CopyUnitName(int i, uint64_t unitType)
     g_copyUnitSet[i] = unit;
 }
 
-/* On the watch thread once the entity data is ready: every registered entity's id names the unit it draws. */
+/* On the game thread once the entity data is ready: every registered entity's id names the unit it draws. */
 static void CopyUnitNamesTick(void)
 {
     static ULONGLONG last;
