@@ -469,13 +469,24 @@ static void TxnNetApply(void)
     ReleaseSRWLockExclusive(&g_netLock);
 }
 
-/* Game data: the overrides of the mods taken out or replaced go, the change's are set (live_data.c). */
+typedef struct TxnDataStep { const char* const* gone; int goneCount; } TxnDataStep;
+
+static void TxnDataStepRun(void* arg)
+{
+    const TxnDataStep* step = (const TxnDataStep*)arg;
+    HotApply(step->gone, step->goneCount, g_txn.res, g_txn.resCount);
+}
+
+/* Game data: the overrides of the mods taken out or replaced go, the change's are set (live_data.c). On the game
+ * thread, as copy_units.c sets its own: set_resource_override faults off it while packages come online. */
 static void TxnDataApply(void)
 {
     const char* gone[TXN_MODS];
     int goneCount = 0;
     for (int i = 0; i < g_txn.modCount; i++) if (g_txn.mods[i].action != TXN_ADD) gone[goneCount++] = g_txn.mods[i].id;
-    if (goneCount > 0 || g_txn.resCount > 0) HotApply(gone, goneCount, g_txn.res, g_txn.resCount);
+    if (goneCount == 0 && g_txn.resCount == 0) return;
+    TxnDataStep step = {gone, goneCount};
+    if (!g_liveOnGameThread(TxnDataStepRun, &step)) Note("live data: the game thread did not take the overrides; they are not set");
 }
 
 /* The change's results for the backend, and the change done. refused: "<reason>\t<why>", or NULL when it was made. */

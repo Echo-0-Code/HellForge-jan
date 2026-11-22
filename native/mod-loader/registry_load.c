@@ -1139,13 +1139,10 @@ static int EnterUnitCopy(uintptr_t table, uint32_t capacity, int i)
     return 1;
 }
 
-static void CopyUnitNamesTick(void); /* copy_units.c: copies spawned by their id (minefield mines) */
-
 /* Polled once the game is loaded: enters the unit copies in the destructible index once it is loaded (again if the game
  * loads it anew); a copy whose base is not in it (a weapon's unit, say) is left out, as its base is. */
 static void UnitCopiesTick(uintptr_t game)
 {
-    CopyUnitNamesTick();
     if (g_unitCopyCount == 0 || game == 0 || strcmp(g_build, "25480438")) return;
     uintptr_t manager = 0, index = 0, table = 0;
     uint32_t capacity = 0;
