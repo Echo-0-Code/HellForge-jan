@@ -457,6 +457,9 @@ On `dev`, since 0.4.0-beta.
 
 - **No crash at the title screen with copied entities.** The loader points a copy's id at its model on the game
   thread now. From its own thread it could fault while the game loaded the loadout's packages.
+- **Copied entities find all their model's resources by their id.** Where the game finds a resource by an entity's
+  id, a copy's id now names its unit's physics, state machine, bones, effects, materials and sounds too, not only the
+  unit.
 - **Copied mines show their model.** A minefield spawns its mines' models by the mine entity's id, so a mod's copy of a
   mine drew the purple question mark and vanished. Each copied entity's id now finds the model its unit record names.
 - **A mod can load the game packages it patches.** `load_package` takes a package a session mod's data spec names in
