@@ -291,9 +291,9 @@ public static class EditorCatalog
         static string Kind(string owner) => owner switch
         {
             "player_weapon" => "Weapons", "support_weapon" => "Support weapons", "stratagem" => "Stratagems", "vehicle_weapon" => "Vehicles",
-            "mounted_weapon" => "Mounted weapons", _ => "Other",
+            "mounted_weapon" => "Mounted weapons", "ammo_item" => "Ammo items", _ => "Other",
         };
-        string[] projectileGroups = ["Weapons", "Support weapons", "Stratagems", "Vehicles", "Mounted weapons", "Other"];
+        string[] projectileGroups = ["Weapons", "Ammo items", "Support weapons", "Stratagems", "Vehicles", "Mounted weapons", "Other"];
         // A weapon's programmable round is another weapon's shot at times (the GR-8 Recoilless Rifle's is the TD-220 Bastion's
         // shell): the note names it too.
         var programmedBy = root["programmable"]!.AsObject().ToLookup(w => w.Value!["projectile"]!.GetValue<long>(), w => w.Key + " (programmable ammo)");

@@ -3,8 +3,8 @@
  * expiry explosions, the status effects a damage type applies, the damage an explosion or a projectile deals. Data only:
  * the game reads the row a reference names like any other. Included by hellforge_modloader.c after fields.c.
  *
- * A new value must be a row of its table that HellForge's catalogue knows (reference_data.h, from HD2Runtime's reviewed
- * catalogues): a projectile type another weapon fires (a mod's own type counts as its base), a catalogued explosion
+ * A new value must be a row of its table that HellForge's catalogue knows (reference_data.h): a projectile type another
+ * weapon fires or an ammo item loads (a mod's own type counts as its base), a catalogued explosion
  * type or 0 (none), an attachable status effect or 0 (an empty slot), a damage id. It is written once the packages its
  * effects need are resident (packages.c); until then the edit waits, and it fails if they do not load. A value back at
  * the field's original needs no check. HD2R Editor's guards: an explosion whose shrapnel leads back to the projectile
@@ -136,25 +136,33 @@ static const RefRow* RefCatalogueRow(uint32_t ref, uint32_t value)
     return RefRowOf(kRefProjectiles, sizeof kRefProjectiles / sizeof kRefProjectiles[0], type);
 }
 
-/* The package an explosive round's blast needs, or 0. The effect of an explosion is resident without it, but its sound bank
- * comes only with the loadout package of the weapon that fires the round: a Liberator copy firing the R-36 Eruptor's round
- * blew up in silence until that package was loaded (research\explosion-registry). A round with no explosion needs none. */
-static uint64_t BlastPackage(uint32_t type)
+/* The packages an explosive round's blast needs (two at most; 0 none). The effect of an explosion is resident without
+ * them, but its sound bank comes only with the loadout package of the weapon that fires the round: a Liberator copy firing
+ * the R-36 Eruptor's round blew up in silence until that package was loaded (research\explosion-registry). A round an
+ * ammo item loads may need a second package. A round with no explosion needs none. */
+static void BlastPackages(uint32_t type, uint64_t packages[2])
 {
     int ready;
     uint32_t impact = 0, expiry = 0;
+    packages[0] = packages[1] = 0;
     uintptr_t row = g_tableRow("ProjectileSettings", type, &ready);
-    if (!row || SafeRead(row + REF_IMPACT, &impact, 4) || SafeRead(row + REF_EXPIRY, &expiry, 4) || (impact == 0 && expiry == 0)) return 0;
+    if (!row || SafeRead(row + REF_IMPACT, &impact, 4) || SafeRead(row + REF_EXPIRY, &expiry, 4) || (impact == 0 && expiry == 0)) return;
     const RefRow* catalogued = RefCatalogueRow(REF_PROJECTILE, type);
-    return catalogued != NULL && catalogued->package != 0 ? kRefPackages[catalogued->package - 1].id : 0;
+    if (catalogued == NULL) return;
+    if (catalogued->package != 0) packages[0] = kRefPackages[catalogued->package - 1].id;
+    if (catalogued->package2 != 0) packages[1] = kRefPackages[catalogued->package2 - 1].id;
 }
 
 static void WantBlastPackage(HfMod* mod, const char* name, uint32_t type)
 {
-    uint64_t package = BlastPackage(type);
-    if (package == 0) return;
-    const char *which, *failed;
-    if (PackageWant(package, &which, &failed) == PKG_FAILED) ApiLog(mod, "%s: its explosion's sound stays silent, package %s did not load: %s", name, which, failed);
+    uint64_t packages[2];
+    BlastPackages(type, packages);
+    for (int k = 0; k < 2; k++)
+    {
+        const char *which, *failed;
+        if (packages[k] != 0 && PackageWant(packages[k], &which, &failed) == PKG_FAILED)
+            ApiLog(mod, "%s: its explosion's sound stays silent, package %s did not load: %s", name, which, failed);
+    }
 }
 
 /* Once the rows are in: the packages of what the mods' projectiles and weapons fire, on every machine. */

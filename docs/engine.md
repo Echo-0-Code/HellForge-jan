@@ -120,6 +120,7 @@ the engine that `scripts/Build-Engine.ps1` last staged in `artifacts/engine-pack
 | `dotnet run --project tests/HellForge.Tests` | the integration checks (mods, stats, SDK, data builder, editor, live edits, privacy and more) | no |
 | `dotnet run --project tests/HellForge.LocalBackend.Tests` | the local backend checks (multiplayer, stats sharing, live and open war, registered items) | no |
 | `py -m unittest discover -s scripts -p test_export_stats_schema.py` | the stats schema exporter | no |
+| `py -m unittest discover -s scripts -p test_export_references.py` | the reference catalogue's rows, the ammunition rounds' among them | no |
 | `./scripts/Build-Engine.ps1` | the native and smoke tests below | yes |
 | `./scripts/Build-Engine.ps1 -NoSteamApi` | the same, but the `steam_api64.dll` stand-in is built against a synthetic export table instead of Valve's DLL: no Steam bridge, broker or bridge test, no package (CI runs this) | no |
 | `./scripts/Build-Editor.ps1 -Test` | the in-game editor against real D3D12 and D3D11 swap chains (`overlay_test`), and its saving into Local Stats (`local_stats_test`) | no |
