@@ -119,7 +119,7 @@ try
             one again): its programs and the user data it last used are swapped in, the installed launcher stays; it runs
             from a copy in temp once this program and the --wait-pid processes have ended, writes logs/version-switch.json
             and, with --restart yes, starts HellForge.exe again. versions-keep is an update's first step: it keeps the installed app before --new-app goes in,
-            and starts the new version's mod list empty unless --fresh-mods no.
+            and the new version keeps the mod list of the version before unless --fresh-mods yes, which starts it empty.
             steam-bridge is the Linux wrapper's relay to Steam instead of socat: host exposes Steam's loopback ports as
             hf-steam-*.sock files, inner recreates them inside the offline network namespace, and check exits 0 when a
             bridge or the named socket answers.

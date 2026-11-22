@@ -12,6 +12,9 @@ On `dev`, since 0.4.0-beta.
 
 ### Added
 
+- **A new version keeps your mods on.** After an update the new version starts with a copy of the earlier version's mod
+  list instead of an empty one; from then on each version's list is its own. `versions-keep` starts it empty with
+  `--fresh-mods yes` ([going back](docs/README.md#going-back-to-an-earlier-version)).
 - **Line of sight, projectiles, sides and joint poses (SDK 28).** `line_of_sight` casts the engine's physics ray.
   `find_projectiles` and `set_projectile` list and move shots in flight. `faction_of`, `side_of` and `find_entities`
   tell friend from foe as the game's AI does. `on_render`, `pose_joint` and `joint_pose` pose joints just before a

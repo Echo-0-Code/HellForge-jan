@@ -271,11 +271,12 @@ Pick the installed version again to use them.
 Each version has its own mod list: which mods are on, their order, and the mods you trusted or blocked. The mods
 themselves stay in the one `mods\` folder, and nothing is deleted.
 
-- After an update, the new version's list starts empty: no mod is on but those HellForge ships. Your profiles,
-  settings, account syncs and catalogue carry over as before.
-- The Mods page then says your earlier version's mods are still there, with Import all mods from `<version>`. It copies
-  that version's list: which mods are on, their order and your trust choices. With several kept versions, it picks the
-  most recent and a chooser offers the others. Not now hides the note.
+- After an update, the new version starts with a copy of the list of the version before. From then on the two lists
+  are separate. Your profiles, settings, account syncs and catalogue carry over as before.
+- When a version's list has no mod on but those HellForge ships, the Mods page says your earlier version's mods are
+  still there, with Import all mods from `<version>`. It copies that version's list: which mods are on, their order and
+  your trust choices. With several kept versions, it picks the most recent and a chooser offers the others. Not now
+  hides the note.
 - A mod added while another version was played with is off in this version's list until you turn it on.
 - A mod the version played with can't load, such as one made for a newer mod SDK, shows as a problem on the Mods page:
   "Not loaded by `<version>`".

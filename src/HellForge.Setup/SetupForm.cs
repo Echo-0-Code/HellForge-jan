@@ -237,8 +237,9 @@ sealed class SetupForm : Form
                 report?.Invoke(i + 1, entries.Count);
             }
         }
-        // The app replaced is kept in app-versions when there is room, for Settings > Installation's go back.
-        var kept = KeptVersions.KeepCurrent(layout, Path.Combine(staging, "app"));
+        // The app replaced is kept in app-versions when there is room, for Settings > Installation's go back. The new
+        // version carries on with the mod list of the version before (this fork's choice; upstream starts it empty).
+        var kept = KeptVersions.KeepCurrent(layout, Path.Combine(staging, "app"), freshModList: false);
         if (Directory.Exists(layout.App)) Directory.Delete(layout.App, recursive: true);
         try { Directory.Move(Path.Combine(staging, "app"), layout.App); }
         catch (Exception) when (kept is { Kept: true, Name: { } name })
