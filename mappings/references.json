@@ -9,6 +9,7 @@
     "0x0827284B048BED82": "packages/generated/loadout/personal_defense_weapon_pepper",
     "0x0971E953FCBDD346": "unnamed loadout package of TD-110 Maelstrom slot 3 weapon",
     "0x0A4BD8A1833F11B2": "packages/generated/loadout/combat_walker_lumberer",
+    "0x0B831A7DD55E8736": "unnamed loadout package of entity BCC2177439D231BE",
     "0x0CBB8FC14F7D3433": "packages/generated/loadout/marksman_rifle_shark",
     "0x0DFF5200594E867F": "packages/generated/loadout/oil_rig",
     "0x0EDAD8DDEC238BD9": "packages/generated/loadout/smg_rhino",
@@ -61,6 +62,7 @@
     "0x4E381ABCE2D425E8": "packages/generated/loadout/eagle_missile",
     "0x4FEE9CC13C0B4CEC": "packages/generated/loadout/grenade_launcher_tactical",
     "0x519980A75EBD50AD": "packages/generated/loadout/ammo_backpack",
+    "0x522BE23400CC6086": "packages/generated/loadout/pump_shotgun_stun",
     "0x530BB611A14B6CE3": "unnamed loadout package of FAF-14 Spear (impact) explosion",
     "0x534C2C49CA10D168": "unnamed loadout package of TD-110 Maelstrom attach_tank_gun weapon",
     "0x543FF1FF0BD82B44": "packages/generated/loadout/flashbang",
@@ -96,6 +98,7 @@
     "0x82751A054BDFD075": "packages/generated/loadout/assault_rifle_karbin",
     "0x82DCD83D81A385F3": "packages/generated/loadout/laser_pistol",
     "0x82EC28278BF9B79A": "packages/generated/loadout/drone_flamethrower_backpack",
+    "0x8C3B838D05731044": "packages/generated/loadout/revolver_pistol_long",
     "0x8C5A99A9A40D5B8D": "packages/generated/loadout/mortar_turret",
     "0x8F295B4D04C3A06C": "packages/generated/loadout/lmg_stalwart",
     "0x902C54AFB4ED396F": "packages/generated/loadout/heavy_mg",
@@ -107,6 +110,7 @@
     "0x96CEDF4706334C5F": "packages/generated/loadout/orbital_napalm_barrage",
     "0x982259927D0C50FF": "packages/generated/loadout/central_core_drill_01",
     "0x9974F498C67D5E20": "packages/generated/loadout/marksman_rifle",
+    "0x99F20DF1C4CF885A": "packages/generated/loadout/automatic_pistol",
     "0x9B0E4447DF81F72E": "packages/generated/loadout/caltrops_grenade",
     "0x9BC33B7058A2BD5A": "packages/generated/loadout/eagle_bomb",
     "0x9BFA7EB1324C29A5": "unnamed objective package (effect) of the Cyborg Production Unit explosion",
@@ -129,6 +133,7 @@
     "0xBBA76437A1C00C1E": "unnamed loadout package of B/MD C4 Pack (detonation) explosion",
     "0xBD90B4FCCB70622C": "packages/generated/loadout/smoke_grenade",
     "0xBE6C260FADCB8719": "packages/generated/loadout/drone_mg_backpack",
+    "0xBF2250DE0B17285C": "packages/generated/loadout/standard_pistol",
     "0xBF35E874AC3A3B5A": "packages/generated/loadout/orbital_smoke",
     "0xBFE4D006CC25A01E": "packages/generated/loadout/eagle_rocket",
     "0xC0052E5B38E18C33": "packages/generated/loadout/laser_guided_missile_launcher",
@@ -166,6 +171,7 @@
     "0xEEEBC5FD26FE0F40": "packages/generated/loadout/melee_chainsaw_greatsword",
     "0xEF8EDB7B47D8F0B3": "packages/generated/loadout/mine_launcher_gas",
     "0xF111FA26003C0DE9": "packages/generated/loadout/shield_grenade",
+    "0xF230D2D2ADCC034A": "unnamed loadout package of Defender",
     "0xF24CFA612428175B": "unnamed loadout package of GL-28 Belt-Fed Grenade Launcher Backpack",
     "0xF3174EF31B118A55": "packages/generated/loadout/hornet_pistol",
     "0xF4DC2361985C3026": "packages/generated/loadout/orbital_railcannon",
@@ -185,6 +191,38 @@
   },
   "projectiles": [
     {
+      "type": 1,
+      "label": "SHOTGUN 10g. DUAL SABOT (ammo)",
+      "owners": [
+        "SHOTGUN 10g. DUAL SABOT",
+        "SHOTGUN 10g. DUAL SABOT ALTERNATE"
+      ],
+      "class": "ammo_item",
+      "package": "0x0B831A7DD55E8736",
+      "owner": "ammo_item",
+      "package2": "0x522BE23400CC6086"
+    },
+    {
+      "type": 3,
+      "label": "PISTOL-SMG 12x25mm. FULL METAL JACKET (ammo)",
+      "owners": [
+        "PISTOL-SMG 12x25mm. FULL METAL JACKET"
+      ],
+      "class": "ammo_item",
+      "package": "0xF230D2D2ADCC034A",
+      "owner": "ammo_item"
+    },
+    {
+      "type": 4,
+      "label": "PISTOL-SMG 9x20mm. PLASMA (ammo)",
+      "owners": [
+        "PISTOL-SMG 9x20mm. PLASMA"
+      ],
+      "class": "ammo_item",
+      "package": "0x99F20DF1C4CF885A",
+      "owner": "ammo_item"
+    },
+    {
       "type": 7,
       "label": "AR-23P Liberator Penetrator",
       "owners": [
@@ -196,6 +234,16 @@
       "owner": "player_weapon"
     },
     {
+      "type": 12,
+      "label": "ROCKET 15x100mm. THERMITE (ammo)",
+      "owners": [
+        "ROCKET 15x100mm. THERMITE"
+      ],
+      "class": "ammo_item",
+      "package": "0xE0807831D6F456C8",
+      "owner": "ammo_item"
+    },
+    {
       "type": 13,
       "label": "TD-220 Bastion MK XVI / attach_tank_gun",
       "owners": [
@@ -204,6 +252,18 @@
       "class": "explosive_impact",
       "package": "0x4B0DBC466E9DBCA1",
       "owner": "vehicle_weapon"
+    },
+    {
+      "type": 14,
+      "label": "SHOTGUN 10g. SCATTER SHOT (ammo)",
+      "owners": [
+        "SHOTGUN 10g. SCATTER SHOT",
+        "SHOTGUN 10g. SCATTER SHOT ALTERNATE"
+      ],
+      "class": "ammo_item",
+      "package": "0x0B831A7DD55E8736",
+      "owner": "ammo_item",
+      "package2": "0x522BE23400CC6086"
     },
     {
       "type": 15,
@@ -226,6 +286,46 @@
       "owner": "stratagem"
     },
     {
+      "type": 19,
+      "label": "REVOLVER 13x40mm. MAGNUM (ammo)",
+      "owners": [
+        "REVOLVER 13x40mm. MAGNUM"
+      ],
+      "class": "ammo_item",
+      "package": "0x0827284B048BED82",
+      "owner": "ammo_item"
+    },
+    {
+      "type": 20,
+      "label": "ROCKET 15x100mm. TOXIC (ammo)",
+      "owners": [
+        "ROCKET 15x100mm. TOXIC"
+      ],
+      "class": "ammo_item",
+      "package": "0xE0807831D6F456C8",
+      "owner": "ammo_item"
+    },
+    {
+      "type": 21,
+      "label": "ROCKET 15x100mm. PLASMA (ammo)",
+      "owners": [
+        "ROCKET 15x100mm. PLASMA"
+      ],
+      "class": "ammo_item",
+      "package": "0xE0807831D6F456C8",
+      "owner": "ammo_item"
+    },
+    {
+      "type": 28,
+      "label": "REVOLVER 13x40mm. HOLLOW POINT (ammo)",
+      "owners": [
+        "REVOLVER 13x40mm. HOLLOW POINT"
+      ],
+      "class": "ammo_item",
+      "package": "0x0827284B048BED82",
+      "owner": "ammo_item"
+    },
+    {
       "type": 34,
       "label": "EAT-411 Leveller",
       "owners": [
@@ -236,6 +336,16 @@
       "owner": "support_weapon"
     },
     {
+      "type": 35,
+      "label": "RIFLE 9x70mm. SOCOM ASSASSIN (ammo)",
+      "owners": [
+        "RIFLE 9x70mm. SOCOM ASSASSIN"
+      ],
+      "class": "ammo_item",
+      "package": "0xDBD9381F9EA9788F",
+      "owner": "ammo_item"
+    },
+    {
       "type": 36,
       "label": "TD-220 Bastion MK XVI",
       "owners": [
@@ -244,6 +354,18 @@
       "class": "explosive_impact",
       "package": "0x4B0DBC466E9DBCA1",
       "owner": "stratagem"
+    },
+    {
+      "type": 37,
+      "label": "SHOTGUN 10g. HIGH VELOCITY SABOT (ammo)",
+      "owners": [
+        "SHOTGUN 10g. HIGH VELOCITY SABOT",
+        "SHOTGUN 10g. HIGH VELOCITY SABOT ALTERNATE"
+      ],
+      "class": "ammo_item",
+      "package": "0x0B831A7DD55E8736",
+      "owner": "ammo_item",
+      "package2": "0x522BE23400CC6086"
     },
     {
       "type": 38,
@@ -276,6 +398,28 @@
       "owner": "player_weapon"
     },
     {
+      "type": 46,
+      "label": "ROCKET 15x100mm. HIGH VELOCITY (ammo)",
+      "owners": [
+        "ROCKET 15x100mm. HIGH VELOCITY"
+      ],
+      "class": "ammo_item",
+      "package": "0xE0807831D6F456C8",
+      "owner": "ammo_item"
+    },
+    {
+      "type": 47,
+      "label": "SHOTGUN 10g. TRI-BALL (ammo)",
+      "owners": [
+        "SHOTGUN 10g. TRI-BALL",
+        "SHOTGUN 10g. TRI-BALL ALTERNATE"
+      ],
+      "class": "ammo_item",
+      "package": "0x0B831A7DD55E8736",
+      "owner": "ammo_item",
+      "package2": "0x44DD33AF0EF2B0D1"
+    },
+    {
       "type": 57,
       "label": "SG-8P Punisher Plasma",
       "owners": [
@@ -284,6 +428,16 @@
       "class": "explosive_impact",
       "package": "0xCA8D89F4FB0CE5EF",
       "owner": "player_weapon"
+    },
+    {
+      "type": 59,
+      "label": "RIFLE 5,5x50mm. RIPPER (ammo)",
+      "owners": [
+        "RIFLE 5,5x50mm. RIPPER"
+      ],
+      "class": "ammo_item",
+      "package": "0xDBD9381F9EA9788F",
+      "owner": "ammo_item"
     },
     {
       "type": 62,
@@ -304,6 +458,17 @@
       "class": "conventional_plain",
       "package": "0x7DE417DB7552D9FC",
       "owner": "vehicle_weapon"
+    },
+    {
+      "type": 73,
+      "label": "SHOTGUN 10g. MAGNUM TRIBALL (ammo)",
+      "owners": [
+        "SHOTGUN 10g. MAGNUM TRIBALL",
+        "SHOTGUN 10g. MAGNUM TRIBALL ALTERNATE"
+      ],
+      "class": "ammo_item",
+      "package": "0x0B831A7DD55E8736",
+      "owner": "ammo_item"
     },
     {
       "type": 74,
@@ -386,6 +551,17 @@
       "owner": "support_weapon"
     },
     {
+      "type": 91,
+      "label": "SHOTGUN 12g. BUGSHOT (ammo)",
+      "owners": [
+        "SHOTGUN 12g. BUGSHOT"
+      ],
+      "class": "ammo_item",
+      "package": "0x0B831A7DD55E8736",
+      "owner": "ammo_item",
+      "package2": "0x44DD33AF0EF2B0D1"
+    },
+    {
       "type": 94,
       "label": "VG-70 Variable",
       "owners": [
@@ -394,6 +570,27 @@
       "class": "conventional_plain",
       "package": "0x9CEED8AE1331D7BF",
       "owner": "player_weapon"
+    },
+    {
+      "type": 95,
+      "label": "RIFLE 8x60mm. EXPLOSIVE (ammo)",
+      "owners": [
+        "RIFLE 8x60mm. EXPLOSIVE"
+      ],
+      "class": "ammo_item",
+      "package": "0xDBD9381F9EA9788F",
+      "owner": "ammo_item",
+      "package2": "0xE0807831D6F456C8"
+    },
+    {
+      "type": 97,
+      "label": "REVOLVER 13x40mm. RIPPER (ammo)",
+      "owners": [
+        "REVOLVER 13x40mm. RIPPER"
+      ],
+      "class": "ammo_item",
+      "package": "0x0827284B048BED82",
+      "owner": "ammo_item"
     },
     {
       "type": 98,
@@ -416,6 +613,16 @@
       "owner": "stratagem"
     },
     {
+      "type": 101,
+      "label": "RIFLE 8x60mm. DEVASTATOR (ammo)",
+      "owners": [
+        "RIFLE 8x60mm. DEVASTATOR"
+      ],
+      "class": "ammo_item",
+      "package": "0xDBD9381F9EA9788F",
+      "owner": "ammo_item"
+    },
+    {
       "type": 103,
       "label": "GP-20 Ultimatum",
       "owners": [
@@ -424,6 +631,47 @@
       "class": "explosive_impact",
       "package": "0xB779A2F9D0928E03",
       "owner": "player_weapon"
+    },
+    {
+      "type": 104,
+      "label": "RIFLE 9x70mm. SUPER URANIUM CORE (ammo)",
+      "owners": [
+        "RIFLE 9x70mm. SUPER URANIUM CORE"
+      ],
+      "class": "ammo_item",
+      "package": "0xDBD9381F9EA9788F",
+      "owner": "ammo_item"
+    },
+    {
+      "type": 105,
+      "label": "PISTOL-SMG 12x25mm. HOLLOW POINT (ammo)",
+      "owners": [
+        "PISTOL-SMG 12x25mm. HOLLOW POINT"
+      ],
+      "class": "ammo_item",
+      "package": "0xF230D2D2ADCC034A",
+      "owner": "ammo_item"
+    },
+    {
+      "type": 108,
+      "label": "RIFLE 8x60mm. LIBERTY FIRE (ammo)",
+      "owners": [
+        "RIFLE 8x60mm. LIBERTY FIRE"
+      ],
+      "class": "ammo_item",
+      "package": "0x2404FA21FE49C32D",
+      "owner": "ammo_item",
+      "package2": "0xDBD9381F9EA9788F"
+    },
+    {
+      "type": 109,
+      "label": "PISTOL-SMG 12x25mm. Ripper (ammo)",
+      "owners": [
+        "PISTOL-SMG 12x25mm. Ripper"
+      ],
+      "class": "ammo_item",
+      "package": "0xF230D2D2ADCC034A",
+      "owner": "ammo_item"
     },
     {
       "type": 110,
@@ -436,6 +684,27 @@
       "owner": "vehicle_weapon"
     },
     {
+      "type": 113,
+      "label": "ROCKET 15x100mm. EMP-ROUNDS (ammo)",
+      "owners": [
+        "ROCKET 15x100mm. EMP-ROUNDS"
+      ],
+      "class": "ammo_item",
+      "package": "0xE0807831D6F456C8",
+      "owner": "ammo_item"
+    },
+    {
+      "type": 114,
+      "label": "REVOLVER 13x40mm. PENETRATOR (ammo)",
+      "owners": [
+        "REVOLVER 13x40mm. PENETRATOR"
+      ],
+      "class": "ammo_item",
+      "package": "0x0827284B048BED82",
+      "owner": "ammo_item",
+      "package2": "0xDBD9381F9EA9788F"
+    },
+    {
       "type": 115,
       "label": "AC-8 Autocannon",
       "owners": [
@@ -444,6 +713,16 @@
       "class": "explosive_shrapnel",
       "package": "0x6AD7CC21015A5F85",
       "owner": "support_weapon"
+    },
+    {
+      "type": 118,
+      "label": "RIFLE 8x60mm. AIRBURST (ammo)",
+      "owners": [
+        "RIFLE 8x60mm. AIRBURST"
+      ],
+      "class": "ammo_item",
+      "package": "0xDBD9381F9EA9788F",
+      "owner": "ammo_item"
     },
     {
       "type": 119,
@@ -514,6 +793,16 @@
       "class": "explosive_impact",
       "package": "0xCF1ACDE501CCFA1B",
       "owner": "support_weapon"
+    },
+    {
+      "type": 134,
+      "label": "RIFLE 9x70mm. SELF PROPELLED (ammo)",
+      "owners": [
+        "RIFLE 9x70mm. SELF PROPELLED"
+      ],
+      "class": "ammo_item",
+      "package": "0xDBD9381F9EA9788F",
+      "owner": "ammo_item"
     },
     {
       "type": 135,
@@ -626,6 +915,16 @@
       "owner": "player_weapon"
     },
     {
+      "type": 156,
+      "label": "PISTOL-SMG 9x20mm. TOXIC (ammo)",
+      "owners": [
+        "PISTOL-SMG 9x20mm. TOXIC"
+      ],
+      "class": "ammo_item",
+      "package": "0x99F20DF1C4CF885A",
+      "owner": "ammo_item"
+    },
+    {
       "type": 157,
       "label": "SMG-72 Pummeler",
       "owners": [
@@ -646,6 +945,37 @@
       "owner": "stratagem"
     },
     {
+      "type": 160,
+      "label": "SHOTGUN 12g. MAGNUM (ammo)",
+      "owners": [
+        "SHOTGUN 12g. MAGNUM"
+      ],
+      "class": "ammo_item",
+      "package": "0x0B831A7DD55E8736",
+      "owner": "ammo_item"
+    },
+    {
+      "type": 163,
+      "label": "RIFLE 8x60mm. SUPER URANIUM CORE (ammo)",
+      "owners": [
+        "RIFLE 8x60mm. SUPER URANIUM CORE"
+      ],
+      "class": "ammo_item",
+      "package": "0xDBD9381F9EA9788F",
+      "owner": "ammo_item"
+    },
+    {
+      "type": 168,
+      "label": "PISTOL-SMG 12x25mm. HIGH VELOCITY (ammo)",
+      "owners": [
+        "PISTOL-SMG 12x25mm. HIGH VELOCITY",
+        "PISTOL-SMG 12x25mm. Plasma"
+      ],
+      "class": "ammo_item",
+      "package": "0xF230D2D2ADCC034A",
+      "owner": "ammo_item"
+    },
+    {
       "type": 170,
       "label": "Eagle Airstrike",
       "owners": [
@@ -654,6 +984,17 @@
       "class": "explosive_impact",
       "package": "0x1E33CC1600FF38F3",
       "owner": "stratagem"
+    },
+    {
+      "type": 173,
+      "label": "PISTOL-SMG 9x20mm. EXPLOSIVE (ammo)",
+      "owners": [
+        "PISTOL-SMG 9x20mm. EXPLOSIVE"
+      ],
+      "class": "ammo_item",
+      "package": "0x99F20DF1C4CF885A",
+      "owner": "ammo_item",
+      "package2": "0xE0807831D6F456C8"
     },
     {
       "type": 174,
@@ -686,6 +1027,17 @@
       "owner": "player_weapon"
     },
     {
+      "type": 183,
+      "label": "SHOTGUN 10g. FLECHETTES (ammo)",
+      "owners": [
+        "SHOTGUN 10g. FLECHETTES",
+        "SHOTGUN 10g. FLECHETTES ALTERNATE"
+      ],
+      "class": "ammo_item",
+      "package": "0x522BE23400CC6086",
+      "owner": "ammo_item"
+    },
+    {
       "type": 186,
       "label": "RS-422 Railgun",
       "owners": [
@@ -704,6 +1056,27 @@
       "class": "explosive_impact",
       "package": "0xD2CEBF1FEDB86A19",
       "owner": "stratagem"
+    },
+    {
+      "type": 189,
+      "label": "RIFLE 5,5x50mm. SUPER URANIUM CORE (ammo)",
+      "owners": [
+        "RIFLE 5,5x50mm. SUPER URANIUM CORE"
+      ],
+      "class": "ammo_item",
+      "package": "0xDBD9381F9EA9788F",
+      "owner": "ammo_item"
+    },
+    {
+      "type": 191,
+      "label": "SHOTGUN 10g. Stun (ammo)",
+      "owners": [
+        "SHOTGUN 10g. Stun",
+        "SHOTGUN 10g. Stun ALTERNATE"
+      ],
+      "class": "ammo_item",
+      "package": "0x522BE23400CC6086",
+      "owner": "ammo_item"
     },
     {
       "type": 194,
@@ -726,6 +1099,28 @@
       "owner": "stratagem"
     },
     {
+      "type": 199,
+      "label": "SHOTGUN 10g. BUGSHOT (ammo)",
+      "owners": [
+        "SHOTGUN 10g. BUGSHOT",
+        "SHOTGUN 10g. BUGSHOT ALTERNATE"
+      ],
+      "class": "ammo_item",
+      "package": "0x0B831A7DD55E8736",
+      "owner": "ammo_item",
+      "package2": "0x44DD33AF0EF2B0D1"
+    },
+    {
+      "type": 200,
+      "label": "RIFLE 9x70mm. PENETRATOR (ammo)",
+      "owners": [
+        "RIFLE 9x70mm. PENETRATOR"
+      ],
+      "class": "ammo_item",
+      "package": "0xDBD9381F9EA9788F",
+      "owner": "ammo_item"
+    },
+    {
       "type": 202,
       "label": "P/40-K Bolt Pistol",
       "owners": [
@@ -734,6 +1129,36 @@
       "class": "explosive_impact",
       "package": "0x9514615D563612F1",
       "owner": "player_weapon"
+    },
+    {
+      "type": 204,
+      "label": "PISTOL-SMG 12x25mm. TOXIC (ammo)",
+      "owners": [
+        "PISTOL-SMG 12x25mm. TOXIC"
+      ],
+      "class": "ammo_item",
+      "package": "0xF230D2D2ADCC034A",
+      "owner": "ammo_item"
+    },
+    {
+      "type": 205,
+      "label": "RIFLE 5,5x50mm. HOLLOW-POINT (ammo)",
+      "owners": [
+        "RIFLE 5,5x50mm. HOLLOW-POINT"
+      ],
+      "class": "ammo_item",
+      "package": "0xDBD9381F9EA9788F",
+      "owner": "ammo_item"
+    },
+    {
+      "type": 206,
+      "label": "ROCKET 15x100mm. HIGH EXPLOSIVE (ammo)",
+      "owners": [
+        "ROCKET 15x100mm. HIGH EXPLOSIVE"
+      ],
+      "class": "ammo_item",
+      "package": "0xE0807831D6F456C8",
+      "owner": "ammo_item"
     },
     {
       "type": 207,
@@ -746,6 +1171,26 @@
       "owner": "player_weapon"
     },
     {
+      "type": 211,
+      "label": "RIFLE 8x60mm. HIGH VELOCITY (ammo)",
+      "owners": [
+        "RIFLE 8x60mm. HIGH VELOCITY"
+      ],
+      "class": "ammo_item",
+      "package": "0xDBD9381F9EA9788F",
+      "owner": "ammo_item"
+    },
+    {
+      "type": 212,
+      "label": "RIFLE 8x60mm. DOUBLE POWER (ammo)",
+      "owners": [
+        "RIFLE 8x60mm. DOUBLE POWER"
+      ],
+      "class": "ammo_item",
+      "package": "0xDBD9381F9EA9788F",
+      "owner": "ammo_item"
+    },
+    {
       "type": 215,
       "label": "MP-98 Knight",
       "owners": [
@@ -755,6 +1200,17 @@
       "class": "conventional_plain",
       "package": "0x0601A2F91EC178A9",
       "owner": "player_weapon"
+    },
+    {
+      "type": 217,
+      "label": "SHOTGUN 10g. MAGNUM (ammo)",
+      "owners": [
+        "SHOTGUN 10g. MAGNUM",
+        "SHOTGUN 10g. MAGNUM ALTERNATE"
+      ],
+      "class": "ammo_item",
+      "package": "0x0B831A7DD55E8736",
+      "owner": "ammo_item"
     },
     {
       "type": 222,
@@ -775,6 +1231,39 @@
       "class": "conventional_plain",
       "package": "0xEA6967F8565A2D76",
       "owner": "support_weapon"
+    },
+    {
+      "type": 227,
+      "label": "SHOTGUN 12g. TRI-BALL (ammo)",
+      "owners": [
+        "SHOTGUN 12g. TRI-BALL"
+      ],
+      "class": "ammo_item",
+      "package": "0x0B831A7DD55E8736",
+      "owner": "ammo_item"
+    },
+    {
+      "type": 230,
+      "label": "PISTOL-SMG 12x25mm. Explosive (ammo)",
+      "owners": [
+        "PISTOL-SMG 12x25mm. Explosive"
+      ],
+      "class": "ammo_item",
+      "package": "0xE0807831D6F456C8",
+      "owner": "ammo_item",
+      "package2": "0xF230D2D2ADCC034A"
+    },
+    {
+      "type": 232,
+      "label": "SHOTGUN 10g. BIRDSHOT (ammo)",
+      "owners": [
+        "SHOTGUN 10g. BIRDSHOT",
+        "SHOTGUN 10g. BUCKSHOT ALTERNATE"
+      ],
+      "class": "ammo_item",
+      "package": "0x0B831A7DD55E8736",
+      "owner": "ammo_item",
+      "package2": "0x44DD33AF0EF2B0D1"
     },
     {
       "type": 234,
@@ -827,6 +1316,16 @@
       "owner": "player_weapon"
     },
     {
+      "type": 244,
+      "label": "PISTOL-SMG 9x20mm. RIPPER (ammo)",
+      "owners": [
+        "PISTOL-SMG 9x20mm. RIPPER"
+      ],
+      "class": "ammo_item",
+      "package": "0x99F20DF1C4CF885A",
+      "owner": "ammo_item"
+    },
+    {
       "type": 247,
       "label": "Orbital Smoke Strike",
       "owners": [
@@ -847,6 +1346,46 @@
       "owner": "player_weapon"
     },
     {
+      "type": 252,
+      "label": "SHOTGUN 12g. SCATTER SHOT (ammo)",
+      "owners": [
+        "SHOTGUN 12g. SCATTER SHOT"
+      ],
+      "class": "ammo_item",
+      "package": "0xDBD9381F9EA9788F",
+      "owner": "ammo_item"
+    },
+    {
+      "type": 255,
+      "label": "RIFLE 5,5x50mm. DOUBLE POWER (ammo)",
+      "owners": [
+        "RIFLE 5,5x50mm. DOUBLE POWER"
+      ],
+      "class": "ammo_item",
+      "package": "0xDBD9381F9EA9788F",
+      "owner": "ammo_item"
+    },
+    {
+      "type": 257,
+      "label": "ROCKET 15x100mm. FRAGMENTATION (ammo)",
+      "owners": [
+        "ROCKET 15x100mm. FRAGMENTATION"
+      ],
+      "class": "ammo_item",
+      "package": "0xE0807831D6F456C8",
+      "owner": "ammo_item"
+    },
+    {
+      "type": 258,
+      "label": "RIFLE 8x60mm. SNIPER ARMOR PIERCING (ammo)",
+      "owners": [
+        "RIFLE 8x60mm. SNIPER ARMOR PIERCING"
+      ],
+      "class": "ammo_item",
+      "package": "0xDBD9381F9EA9788F",
+      "owner": "ammo_item"
+    },
+    {
       "type": 259,
       "label": "EAT-700 Expendable Napalm",
       "owners": [
@@ -855,6 +1394,17 @@
       "class": "explosive_shrapnel",
       "package": "0x5D68E55823ACD1BF",
       "owner": "support_weapon"
+    },
+    {
+      "type": 260,
+      "label": "SHOTGUN 10g. BUCKSHOT (ammo)",
+      "owners": [
+        "SHOTGUN 10g. BUCKSHOT",
+        "SHOTGUN 10g. BUCKSHOT ALTERNATE"
+      ],
+      "class": "ammo_item",
+      "package": "0xE566E3AAF90DB459",
+      "owner": "ammo_item"
     },
     {
       "type": 261,
@@ -876,6 +1426,27 @@
       "class": "conventional_plain",
       "package": "0x933148104D23A322",
       "owner": "player_weapon"
+    },
+    {
+      "type": 264,
+      "label": "RIFLE 9x70mm. Sniper Armor Piercing (ammo)",
+      "owners": [
+        "RIFLE 9x70mm. Sniper Armor Piercing"
+      ],
+      "class": "ammo_item",
+      "package": "0xDBD9381F9EA9788F",
+      "owner": "ammo_item"
+    },
+    {
+      "type": 265,
+      "label": "SHOTGUN 12g. FLECHETTES (ammo)",
+      "owners": [
+        "SHOTGUN 12g. FLECHETTES"
+      ],
+      "class": "ammo_item",
+      "package": "0x0B831A7DD55E8736",
+      "owner": "ammo_item",
+      "package2": "0x44DD33AF0EF2B0D1"
     },
     {
       "type": 275,
@@ -913,6 +1484,16 @@
       "owner": "stratagem"
     },
     {
+      "type": 278,
+      "label": "RIFLE 5,5x50mm. DEVASTATOR (ammo)",
+      "owners": [
+        "RIFLE 5,5x50mm. DEVASTATOR"
+      ],
+      "class": "ammo_item",
+      "package": "0xDBD9381F9EA9788F",
+      "owner": "ammo_item"
+    },
+    {
       "type": 280,
       "label": "GL-21 Grenade Launcher",
       "owners": [
@@ -921,6 +1502,16 @@
       "class": "explosive_impact_and_expiry",
       "package": "0x0089BBE3E284FCAA",
       "owner": "support_weapon"
+    },
+    {
+      "type": 283,
+      "label": "PISTOL-SMG 9x20mm. THERMITE (ammo)",
+      "owners": [
+        "PISTOL-SMG 9x20mm. THERMITE"
+      ],
+      "class": "ammo_item",
+      "package": "0x99F20DF1C4CF885A",
+      "owner": "ammo_item"
     },
     {
       "type": 286,
@@ -941,6 +1532,27 @@
       "class": "conventional_plain",
       "package": "0xF90A06C6E291692D",
       "owner": "player_weapon"
+    },
+    {
+      "type": 291,
+      "label": "PISTOL-SMG 9x20mm. FULL METAL JACKET (ammo)",
+      "owners": [
+        "PISTOL-SMG 9x20mm. FULL METAL JACKET"
+      ],
+      "class": "ammo_item",
+      "package": "0x99F20DF1C4CF885A",
+      "owner": "ammo_item"
+    },
+    {
+      "type": 292,
+      "label": "SHOTGUN 10g. LIBERTY FIRE (ammo)",
+      "owners": [
+        "SHOTGUN 10g. LIBERTY FIRE",
+        "SHOTGUN 10g. LIBERTY FIRE ALTERNATE"
+      ],
+      "class": "ammo_item",
+      "package": "0x0B831A7DD55E8736",
+      "owner": "ammo_item"
     },
     {
       "type": 297,
@@ -993,6 +1605,16 @@
       "owner": "support_weapon"
     },
     {
+      "type": 307,
+      "label": "SHOTGUN 12g. MAGNUM TRIBALL (ammo)",
+      "owners": [
+        "SHOTGUN 12g. MAGNUM TRIBALL"
+      ],
+      "class": "ammo_item",
+      "package": "0x0B831A7DD55E8736",
+      "owner": "ammo_item"
+    },
+    {
       "type": 308,
       "label": "M6C/SOCOM Pistol",
       "owners": [
@@ -1001,6 +1623,16 @@
       "class": "conventional_plain",
       "package": "0x2A5298E1C2F70C82",
       "owner": "player_weapon"
+    },
+    {
+      "type": 309,
+      "label": "REVOLVER 13x40mm. FULL METAL JACKET (ammo)",
+      "owners": [
+        "REVOLVER 13x40mm. FULL METAL JACKET"
+      ],
+      "class": "ammo_item",
+      "package": "0x8C3B838D05731044",
+      "owner": "ammo_item"
     },
     {
       "type": 310,
@@ -1053,6 +1685,16 @@
       "owner": "stratagem"
     },
     {
+      "type": 321,
+      "label": "RIFLE 5,5x50mm. SELF PROPELLED (ammo)",
+      "owners": [
+        "RIFLE 5,5x50mm. SELF PROPELLED"
+      ],
+      "class": "ammo_item",
+      "package": "0xDBD9381F9EA9788F",
+      "owner": "ammo_item"
+    },
+    {
       "type": 324,
       "label": "TD-110 Maelstrom / slot_2",
       "owners": [
@@ -1083,6 +1725,28 @@
       "owner": "player_weapon"
     },
     {
+      "type": 332,
+      "label": "SHOTGUN 10g. DUAL SABOT (ammo)",
+      "owners": [
+        "SHOTGUN 10g. DUAL SABOT",
+        "SHOTGUN 10g. DUAL SABOT ALTERNATE"
+      ],
+      "class": "ammo_item",
+      "package": "0x0B831A7DD55E8736",
+      "owner": "ammo_item",
+      "package2": "0x522BE23400CC6086"
+    },
+    {
+      "type": 333,
+      "label": "RIFLE 8x60mm. PENETRATOR (ammo)",
+      "owners": [
+        "RIFLE 8x60mm. PENETRATOR"
+      ],
+      "class": "ammo_item",
+      "package": "0xDBD9381F9EA9788F",
+      "owner": "ammo_item"
+    },
+    {
       "type": 334,
       "label": "AR/GL-21 One-Two",
       "owners": [
@@ -1091,6 +1755,16 @@
       "class": "conventional_plain",
       "package": "0x49F1972458F7CCEC",
       "owner": "player_weapon"
+    },
+    {
+      "type": 337,
+      "label": "PISTOL-SMG 9x20mm. HOLLOW POINT (ammo)",
+      "owners": [
+        "PISTOL-SMG 9x20mm. HOLLOW POINT"
+      ],
+      "class": "ammo_item",
+      "package": "0xBF2250DE0B17285C",
+      "owner": "ammo_item"
     },
     {
       "type": 340,
@@ -1121,6 +1795,16 @@
       "class": "conventional_plain",
       "package": "0x1B006880AC88D1CD",
       "owner": "player_weapon"
+    },
+    {
+      "type": 345,
+      "label": "RIFLE 5,5x50mm. HIGH VELOCITY (ammo)",
+      "owners": [
+        "RIFLE 5,5x50mm. HIGH VELOCITY"
+      ],
+      "class": "ammo_item",
+      "package": "0xDBD9381F9EA9788F",
+      "owner": "ammo_item"
     },
     {
       "type": 346,
@@ -3905,6 +4589,16 @@
         ]
       },
       "was": "idle_sam_site (impact)"
+    },
+    {
+      "type": 339,
+      "id": "ammo_item/339",
+      "label": "Primary_Airburst",
+      "family": "ammo_item",
+      "packages": [],
+      "mission": false,
+      "shrapnel": false,
+      "damage": 335
     },
     {
       "type": 341,
@@ -10181,10 +10875,6 @@
     {
       "type": 338,
       "label": "OilField"
-    },
-    {
-      "type": 339,
-      "label": "Primary_Airburst"
     },
     {
       "type": 348,

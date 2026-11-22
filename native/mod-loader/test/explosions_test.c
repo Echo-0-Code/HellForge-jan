@@ -216,7 +216,15 @@ static void ExplosionsWidth(int reviewed)
     VirtualFree(game, 0, MEM_RELEASE);
 }
 
-/* An explosive round's weapon package: only for a round with an explosion, by its base when a mod copied it. */
+/* An explosive round's weapon packages: only for a round with an explosion, by its base when a mod copied it; a round
+ * an ammo item loads (such as a 10g Dual Sabot) can need two. */
+static uint64_t BlastPackageOf(uint32_t type, int k)
+{
+    uint64_t packages[2];
+    BlastPackages(type, packages);
+    return packages[k];
+}
+
 static void BlastPackageFixture(void)
 {
     uintptr_t (*saved)(const char*, uint64_t, int*) = g_tableRow;
@@ -224,14 +232,20 @@ static void BlastPackageFixture(void)
     uint8_t* round = (uint8_t*)g_refRows[0];
     uint32_t impact = *(uint32_t*)(round + REF_IMPACT), expiry = *(uint32_t*)(round + REF_EXPIRY);
     *(uint32_t*)(round + REF_IMPACT) = 0; *(uint32_t*)(round + REF_EXPIRY) = 0;
-    assert(BlastPackage(40) == 0);
+    assert(BlastPackageOf(40, 0) == 0 && BlastPackageOf(40, 1) == 0);
     *(uint32_t*)(round + REF_EXPIRY) = 158;
-    assert(BlastPackage(40) == 0xE0807831D6F456C8ull);
+    assert(BlastPackageOf(40, 0) == 0xE0807831D6F456C8ull && BlastPackageOf(40, 1) == 0);
     *(uint32_t*)(round + REF_IMPACT) = 158; *(uint32_t*)(round + REF_EXPIRY) = 0;
-    assert(BlastPackage(40) == 0xE0807831D6F456C8ull && BlastPackage(9999) == 0);
+    assert(BlastPackageOf(40, 0) == 0xE0807831D6F456C8ull && BlastPackageOf(9999, 0) == 0);
     *(uint32_t*)(round + REF_IMPACT) = impact; *(uint32_t*)(round + REF_EXPIRY) = expiry;
+    const RefRow* twin = RefDonor(1);
+    uint8_t* ammo = (uint8_t*)g_refRows[1];
+    uint32_t ammoImpact = *(uint32_t*)(ammo + REF_IMPACT);
+    *(uint32_t*)(ammo + REF_IMPACT) = 158;
+    assert(BlastPackageOf(twin->type, 0) == kRefPackages[twin->package - 1].id && BlastPackageOf(twin->type, 1) == kRefPackages[twin->package2 - 1].id);
+    *(uint32_t*)(ammo + REF_IMPACT) = ammoImpact;
     g_tableRow = saved;
-    puts("explosions: an explosive round asks for its weapon's package, a plain one does not");
+    puts("explosions: an explosive round asks for its weapon's packages, a plain one does not");
 }
 
 /* The projectile type's field (projectiles.c): untouched up to 161 new types; past that it widens from 9 to 11 bits, an

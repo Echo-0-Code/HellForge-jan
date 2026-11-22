@@ -424,6 +424,10 @@ types of its own from them and let players pick one in its own screen (SDK 25):
 - An item must be for the slot it goes in, and an attachment must be offered on the weapon.
 - Its delta sets the projectile when the weapon is built, over `HfWeapon.projectile`. A weapon with a projectile and no
   ammunition has none, as before.
+- The `set` may name a vanilla round that only ammunition items load, such as 206 (15x100mm High Explosive rocket),
+  118 (8x60mm Airburst) or 191 (the Halt's stun pellets). `mappings/ammo-rounds.json` lists the 65 HellForge accepts
+  and the packages each loads. The 10g Slug (240), 10g Fragmentation (322) and 12x25mm Thermite (287) rounds are not
+  there: they use an icon or an effect no listed package carries.
 
 ### A weapon of your own
 

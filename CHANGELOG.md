@@ -12,6 +12,10 @@ On `dev`, since 0.4.0-beta.
 
 ### Added
 
+- **Vanilla rounds only ammunition loads.** Mods can now name 65 rounds that no weapon fires, such as the 15x100mm
+  High Explosive rocket or the Halt's stun pellets. They work in a projectile edit, an `add_projectile` base or an
+  ammunition copy's `set`, where HellForge used to refuse them. Each one loads the packages its effects need
+  ([content](docs/modding/content.md#ammunition-of-your-own)).
 - **Ammunition types of your own (SDK 25).** An attachment's new `set` gives it values of its own, so a copy of a
   vanilla ammunition item can load a mod's projectile, magazine size or rate. `HfWeapon.ammunition` gives a weapon a
   default ammunition and opens the slot. `set_weapon_pick` and `weapon_pick` pick an item in a weapon's slot through

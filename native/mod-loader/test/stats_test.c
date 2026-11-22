@@ -2419,10 +2419,20 @@ static int g_refResidentCount;
 static uint64_t g_refRequested[8];
 static int g_refRequestedCount;
 
+/* A catalogued donor round with one package or with two (a round an ammo item loads); both have the donor's row. */
+static const RefRow* RefDonor(int two)
+{
+    for (size_t i = 0; i < sizeof kRefProjectiles / sizeof kRefProjectiles[0]; i++)
+        if ((kRefProjectiles[i].package2 != 0) == two && kRefProjectiles[i].package != 0) return &kRefProjectiles[i];
+    assert(!"no such donor");
+    return NULL;
+}
+
 static uintptr_t RefTableRow(const char* component, uint64_t id, int* ready)
 {
     *ready = 1;
-    if (!strcmp(component, "ProjectileSettings")) return id == 40 ? (uintptr_t)g_refRows[0] : id == kRefProjectiles[0].type ? (uintptr_t)g_refRows[1] : 0;
+    if (!strcmp(component, "ProjectileSettings"))
+        return id == 40 ? (uintptr_t)g_refRows[0] : id == RefDonor(0)->type || id == RefDonor(1)->type ? (uintptr_t)g_refRows[1] : 0;
     if (!strcmp(component, "DamageInfo")) return id == 149 ? (uintptr_t)g_refRows[3] : 0;
     if (!strcmp(component, "ExplosionSettings"))
         for (int i = 0; i < 4; i++) if (g_refExplosionTypes[i] == id) return (uintptr_t)g_refExplosions[i];
@@ -2540,7 +2550,7 @@ static void RefsFixture(void)
     uint8_t* weapon = FakeRecordOf("ProjectileWeaponComponentData", 0x77, 616, 0);
     uint32_t own = 40; memcpy(weapon, &own, 4);
     HfField projectile = HF_FIELD(ProjectileWeapon, projectile);
-    v = (HfValue)HF_U32(kRefProjectiles[0].type);
+    v = (HfValue)HF_U32(RefDonor(0)->type);
     int edits = g_editCount;
     assert(ApiSetLive(mod, 0x77, &projectile, &v, 0) == HF_APPLIES_RESPAWN && g_editCount == edits + 1 && g_edits[edits].waiting);
     PackagesRequest();
