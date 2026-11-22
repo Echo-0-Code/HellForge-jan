@@ -67,6 +67,26 @@ On Linux, the graphical installer asks for a Proton prefix instead of an install
 cannot run from inside Steam's steamapps folder" was unpacked into one: run the installer again with a prefix folder
 outside `steamapps`, then delete the copy the message names.
 
+### Going back to an earlier version did not happen
+
+The launcher says why under the version dropdown, and `logs\versions.log` has a line for each keep and switch:
+
+| Message | What to do |
+|---|---|
+| "Close these first: ..." or "Close these to switch versions: ..." | Close the game, any session, and HellForge programs started from the installation ("another HellForge window", an external launcher's session). Then pick the version again. |
+| "... can't be played from this launcher" | The launcher plays HellForge 0.3.0-beta, 0.4.0-beta and builds of its own version. Use an older version's own Setup for anything else. |
+| "... plays HELLDIVERS 2 build ..." | That version was made for another game build than this installation's copy. |
+| "... could not be swapped in (...). Nothing changed" | A file was in use, often by an antivirus scan or an Explorer window in `app\`. Close it and try again. |
+| "... and putting ... back failed too" | Close every program that may hold the installation's files, then pick the version again or run `HellForge-Setup.exe` over the installation. Either finishes putting it back. |
+| "The version before this update was not kept: only ... GB is free" | The update needed room it didn't have. Free space; the next update keeps the version it replaces. |
+
+If `HellForge.exe` says the launcher is missing after a switch was cut short (the PC lost power), run
+`HellForge-Setup.exe` over the installation: it puts the switch back before it updates.
+
+With no launcher open, run the newest `HellForge-Setup.exe` (a copy is in the installation's `installer\` folder) and
+press Switch to `<version>`. An installation an earlier HellForge left on an older version's launcher (the 0.5.0 test
+builds switched the whole app) gets its newest launcher back that way, or at the next update.
+
 ### "This PC runs Windows 10 version ..." (Setup or the launcher closes as it starts)
 
 Setup checks this first and names your Windows. Update to Windows 10 version 22H2 or Windows 11 in Settings > Update &
@@ -251,6 +271,18 @@ Cases HellForge already recognises:
   | "... kept the hosts file (...) open, so the sync could not change it" | The program it names keeps the hosts file open; it is usually a security program. Allow the capture in it. |
   | "The capture has not got ready after a minute; still waiting." | A security program is usually checking or holding the capture. It goes on if it is let through. |
   | "The capture could not reach HELLDIVERS 2's servers" | Check the internet connection. |
+  | "Windows does not follow the sync's line in the hosts file (... still leads to ...)" | A VPN, DNS changer or ad blocker answers name lookups itself, so the game would go past the sync. Turn it off while you sync. |
+
+  Once the game runs, the launcher reads the capture's `proxy.log` and says where the game's login stopped, without
+  waiting out the ten minutes:
+
+  | Message | What to do |
+  | --- | --- |
+  | "HELLDIVERS 2 never contacted the sync" | A VPN, DNS changer or ad blocker sent the game past the sync. Turn it off while you sync. |
+  | "... the sync could not reach HELLDIVERS 2's servers (...)" | A firewall, VPN or network filter blocks the capture. Allow it, or turn the filter off while you sync. |
+  | "Something on this PC stepped into the sync's connection ... and showed its own certificate" | An antivirus's HTTPS or web scanning. Turn it off while you sync. |
+  | "HELLDIVERS 2 reached the sync but did not accept its certificate" | A security program guards Windows' trusted certificates. Allow `HellForge.CaptureProxy.exe` in it. |
+  | "HELLDIVERS 2's servers refused the game's login (HTTP ...)" | The servers may be down: check that the normal game logs in, then sync again. |
 
   A capture is left running when the launcher closed during a sync. The next sync stops it itself, along with its hosts
   line and certificate: restarting the PC is not needed for that.
@@ -488,17 +520,20 @@ first.
 
 ### Premium content is locked
 
-Premium warbonds, Superstore items and DLC gear come from your last Sync Inventory. This PC's snapshot signer seals it
-for 14 days. Profile > Account sync says why a snapshot gives none:
+Premium warbonds, Superstore items and DLC gear come from your last Sync Inventory. This PC's snapshot signer seals it,
+and the seal holds until your next sync replaces it. Profile > Account sync says why a snapshot gives none:
 
 | Message | What to do |
 |---|---|
-| "The snapshot is older than 14 days. Sync again." | Run Sync Inventory again. |
 | "This snapshot was sealed by an older HellForge. Sync again." | Run Sync Inventory once after updating HellForge. |
 | "This PC has no snapshot signer yet. Sync again." | Run Sync Inventory: the capture makes the signer, with administrator rights on Windows and the helper on Linux. |
+| "The snapshot signer's key is on this PC (...) but not visible inside the Steam Linux Runtime..." (Linux) | Syncing again does not help: update HellForge ([when premium content stays locked](linux-account-sync.md#when-premium-content-stays-locked)). |
 | "This snapshot was sealed on another PC, or before this PC's snapshot signer changed. Sync again." | The snapshot came from another PC, or the signer's key was removed. Run Sync Inventory on this PC. |
 | "The capture could not open this PC's snapshot signer..." | Sync again. On Linux, premium content needs systemd ([the snapshot signer](linux-account-sync.md#the-snapshot-signer)). |
 | "...SELinux blocked the snapshot signer..." or "...systemd could not start the snapshot signer..." (Linux) | Sync again, and accept the helper install if the launcher offers it: it labels the signer. If it stays, send the message and `sudo ausearch -m avc -ts recent` ([SELinux](linux-account-sync.md#selinux-fedora-bazzite-and-nobara)). |
+
+An item the live game gave you on its own, without its premium warbond (a free reward, such as the Killzone weapons
+some players got), is yours on every profile once synced. The rest of that warbond stays locked until you own it.
 
 ## Playing with friends
 

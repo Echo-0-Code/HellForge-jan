@@ -49,6 +49,7 @@ public partial class MainWindow
             }
             modsData = task.IsCompletedSuccessfully ? task.Result
                 : EmptyModsPage("Could not read the mods folder: " + Privacy.Scrub(task.Exception?.GetBaseException().Message ?? "unknown error"));
+            ShowModImport();
             if (!onlyIfChanged || modsDrawn != DrawnKey())
             {
                 if (modDrag == null) DrawMods();
@@ -94,9 +95,13 @@ public partial class MainWindow
         // Local Stats is the in-game editor's (its saved changes, always on, never compared): not listed, so nobody thinks
         // friends must match it
         mods = mods.Where(m => m.Id != ModCatalog.LocalStatsId).ToList();
+        // an older version played with loads what its own loader can: the rest are its problems
+        if (request.InstallRoot != null && playedRuntime is { IsCurrent: false } older)
+            foreach (var problem in OlderLoaderProblems(new InstallLayout(request.InstallRoot)).Except(problems))
+                problems.Add($"Not loaded by {older.Text}: {problem}");
         var sdk = request.InstallRoot != null ? ModSdk.Find(request.InstallRoot) : null;
         var toolsReady = sdk != null && ModKit.ToolsReady(sdk);
-        var (downloaded, bytes) = DownloadedMods(request.ModsFolder);
+        var (downloaded, bytes) = SyncedStore.Downloaded(request.ModsFolder);
         var (premium, atSession) = mods.Any(m => m.Premium.Count > 0) ? PremiumOwnership(request) : (null, false);
         var data = new ModsPageData(mods, problems, null, ComparedText(ModCatalog.Active(mods)), ModSettings.Read(request.ModsFolder), downloaded, bytes,
             request.RunDirectory != null ? ModStatus.Read(request.RunDirectory) ?? [] : [],
@@ -142,17 +147,6 @@ public partial class MainWindow
         }
     }
 
-    // The mods downloaded from hosts (SyncedStore): how many, and their size.
-    static (int Count, long Bytes) DownloadedMods(string modsFolder)
-    {
-        var store = SyncedStore.Root(modsFolder);
-        var stored = Directory.Exists(store) ? Directory.GetDirectories(store).Where(d => !Path.GetFileName(d).StartsWith('.')).ToList() : [];
-        long bytes = 0;
-        try { bytes = stored.Sum(d => Directory.GetFiles(d, "*", SearchOption.AllDirectories).Sum(f => new FileInfo(f).Length)); }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
-        return (stored.Count, bytes);
-    }
-
     // Folder mods with sources (ModKitPage's SourceMods).
     static bool HasSourceMods(string modsFolder) => Directory.Exists(modsFolder) &&
         Directory.EnumerateDirectories(modsFolder).Any(f => !Path.GetFileName(f).StartsWith('.') &&
@@ -176,5 +170,18 @@ public partial class MainWindow
         var icons = new Dictionary<string, Bitmap?>(StringComparer.Ordinal);
         foreach (var icon in mods.Select(m => m.Icon).OfType<string>().Distinct(StringComparer.Ordinal)) icons[icon] = Picture(icon, 80);
         return icons;
+    }
+
+    // The older version's answer, asked again only when the mods folder or its list changed.
+    (string Key, IReadOnlyList<string> Problems)? olderProblems;
+
+    IReadOnlyList<string> OlderLoaderProblems(InstallLayout install)
+    {
+        var key = string.Join("|", Directory.Exists(install.Mods)
+            ? Directory.EnumerateFileSystemEntries(install.Mods).Select(e => e + "=" + File.GetLastWriteTimeUtc(e).Ticks) : []);
+        if (olderProblems is { } cached && cached.Key == key) return cached.Problems;
+        var problems = SessionRuntime.LoaderProblems(install, TimeSpan.FromSeconds(30));
+        olderProblems = (key, problems);
+        return problems;
     }
 }
