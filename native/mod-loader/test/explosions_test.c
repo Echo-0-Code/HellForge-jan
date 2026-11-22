@@ -217,7 +217,7 @@ static void ExplosionsWidth(int reviewed)
 }
 
 /* An explosive round's weapon packages: only for a round with an explosion, by its base when a mod copied it; a round
- * an ammo item loads (kRefProjectiles[0], a 10g Dual Sabot) can need two. */
+ * an ammo item loads (such as a 10g Dual Sabot) can need two. */
 static uint64_t BlastPackageOf(uint32_t type, int k)
 {
     uint64_t packages[2];
@@ -238,8 +238,7 @@ static void BlastPackageFixture(void)
     *(uint32_t*)(round + REF_IMPACT) = 158; *(uint32_t*)(round + REF_EXPIRY) = 0;
     assert(BlastPackageOf(40, 0) == 0xE0807831D6F456C8ull && BlastPackageOf(9999, 0) == 0);
     *(uint32_t*)(round + REF_IMPACT) = impact; *(uint32_t*)(round + REF_EXPIRY) = expiry;
-    const RefRow* twin = &kRefProjectiles[0];
-    assert(twin->package2 != 0);
+    const RefRow* twin = RefDonor(1);
     uint8_t* ammo = (uint8_t*)g_refRows[1];
     uint32_t ammoImpact = *(uint32_t*)(ammo + REF_IMPACT);
     *(uint32_t*)(ammo + REF_IMPACT) = 158;
