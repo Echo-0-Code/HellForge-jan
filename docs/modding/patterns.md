@@ -185,6 +185,9 @@ be one mod, or one of them loses its layers.
   held from the start, and a paint package with them as its only rewards. So a secondary takes a weapon pattern as a
   primary does, and so do mods' copies, each with a package of its own. A support weapon takes it too, filed after
   its paints and held with its stratagem. One whose paints the catalogue has no room for takes no pattern either.
+- **Entity copies of support weapons.** A stratagem's weapon made with `add_entity` and `own_all = 1` gets a paint
+  package of its own, the game's paints and the patterns, all held from the start. Without `own_all` it shares its
+  base's record and takes no paints of its own.
 - **The hangar.** Ship Management's Vehicle Customization lists the Pelican, the hellpod and every vehicle, each with
   its patterns.
 - **Picks.** A pick saves as the game's patterns do and is kept across sessions. Without the mod, the weapon or vehicle
