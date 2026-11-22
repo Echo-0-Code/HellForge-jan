@@ -5060,6 +5060,7 @@ int main(int argc, char** argv)
     EditsForgetFixture();
     NetTypesFixture();
     HotDataFixture();
+    CopyNamesFixture();
     ContentNumbersFixture();
     ContentInstallFixture();
     StratagemGuardsFixture();
