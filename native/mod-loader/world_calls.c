@@ -328,23 +328,27 @@ static uint32_t WcFaction(const WcScan* s, uint32_t entity)
     return s->factionsOk && EvpHash(s->factions + 0x12050, entity, 8, 4, &index) ? EvpU32(s->masks + (uintptr_t)index * 4, 0) : 0;
 }
 
-/* Health index i as an enemy within reach: 1 with *f filled. */
-static int WcEnemyAt(const WcScan* s, uint32_t i, const float* centre, float radius, HfFoundEnemy* f)
+static uint32_t WsSide(uint32_t mask, uint32_t toward, uint64_t resource); /* world_sight.c */
+
+/* Health index i as a living entity of the query's sides within reach: 1 with *f filled. */
+static int WcFoundAt(const WcScan* s, uint32_t i, const HfFind* q, HfFoundEnemy* f)
 {
     uintptr_t descriptor;
     uint8_t d[24];
     uint32_t life = EvpU32(s->records + (uintptr_t)i * 0x1B8 + 0x19C, 2);
-    if (life >= 2 || !EvpPtr(s->descriptors + (uintptr_t)i * 8, &descriptor) || SafeRead(descriptor, d, sizeof d)) return 0;
+    if (life >= 2 || (life == 1 && (q->flags & HF_FIND_NOT_DOWNED)) || !EvpPtr(s->descriptors + (uintptr_t)i * 8, &descriptor) ||
+        SafeRead(descriptor, d, sizeof d)) return 0;
     memset(f, 0, sizeof *f);
     memcpy(&f->resource, d, 8); memcpy(&f->entity, d + 8, 4); memcpy(&f->unit, d + 12, 4);
     f->faction = WcFaction(s, f->entity);
-    if (f->faction ? (f->faction & 1) != 0 : !ActEnemy(f->resource)) return 0;
+    if (!((q->sides >> WsSide(f->faction, q->toward, f->resource)) & 1)) return 0;
     if (!EvpAlive(f->entity) || !EvpUnitPosition(f->unit, f->position)) return 0;
-    float dx = f->position[0] - centre[0], dy = f->position[1] - centre[1], dz = f->position[2] - centre[2];
+    float dx = f->position[0] - q->centre[0], dy = f->position[1] - q->centre[1], dz = f->position[2] - q->centre[2];
     f->distance = sqrtf(dx * dx + dy * dy + dz * dz);
-    if (!(f->distance <= radius)) return 0;
+    if (!(f->distance <= q->radius)) return 0;
     f->health = (int32_t)EvpU32(s->records + (uintptr_t)i * 0x1B8 + 0x14, 0);
     f->max_health = s->ext ? (int32_t)EvpU32(s->ext + (uintptr_t)i * 0x1C + 0x14, 0xFFFFFFFFu) : -1;
+    if ((q->flags & HF_FIND_HURT) && !(f->max_health > 0 && f->health < f->max_health)) return 0;
     f->flags = (life == 1 ? HF_FOUND_DOWNED : 0) | (d[20] & 1 ? HF_FOUND_AUTHORITY : 0);
     return 1;
 }
@@ -355,21 +359,36 @@ static int WcNearer(const void* a, const void* b)
     return x < y ? -1 : x > y;
 }
 
-/* SDK 21, find_enemies: how many enemies were written to out, nearest first. */
-static uint32_t ApiFindEnemies(HfMod* mod, const float centre[3], float radius, HfFoundEnemy* out, uint32_t capacity)
+/* The query's entities, nearest first: how many were written to out. */
+static uint32_t WcFindLiving(HfMod* mod, const char* what, const HfFind* q, HfFoundEnemy* out, uint32_t capacity)
 {
     uintptr_t game = ApiModuleBase("game.dll", NULL);
     WcScan s;
-    if (centre == NULL || (capacity > 0 && out == NULL) || !(radius > 0.0f)) { ApiLog(mod, "find_enemies: refused: no centre, no room or no radius"); return 0; }
+    if (q->sides == 0 || (capacity > 0 && out == NULL) || !(q->radius > 0.0f)) { ApiLog(mod, "%s: refused: no sides, no room or no radius", what); return 0; }
     if (!game || ReadState(game) != HF_STATE_MISSION || !WcScanOf(game, &s)) return 0;
     AcquireSRWLockExclusive(&g_wcFoundLock);
     uint32_t found = 0;
-    for (uint32_t i = 0; i < s.live && found < WC_FOUND_MAX; i++) found += (uint32_t)WcEnemyAt(&s, i, centre, radius, &g_wcFound[found]);
+    for (uint32_t i = 0; i < s.live && found < WC_FOUND_MAX; i++) found += (uint32_t)WcFoundAt(&s, i, q, &g_wcFound[found]);
     qsort(g_wcFound, found, sizeof g_wcFound[0], WcNearer);
     uint32_t written = found < capacity ? found : capacity;
     if (written) memcpy(out, g_wcFound, sizeof out[0] * written);
     ReleaseSRWLockExclusive(&g_wcFoundLock);
     return written;
+}
+
+/* SDK 21, find_enemies: how many enemies were written to out, nearest first. */
+static uint32_t ApiFindEnemies(HfMod* mod, const float centre[3], float radius, HfFoundEnemy* out, uint32_t capacity)
+{
+    if (centre == NULL) { ApiLog(mod, "find_enemies: refused: no centre"); return 0; }
+    HfFind q = {sizeof q, HF_FIND_HOSTILE, HF_FACTION_HELLDIVERS, 0, {centre[0], centre[1], centre[2]}, radius};
+    return WcFindLiving(mod, "find_enemies", &q, out, capacity);
+}
+
+/* SDK 27, find_entities: find_enemies for any sides, seen from any faction. */
+static uint32_t ApiFindEntities(HfMod* mod, const HfFind* query, HfFoundEnemy* out, uint32_t capacity)
+{
+    if (query == NULL || query->size < sizeof *query) { ApiLog(mod, "find_entities: refused: no HfFind, or its size is not set"); return 0; }
+    return WcFindLiving(mod, "find_entities", query, out, capacity);
 }
 
 /* ---- armory_weapon ------------------------------------------------------------------------------------------------ */
@@ -428,3 +447,5 @@ static void WorldCallsStart(void)
 }
 
 #include "armory_tabs.c" /* SDK 26: after this file (its menu reads and pins) */
+#include "world_sight.c"  /* SDK 27: after this file (its scan of the health records) */
+#include "joint_poses.c"  /* SDK 27: after terminal_camera.c (the render step's pins) */

@@ -1,6 +1,7 @@
-/* HellForge mod SDK 21: effects on entities (play_effect, stop_effect), enemies near a point (find_enemies) and the
- * weapon the armory shows (armory_weapon); docs/modding/world.md. It also holds the spawn director's
- * enemy constants (SDK 17, add_enemy). Included by hellforge_mod.h. */
+/* HellForge mod SDK 21 and 27: effects on entities (play_effect, stop_effect), enemies near a point (find_enemies), the
+ * weapon the armory shows (armory_weapon), line of sight, projectiles near a point, sides and joint poses;
+ * docs/modding/world.md. It also holds the spawn director's enemy constants (SDK 17, add_enemy). Included by
+ * hellforge_mod.h. */
 #pragma once
 #include <stdint.h>
 
@@ -53,6 +54,118 @@ typedef struct HfFoundEnemy
 /* HfFoundEnemy.flags */
 #define HF_FOUND_DOWNED 0x1u    /* downed, not dead */
 #define HF_FOUND_AUTHORITY 0x2u /* this machine simulates it (is_authority) */
+
+/* ---- SDK 27 --------------------------------------------------------------------------------------------------------- */
+
+/* line_of_sight's answers */
+#define HF_SIGHT_UNKNOWN 0u /* not known now (the mod's log says why): treat it as the caller sees fit */
+#define HF_SIGHT_CLEAR 1u
+#define HF_SIGHT_BLOCKED 2u
+
+/* What a line_of_sight ray leaves out. Zero-initialize it and set `size`. */
+typedef struct HfSight
+{
+    uint32_t size;      /* sizeof(HfSight) */
+    uint32_t ignore[4]; /* units whose hits do not count, such as the turret's own and its wearer's (0: none) */
+    float skip_from;    /* hits closer than this to `from` do not count (metres): the muzzle's own body */
+    float skip_to;      /* nor hits closer than this in front of `to`: the target itself */
+} HfSight;
+
+/* The first hit that blocked a line_of_sight ray. */
+typedef struct HfSightHit
+{
+    float distance;    /* from `from` (metres) */
+    uint32_t unit;     /* the unit hit; 0 for the ground or a static object */
+    float position[3]; /* where along the ray */
+} HfSightHit;
+
+/* find_projectiles' answers, nearest first. */
+typedef struct HfFoundProjectile
+{
+    uint32_t slot;      /* its place in the projectile pool (0 .. 2047): set_projectile's handle while it flies */
+    uint32_t type;      /* its ProjectileType (HF_PROJECTILE_..., or one add_projectile returned) */
+    float position[3];
+    float velocity[3];  /* metres a second */
+    float distance;     /* from the centre asked about (metres) */
+    uint32_t source;    /* the entity that fired it, 0 when none reads */
+    uint64_t peer;      /* the peer its hits are credited to (a player's), 0 for none */
+} HfFoundProjectile;
+
+/* side_of's answers. A faction mask holds a bit per side; HF_FACTION_HELLDIVERS is the players'. As the game's AI
+ * sorts what it sees: no mask is neutral, a mask sharing a bit is friendly, any other mask is hostile. */
+#define HF_FACTION_HELLDIVERS 0x1u
+#define HF_SIDE_UNKNOWN 0u /* not an entity of this world, or the factions do not read */
+#define HF_SIDE_HOSTILE 1u
+#define HF_SIDE_FRIENDLY 2u
+#define HF_SIDE_NEUTRAL 3u
+
+/* HfFind.sides: which of them find_entities lists */
+#define HF_FIND_HOSTILE (1u << HF_SIDE_HOSTILE)
+#define HF_FIND_FRIENDLY (1u << HF_SIDE_FRIENDLY)
+#define HF_FIND_NEUTRAL (1u << HF_SIDE_NEUTRAL)
+/* HfFind.flags */
+#define HF_FIND_HURT 0x1u       /* only those below their max health */
+#define HF_FIND_NOT_DOWNED 0x2u /* leave the downed out */
+
+/* A find_entities query. Zero-initialize it and set `size`. Its answers are HfFoundEnemy records. */
+typedef struct HfFind
+{
+    uint32_t size;      /* sizeof(HfFind) */
+    uint32_t sides;     /* HF_FIND_...: which sides, seen from `toward` */
+    uint32_t toward;    /* the faction mask they are on a side of (0: HF_FACTION_HELLDIVERS) */
+    uint32_t flags;     /* HF_FIND_HURT, HF_FIND_NOT_DOWNED */
+    float centre[3];
+    float radius;       /* metres */
+} HfFind;
+
+/* A joint's pose in its parent's frame, as the engine keeps it: three axis rows, the offset from the parent, the
+ * scale. pose_joint writes it, joint_pose reads it (HF_POSE_LOCAL). */
+typedef struct HfJointPose
+{
+    float axes[9];
+    float position[3];
+    float scale[3];
+    float reserved;    /* 0 */
+} HfJointPose;
+
+/* joint_pose's spaces */
+#define HF_POSE_WORLD 0u /* a 4x4 row-major matrix: the axis rows (with scale), then the position at [12..14] */
+#define HF_POSE_LOCAL 1u /* an HfJointPose */
+
+/* Called once a frame, after the game has animated every unit and just before the frame renders (on_render). */
+typedef void (*HfRenderCallback)(HfMod* mod, void* user);
+/* The id of a unit's node by name, as pose_joint and joint_pose take it (the engine's 32-bit name id). */
+#define hf_node_id(mod, name) ((uint32_t)(HF_API(mod)->resource_hash(name) >> 32))
+
+/* Shot rules (modify_shots, homing): what they take is this machine's player's own shots of one projectile type, fired
+ * by the listed weapons (entity resources, ending in 0; NULL or none: any of the player's). Each shot is changed once, as
+ * it leaves; other weapons firing the same projectile stay as they are. Without HF_SHOT_MULTIPLAYER only in a solo game
+ * (another machine's copy of the shot flies as the game made it). */
+#define HF_SHOT_MULTIPLAYER 0x1u
+#define HF_HOMING_NO_RETARGET 0x2u /* homing: keep the first target */
+#define HF_HOMING_FRIENDLY 0x4u    /* homing: home on the other players' Helldivers, not on enemies */
+typedef struct HfShotRule
+{
+    uint32_t size;          /* sizeof(HfShotRule) */
+    uint32_t projectile;    /* its ProjectileSettings type */
+    const uint64_t* sources;
+    float damage;           /* multipliers, 1 for unchanged: damage 0.01 .. 100, armor_penetration 0.1 .. 10, */
+    float armor_penetration; /* speed 0.1 .. 10, gravity 0 .. 20, drag 0 .. 20 */
+    float speed, gravity, drag;
+    uint32_t flags;
+} HfShotRule;
+typedef struct HfHoming
+{
+    uint32_t size;          /* sizeof(HfHoming) */
+    uint32_t projectile;
+    const uint64_t* sources;
+    float turn_rate;        /* degrees a second, 1 .. 1440 */
+    float cone;             /* the half-angle it looks for targets in, 1 .. 180 degrees */
+    float range;            /* metres, 1 .. 500 */
+    float arm_distance;     /* metres flown before it steers, 0 .. 100 */
+    float aim_height;       /* metres above the target's root, -5 .. 10 */
+    uint32_t flags;         /* HF_SHOT_MULTIPLAYER, HF_HOMING_... */
+} HfHoming;
 
 /* armory_weapon's menu: the menu state the game shows. */
 #define HF_MENU_ARMORY 2u     /* the Armory: its weapon tabs' grids, with CUSTOMIZE and EQUIP */

@@ -240,3 +240,5 @@ static void InstallTerminalCamera(void)
     g_tcamState = 1;
     Note("terminal camera: the terminal's browser zooms the camera into its screen");
 }
+
+static void JointPosesInstall(void); /* joint_poses.c, which shares these pins; installed with the camera */

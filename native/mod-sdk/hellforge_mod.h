@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 26
+#define HF_MOD_SDK_VERSION 27
 #define HF_MOD_EXPORT __declspec(dllexport)
 
 typedef struct HfMod HfMod; /* Identifies the calling mod in logs and status. Opaque, but for SDK 6's HF_API(mod). */
@@ -278,7 +278,7 @@ typedef struct HfArc
 
 #include "hellforge_customization.h" /* HfAttachment (SDK 17) and HfPattern (SDK 18): weapon attachments and patterns */
 #include "hellforge_ui.h"            /* SDK 19: screens in the game's own UI */
-#include "hellforge_world.h"         /* SDK 21: effects on entities, enemies near a point, the armory's weapon; HfAbility */
+#include "hellforge_world.h"         /* SDK 21, 27: effects, enemies, sight, projectiles, poses; shot rules, HfAbility */
 
 /* A new enemy in the spawn director's rosters (SDK 17, add_enemy): a row of its own, tied to no vanilla enemy. The
  * director spawns by group: a squad asks for some of a group's enemies, and the group's rows share the draw by their
@@ -921,35 +921,6 @@ typedef struct HfLimbState { int32_t health, max_health; uint32_t injured; } HfL
 #define HF_STATUS_GAS_CONFUSION 44u
 #define HF_STATUS_GAS_CONFUSION_2 45u
 #define HF_STATUS_FLAMER_SLOWED 67u
-/* Shot rules (modify_shots, homing): what they take is this machine's player's own shots of one projectile type, fired
- * by the listed weapons (entity resources, ending in 0; NULL or none: any of the player's). Each shot is changed once, as
- * it leaves; other weapons firing the same projectile stay as they are. Without HF_SHOT_MULTIPLAYER only in a solo game
- * (another machine's copy of the shot flies as the game made it). */
-#define HF_SHOT_MULTIPLAYER 0x1u
-#define HF_HOMING_NO_RETARGET 0x2u /* homing: keep the first target */
-#define HF_HOMING_FRIENDLY 0x4u    /* homing: home on the other players' Helldivers, not on enemies */
-typedef struct HfShotRule
-{
-    uint32_t size;          /* sizeof(HfShotRule) */
-    uint32_t projectile;    /* its ProjectileSettings type */
-    const uint64_t* sources;
-    float damage;           /* multipliers, 1 for unchanged: damage 0.01 .. 100, armor_penetration 0.1 .. 10, */
-    float armor_penetration; /* speed 0.1 .. 10, gravity 0 .. 20, drag 0 .. 20 */
-    float speed, gravity, drag;
-    uint32_t flags;
-} HfShotRule;
-typedef struct HfHoming
-{
-    uint32_t size;          /* sizeof(HfHoming) */
-    uint32_t projectile;
-    const uint64_t* sources;
-    float turn_rate;        /* degrees a second, 1 .. 1440 */
-    float cone;             /* the half-angle it looks for targets in, 1 .. 180 degrees */
-    float range;            /* metres, 1 .. 500 */
-    float arm_distance;     /* metres flown before it steers, 0 .. 100 */
-    float aim_height;       /* metres above the target's root, -5 .. 10 */
-    uint32_t flags;         /* HF_SHOT_MULTIPLAYER, HF_HOMING_... */
-} HfHoming;
 /* A transport Pelican called in (spawn_pelican): it flies in from the approach point, hovers over the position and
  * leaves after hover_seconds once released (0: at once). Host; solo for the hover. */
 typedef struct HfPelicanCall
@@ -1743,6 +1714,38 @@ typedef struct HfApi
      * on_select runs on the game thread, selected 1 when picked, 0 when another tab is or the Armory closes. Any
      * thread. Its handle (1 and up), or 0 refused (the mod's log says why: no room on the bar, or another game build). */
     uint32_t (*add_armory_tab)(HfMod* mod, uint32_t list, const char* label, HfArmoryTabCallback on_select, void* user);
+
+    /* ---- SDK 27: sight, projectiles, sides and joint poses (hellforge_world.h, docs/modding/world.md; check hf->size) */
+    /* Whether the straight line from `from` to `to` is clear, through the engine's physics raycast: HF_SIGHT_CLEAR,
+     * HF_SIGHT_BLOCKED (hit, may be NULL, gets the first hit that counts) or HF_SIGHT_UNKNOWN (the mod's log says why).
+     * how (may be NULL) leaves units and the ends out. Game thread only, in a mission. */
+    uint32_t (*line_of_sight)(HfMod* mod, const float from[3], const float to[3], const HfSight* how, HfSightHit* hit);
+    /* The projectiles in flight within radius metres of centre, nearest first: of `type` (0: any), up to capacity of
+     * them in out, and how many were written. Shots that already hit are left out. Any thread, in a mission. */
+    uint32_t (*find_projectiles)(HfMod* mod, const float centre[3], float radius, uint32_t type, HfFoundProjectile* out, uint32_t capacity);
+    /* Moves the projectile in a pool slot, if it is still of `type` and flying: its position, its velocity, or both
+     * (NULL keeps one). This machine's copy only. Game thread only. 1 done, 0 not: the shot has hit or ended, or the
+     * mod's log says why. */
+    int (*set_projectile)(HfMod* mod, uint32_t slot, uint32_t type, const float position[3], const float velocity[3]);
+    /* An entity's faction mask (HF_FACTION_HELLDIVERS is the players' bit), 0 when it has none or does not read. */
+    uint32_t (*faction_of)(HfMod* mod, uint32_t entity);
+    /* Which side an entity is on, seen from a faction mask (0: HF_FACTION_HELLDIVERS): HF_SIDE_HOSTILE, _FRIENDLY or
+     * _NEUTRAL, as the game's AI sorts what it sees; HF_SIDE_UNKNOWN when it does not read. Seen from the Helldivers,
+     * an enemy type with no mask is hostile, as find_enemies counts it. Any thread. */
+    uint32_t (*side_of)(HfMod* mod, uint32_t entity, uint32_t toward);
+    /* The living entities of the sides a query asks for (HfFind), nearest first, as find_enemies lists enemies: up to
+     * capacity of them in out, and how many were written. Any thread, in a mission; a few times a second at most. */
+    uint32_t (*find_entities)(HfMod* mod, const HfFind* query, HfFoundEnemy* out, uint32_t capacity);
+    /* Calls back once a frame after the game has animated every unit and just before the frame renders: the place to
+     * pose joints that follow other joints. On the game's main thread. 1 added, 0 refused (the mod's log says why). */
+    int (*on_render)(HfMod* mod, HfRenderCallback callback, void* user);
+    /* Sets one joint of a unit (node: hf_node_id of its name, 0 the root) to a pose in its parent's frame, for this
+     * frame: inside an on_render callback at once, else at the next frame's render. The game's animation sets animated
+     * joints again each frame, so pose them every frame. 1 done or queued, 0 refused (no such unit or node). */
+    int (*pose_joint)(HfMod* mod, uint32_t unit, uint32_t node, const HfJointPose* pose);
+    /* A joint's pose now (node as pose_joint takes it): HF_POSE_WORLD as a 4x4 matrix, or HF_POSE_LOCAL as an
+     * HfJointPose, in out (16 floats). Game thread or an on_render callback. 1 read, 0 not (no such unit or node). */
+    int (*joint_pose)(HfMod* mod, uint32_t unit, uint32_t node, uint32_t space, float out[16]);
 } HfApi;
 
 /* SDK 6: an HfMod starts with the API, so these need only the mod. */
