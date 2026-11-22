@@ -19,18 +19,27 @@ namespace HellForge.Core.GameData;
 public sealed record DataSpec(IReadOnlyList<DataPatch> Patches, IReadOnlyList<string> Inputs)
 {
     public bool UsesSteam => Patches.Any(p => p.Resources.Any(r => r.Steam));
+    // The other mods whose own patches it edits (DataPatch.Mod), in order.
+    public IReadOnlyList<string> Mods => [.. Patches.Select(p => p.Mod).OfType<string>().Distinct().Order(StringComparer.Ordinal)];
     // The past builds its resources come from ("<depot>:<manifest>", AssetMigration.GameBuilds), in order.
     public IReadOnlyList<string> Builds => [.. Patches.SelectMany(p => p.Resources).Select(r => r.Build).OfType<string>().Distinct().Order(StringComparer.Ordinal)];
 }
 // A patch for game archives, or (Package) a package of the mod's own: a whole archive of its own id, loaded at session
 // start or only when asked for (load_package, or a record that names it).
-public sealed record DataPatch(IReadOnlyList<string> Archives, IReadOnlyList<DataResource> Resources, ModDataPackage? Package = null);
+// With Mod, a patch of edits to resources another mod ships (ModPatches): written for each bundle that mod ships them in
+// and staged right after that mod's own patches, so it stands for that mod's version whatever the load order.
+public sealed record DataPatch(IReadOnlyList<string> Archives, IReadOnlyList<DataResource> Resources, ModDataPackage? Package = null)
+{
+    public string? Mod { get; init; }
+}
 public sealed record ModDataPackage(string Name, ulong Id, bool Session);
 public abstract record DataResource(string Where)
 {
     public bool Steam { get; init; }
     // A past build it is read from (BuildResources), or null.
     public string? Build { get; init; }
+    // Another mod whose own patches it is read from (an edit's "source": {"mod": ...}), or null.
+    public string? Mod { get; init; }
 }
 public sealed record CopyResource(string Where, ulong Type, ulong From, string Name, IReadOnlyDictionary<int, ulong> Expect,
     IReadOnlyList<Replacement> Replace, CurveEdit? Curves, IReadOnlyDictionary<uint, double[]>? Colours, ResourceEdits.LutRecolour? Lut, MeshFile? Mesh = null,
@@ -131,6 +140,8 @@ public static partial class DataSpecs
                     return $"{copy.Where} brings its own shader code";
                 case ShaderResource shader:
                     return $"{shader.Where} brings its own shader code";
+                case EditResource { Mod: { } mod } edit:
+                    return $"{edit.Where} edits {mod}'s {ResourceTypes.Describe(edit.Type)} 0x{edit.Id:X16} in place";
                 case EditResource edit:
                     return $"{edit.Where} edits the game's {ResourceTypes.Describe(edit.Type)} 0x{edit.Id:X16} in place";
                 case CopyResource copy when copy.Curves != null && copy.Type != ResourceTypes.Particles || copy.Colours != null && copy.Type != ResourceTypes.Material ||
@@ -179,19 +190,32 @@ public static partial class DataSpecs
         {
             var at = $"patches[{p++}]";
             Fields(patch, at, "archives", "package", "load", "resources");
-            var package = ReadPackage(patch, at);
-            var archives = package != null ? [] : ReadArchives(patch, at);
             var resources = new List<DataResource>();
             var r = 0;
             foreach (var resource in Items(patch, "resources", at))
                 resources.Add(Resource(resource, $"{at}.resources[{r++}]", folder, inputs));
             if (resources.Count == 0) throw new InvalidDataException($"{at}: resources are missing.");
+            if (ModPatch(patch, at, resources) is { } modPatch) { patches.Add(modPatch); continue; }
+            var package = ReadPackage(patch, at);
+            var archives = package != null ? [] : ReadArchives(patch, at);
             patches.Add(new(archives, resources, package));
         }
         if (patches.Count == 0) throw new InvalidDataException("patches are missing.");
         if (patches.Where(x => x.Package != null).GroupBy(x => x.Package!.Id).FirstOrDefault(g => g.Count() > 1) is { } twice)
             throw new InvalidDataException($"package {twice.First().Package!.Name} is named by two patches.");
         return new(patches, [.. inputs]);
+    }
+
+    // A patch of edits to another mod's resources, or null for any other. Its bundles are where that mod ships what it
+    // edits, so it names none.
+    static DataPatch? ModPatch(JsonElement patch, string at, List<DataResource> resources)
+    {
+        if (resources.FirstOrDefault(x => x.Mod != null)?.Mod is not { } mod) return null;
+        if (resources.Any(x => x is not EditResource || x.Mod != mod))
+            throw new InvalidDataException($"{at}: a patch with an edit of another mod's resource holds only edits of that one mod's resources.");
+        if (patch.TryGetProperty("archives", out _) || patch.TryGetProperty("package", out _) || patch.TryGetProperty("load", out _))
+            throw new InvalidDataException($"{at}: a patch of another mod's resources takes no archives or package: it goes where that mod ships them.");
+        return new([], resources) { Mod = mod };
     }
 
     static List<string> ReadArchives(JsonElement patch, string at)
@@ -642,13 +666,24 @@ public static partial class DataSpecs
     // pinned by the game's own bytes there, so another game build or a wrong offset is refused before anything is written.
     static EditResource ReadEdit(JsonElement e, string at, string? folder, ISet<string> inputs)
     {
-        Fields(e, at, "type", "edit", "gpu", "stages", "bytes", "layers", "slots");
-        if (e.TryGetProperty("layers", out var layerSpec)) return ReadLayers(e, layerSpec, at, folder, inputs);
-        if (e.TryGetProperty("slots", out var slotSpec)) return ReadSlots(e, slotSpec, at);
+        Fields(e, at, "type", "edit", "gpu", "stages", "bytes", "layers", "slots", "source");
+        var mod = EditSource(e, at);
+        if (e.TryGetProperty("layers", out var layerSpec)) return ReadLayers(e, layerSpec, at, folder, inputs) with { Mod = mod };
+        if (e.TryGetProperty("slots", out var slotSpec)) return ReadSlots(e, slotSpec, at) with { Mod = mod };
         var stages = e.TryGetProperty("stages", out _) ? ReadStages(e, at) : [];
         var bytes = e.TryGetProperty("bytes", out _) ? ReadBytes(e, at) : [];
         if (stages.Count == 0 && bytes.Count == 0) throw new InvalidDataException($"{at}: an edit needs stages or bytes.");
-        return new EditResource(at, Type(e, at), Id(Property(e, "edit", at), at), stages, bytes, e.TryGetProperty("gpu", out var gpu) ? ReadGpuPin(gpu, $"{at}.gpu") : null);
+        return new EditResource(at, Type(e, at), Id(Property(e, "edit", at), at), stages, bytes, e.TryGetProperty("gpu", out var gpu) ? ReadGpuPin(gpu, $"{at}.gpu") : null) { Mod = mod };
+    }
+
+    // An edit's "source": {"mod": "<id>"}, another mod whose own patch files ship the resource; without it, the game's.
+    static string? EditSource(JsonElement e, string at)
+    {
+        if (!e.TryGetProperty("source", out var source)) return null;
+        if (source.ValueKind != JsonValueKind.Object) throw new InvalidDataException($"{at}: an edit's source is {{\"mod\": \"<mod id>\"}}, another mod that ships the resource.");
+        Fields(source, $"{at}.source", "mod");
+        var id = Text(source, "mod", $"{at}.source");
+        return ModCatalog.IsModId(id) ? id : throw new InvalidDataException($"{at}.source: mod is a mod's id, such as \"author.mod-name\".");
     }
 
     // "layers": PNGs in the mod folder added after a game array texture's own layers (TextureImage.AppendLayers).

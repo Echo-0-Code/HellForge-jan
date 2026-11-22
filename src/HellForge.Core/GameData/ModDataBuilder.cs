@@ -21,7 +21,13 @@ public static class ModDataBuilder
     // +0x40 repeat it. Every one of the game's 4821 physics resources is laid out so.
     static readonly int[] PhysicsNames = [0x08, 0x38, 0x40];
 
-    public static List<string> Build(DataSpec spec, string modFolder, GameDataReader game, string output, GameDataReader? steam = null)
+    // A spec's patches of another mod's resources (DataPatch.Mod) are written under <output>/after/<that mod's id>/, which
+    // staging places right after that mod's own patches. Such a patch is left out, with a line in notes, when that mod is
+    // not among mods or no longer ships what it edits the way the edit expects; the rest of the spec still builds.
+    public const string AfterFolder = "after";
+
+    public static List<string> Build(DataSpec spec, string modFolder, GameDataReader game, string output, GameDataReader? steam = null,
+        IReadOnlyDictionary<string, ModPatches>? mods = null, List<string>? notes = null)
     {
         if (spec.Patches.Any(p => p.Resources.Any(r => r is ShaderResource))) spec = ShaderHosts.Current.Expand(spec);
         if (spec.UsesSteam && steam == null) throw new InvalidDataException("it takes resources from HELLDIVERS 2 as Steam has it installed, and Steam's copy was not found.");
@@ -92,28 +98,8 @@ public static class ModDataBuilder
             return resources;
         }
         // A game resource under its own key, so the patch takes its place; not in `added`: standing for the game's is its purpose.
-        void AddEdit(Dictionary<ResourceKey, ResourceParts> resources, EditResource edit)
-        {
-            var key = new ResourceKey(edit.Type, edit.Id);
-            var source = Read(key, From(edit));
-            if (edit.Layers != null)
-            {
-                try { AddResource(resources, edit.Where, key, TextureImage.AppendLayers(source, [.. edit.Layers.Select(p => File.ReadAllBytes(Path.Combine(modFolder, p)))])); }
-                catch (InvalidDataException error) { throw new InvalidDataException($"{edit.Where} (texture 0x{edit.Id:X16}): {error.Message}"); }
-                return;
-            }
-            if (edit.Slots != null)
-            {
-                try { AddResource(resources, edit.Where, key, source with { Main = UnitSlots.Rename(source.Main, edit.Slots) }); }
-                catch (InvalidDataException error) { throw new InvalidDataException($"{edit.Where} (unit 0x{edit.Id:X16}): {error.Message}"); }
-                return;
-            }
-            try { AddResource(resources, edit.Where, key, source with { Gpu = ShaderSplice.EditBytes(ShaderSplice.EditStages(ShaderSplice.Pinned(source.Gpu, edit.Gpu), edit.Stages), edit.Bytes) }); }
-            catch (InvalidDataException error) when (!error.Message.StartsWith(edit.Where, StringComparison.Ordinal))
-            {
-                throw new InvalidDataException($"{edit.Where} ({ResourceTypes.Describe(edit.Type)} 0x{edit.Id:X16}): {error.Message}");
-            }
-        }
+        void AddEdit(Dictionary<ResourceKey, ResourceParts> resources, EditResource edit) =>
+            AddResource(resources, edit.Where, new(edit.Type, edit.Id), Edited(edit, Read(new(edit.Type, edit.Id), From(edit)), modFolder));
         // A unit copy's own animations: its bones and state machine under the unit's name, its clips beside it, and the
         // unit pointed at them (header +0x08 bones, +0x20 state machine).
         void AddAnimations(Dictionary<ResourceKey, ResourceParts> resources, AnimationsResource a, HashSet<ResourceKey> added)
@@ -223,10 +209,49 @@ public static class ModDataBuilder
             added.Add(named);
         }
 
+        // A patch of another mod's resources, one archive for each bundle that mod ships any of them in; each resource only
+        // where the mod ships it, edited from that copy.
+        List<(IReadOnlyList<string> Archives, bool Whole, byte[] Archive, byte[] Gpu, byte[] Stream)> ModPatch(DataPatch patch, ModPatches source)
+        {
+            var bundles = new SortedDictionary<string, Dictionary<ResourceKey, ResourceParts>>(StringComparer.Ordinal);
+            foreach (var edit in patch.Resources.Cast<EditResource>())
+            {
+                var key = new ResourceKey(edit.Type, edit.Id);
+                var copies = source.Find(key);
+                if (copies.Count == 0) throw new InvalidDataException($"{edit.Where}: {source.Id} does not ship {key}.");
+                foreach (var (bundle, parts) in copies)
+                {
+                    if (!bundles.TryGetValue(bundle, out var resources)) bundles[bundle] = resources = [];
+                    AddResource(resources, edit.Where, key, Edited(edit, parts, modFolder));
+                }
+            }
+            return [.. bundles.Select(b =>
+            {
+                var (archive, gpu, stream) = ResourceArchive.Write(b.Value);
+                return ((IReadOnlyList<string>)[b.Key], false, archive, gpu, stream);
+            })];
+        }
+
+        var after = new Dictionary<string, List<(IReadOnlyList<string> Archives, bool Whole, byte[] Archive, byte[] Gpu, byte[] Stream)>>(StringComparer.Ordinal);
+        // Left out whole, with the reason in notes, when it cannot be built: the rest of the spec does not wait on another mod.
+        void AddModPatch(int p, DataPatch patch, string id)
+        {
+            if (mods?.GetValueOrDefault(id) is not { } source) { notes?.Add($"patches[{p}] is left out: {id} is not enabled."); return; }
+            try
+            {
+                var archives = ModPatch(patch, source);
+                if (!after.TryGetValue(id, out var list)) after[id] = list = [];
+                list.AddRange(archives);
+            }
+            catch (Exception error) when (error is InvalidDataException or IOException) { notes?.Add($"patches[{p}] is left out: {error.Message}"); }
+        }
+
         var built = new List<(IReadOnlyList<string> Archives, bool Whole, byte[] Archive, byte[] Gpu, byte[] Stream)>();
         var added = new HashSet<ResourceKey>();
-        foreach (var patch in spec.Patches)
+        for (var p = 0; p < spec.Patches.Count; p++)
         {
+            var patch = spec.Patches[p];
+            if (patch.Mod is { } id) { AddModPatch(p, patch, id); continue; }
             var (archive, gpu, stream) = ResourceArchive.Write(PatchResources(patch, added));
             built.Add((patch.Package is { } package ? [PackageFile(package)] : patch.Archives, patch.Package != null, archive, gpu, stream));
         }
@@ -235,7 +260,30 @@ public static class ModDataBuilder
         // What a mod adds has a name of its own: a copy or icon may not stand in for one of the game's resources.
         var taken = game.Find(added).Keys.Select(k => k.ToString()).Order(StringComparer.Ordinal).ToList();
         if (taken.Count > 0) throw new InvalidDataException("these names are the game's own resources; give them names of the mod's: " + string.Join(", ", taken) + ".");
-        return WriteFiles(output, built);
+        var files = WriteFiles(output, built);
+        foreach (var (id, archives) in after)
+            files.AddRange(WriteFiles(Path.Combine(output, AfterFolder, id), archives).Select(f => $"{AfterFolder}/{id}/{f}"));
+        return files;
+    }
+
+    // An edit applied to the resource it edits (the game's, or another mod's copy).
+    static ResourceParts Edited(EditResource edit, ResourceParts source, string modFolder)
+    {
+        if (edit.Layers != null)
+        {
+            try { return TextureImage.AppendLayers(source, [.. edit.Layers.Select(p => File.ReadAllBytes(Path.Combine(modFolder, p)))]); }
+            catch (InvalidDataException error) { throw new InvalidDataException($"{edit.Where} (texture 0x{edit.Id:X16}): {error.Message}"); }
+        }
+        if (edit.Slots != null)
+        {
+            try { return source with { Main = UnitSlots.Rename(source.Main, edit.Slots) }; }
+            catch (InvalidDataException error) { throw new InvalidDataException($"{edit.Where} (unit 0x{edit.Id:X16}): {error.Message}"); }
+        }
+        try { return source with { Gpu = ShaderSplice.EditBytes(ShaderSplice.EditStages(ShaderSplice.Pinned(source.Gpu, edit.Gpu), edit.Stages), edit.Bytes) }; }
+        catch (InvalidDataException error) when (!error.Message.StartsWith(edit.Where, StringComparison.Ordinal))
+        {
+            throw new InvalidDataException($"{edit.Where} ({ResourceTypes.Describe(edit.Type)} 0x{edit.Id:X16}): {error.Message}");
+        }
     }
 
     // Where each resource the spec reads is, in the game copy and in Steam's install. Every missing one is reported
@@ -243,7 +291,7 @@ public static class ModDataBuilder
     static (Dictionary<ResourceKey, GameDataReader.Location> Game, Dictionary<ResourceKey, GameDataReader.Location> Steam) FindSources(DataSpec spec,
         GameDataReader game, GameDataReader? steam)
     {
-        HashSet<ResourceKey> Sources(bool fromSteam) => spec.Patches.SelectMany(p => p.Resources).Where(r => r.Build == null && r.Steam == fromSteam).SelectMany(r => r switch
+        HashSet<ResourceKey> Sources(bool fromSteam) => spec.Patches.SelectMany(p => p.Resources).Where(r => r.Build == null && r.Mod == null && r.Steam == fromSteam).SelectMany(r => r switch
         {
             // a unit copy's physics too, if it has one: the engine finds a unit's physics by the unit's name (its header names
             // its bones and state machine), so a copy without it gets a default body (a sentry: a huge box, and no aim)
@@ -433,15 +481,18 @@ public static class ModDataBuilder
 // when a session stages mods and reused while the key holds. The key covers the builder version, the supported game build,
 // the game's bundles.nxa (which changes with any game data), the spec and its input files; a mod's older keys are removed
 // when a new one is built. The cache is outside the mod folder, so it is never zipped or shared with the mod and never
-// counted in the modlist code (the spec is, with the builder version; ModCatalog.Digest).
+// counted in the modlist code (the spec is, with the builder version; ModCatalog.Digest). A spec that edits other mods'
+// resources keys on those mods' patch files too (ModPatches.Stamp), so their new versions build it again.
 public static class ModDataCache
 {
     const string Record = "hellforge-data-build.json";
 
     public static string Folder(InstallLayout install) => Path.Combine(install.Temp, "mod-data");
 
-    // The mods with their generated data (GeneratedData), and why any could not be built; those are left out.
-    public static (List<ModManifest> Mods, List<string> Problems) Prepare(InstallLayout install, IReadOnlyList<ModManifest> mods, Action<string>? log = null)
+    // The mods with their generated data (GeneratedData), and why any could not be built; those are left out. loaded: the
+    // session's mods whose own patches a spec may edit (by default mods); a patch of one not among them is left out.
+    public static (List<ModManifest> Mods, List<string> Problems) Prepare(InstallLayout install, IReadOnlyList<ModManifest> mods, Action<string>? log = null,
+        IReadOnlyList<ModManifest>? loaded = null)
     {
         var ready = new List<ModManifest>();
         var problems = new List<string>();
@@ -453,7 +504,10 @@ public static class ModDataCache
                 if (!mod.HasDataSpec) { ready.Add(mod); continue; }
                 try
                 {
-                    ready.Add(mod with { GeneratedData = Ensure(install, mod, () => game ??= new GameDataReader(Path.Combine(install.Game, "data")), log).Folder });
+                    var data = Ensure(install, mod, () => game ??= new GameDataReader(Path.Combine(install.Game, "data")), log, loaded ?? mods);
+                    // the mod loads; only those patches stay out, and the Mods page says why
+                    problems.AddRange(data.Notes.Select(n => $"{mod.Archive ?? Path.GetFileName(mod.Folder)}: {n}"));
+                    ready.Add(mod with { GeneratedData = data.Folder });
                 }
                 catch (Exception error) when (error is InvalidDataException or IOException or UnauthorizedAccessException)
                 {
@@ -465,30 +519,38 @@ public static class ModDataCache
         return (ready, problems);
     }
 
-    // The folder of a mod's generated patches, built first when there is none for the current key.
-    public static (string Folder, IReadOnlyList<string> Files, bool Built) Ensure(InstallLayout install, ModManifest mod, Func<GameDataReader> game, Action<string>? log = null)
+    // The folder of a mod's generated patches, built first when there is none for the current key. loaded: the mods whose
+    // own patches the spec may edit; Notes: the patches left out, and why.
+    public static (string Folder, IReadOnlyList<string> Files, bool Built, IReadOnlyList<string> Notes) Ensure(InstallLayout install, ModManifest mod, Func<GameDataReader> game,
+        Action<string>? log = null, IReadOnlyList<ModManifest>? loaded = null)
     {
         var spec = DataSpecs.Load(mod.Folder) ?? throw new InvalidDataException($"{DataSpecs.FileName} is missing.");
         var steamData = spec.UsesSteam ? SteamData() : null;
-        var key = Key(spec, mod.Folder, Path.Combine(install.Game, "data"), steamData);
+        var sources = spec.Mods.Select(id => loaded?.FirstOrDefault(m => m.Id == id && m.Id != mod.Id)).OfType<ModManifest>().ToDictionary(m => m.Id, StringComparer.Ordinal);
+        var key = Key(spec, mod.Folder, Path.Combine(install.Game, "data"), steamData, sources);
         var cache = Path.Combine(Folder(install), mod.Id);
         var target = Path.Combine(cache, key);
         if (File.Exists(Path.Combine(target, Record)))
-            return (target, Directory.GetFiles(target).Select(Path.GetFileName).Where(f => ModCatalog.PatchFile().IsMatch(f!)).Order(StringComparer.Ordinal).ToList()!, false);
+        {
+            var record = JsonSerializer.Deserialize<BuildRecord>(File.ReadAllText(Path.Combine(target, Record)), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            return (target, record?.Files ?? [], false, record?.Notes ?? []);
+        }
         log?.Invoke($"Building the data of {mod.Id} from the game data...");
         var staging = target + ".partial-" + Guid.NewGuid().ToString("N")[..8];
         try
         {
             using var steam = steamData == null ? null : new GameDataReader(steamData);
-            var files = ModDataBuilder.Build(spec, mod.Folder, game(), staging, steam);
-            File.WriteAllText(Path.Combine(staging, Record), JsonSerializer.Serialize(new { builder = ModDataBuilder.Version, key, mod = mod.Id, files },
-                new JsonSerializerOptions { WriteIndented = true }) + "\n");
+            var notes = new List<string>();
+            var files = ModDataBuilder.Build(spec, mod.Folder, game(), staging, steam, sources.ToDictionary(s => s.Key, s => new ModPatches(s.Value), StringComparer.Ordinal), notes);
+            foreach (var note in notes) log?.Invoke($"{mod.Id}: {note}");
+            File.WriteAllText(Path.Combine(staging, Record), JsonSerializer.Serialize(new BuildRecord(ModDataBuilder.Version, key, mod.Id, files, notes),
+                new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase }) + "\n");
             try { Directory.Move(staging, target); }
             catch (IOException) when (Directory.Exists(target)) { Directory.Delete(staging, recursive: true); }
             foreach (var stale in Directory.GetDirectories(cache).Where(d => !string.Equals(d, target, StringComparison.OrdinalIgnoreCase)))
                 try { Directory.Delete(stale, recursive: true); }
                 catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
-            return (target, files, true);
+            return (target, files, true, notes);
         }
         catch
         {
@@ -504,7 +566,9 @@ public static class ModDataCache
         return Path.Combine(steam.Report.Source, "data");
     }
 
-    public static string Key(DataSpec spec, string modFolder, string gameData, string? steamData = null)
+    sealed record BuildRecord(int Builder, string Key, string Mod, List<string> Files, List<string>? Notes);
+
+    public static string Key(DataSpec spec, string modFolder, string gameData, string? steamData = null, IReadOnlyDictionary<string, ModManifest>? sources = null)
     {
         var text = new StringBuilder();
         text.Append("builder ").Append(ModDataBuilder.Version).Append('\n');
@@ -514,6 +578,8 @@ public static class ModDataCache
         text.Append("spec ").Append(FileHash(Path.Combine(modFolder, DataSpecs.FileName))).Append('\n');
         if (spec.Builds.Count > 0) text.Append(BuildResources.Stamp(modFolder, spec));
         foreach (var input in spec.Inputs) text.Append(input).Append(' ').Append(FileHash(Path.Combine(modFolder, input))).Append('\n');
+        foreach (var id in spec.Mods)
+            text.Append("mod ").Append(id).Append(' ').Append(sources?.GetValueOrDefault(id) is { } source ? ModPatches.Stamp(source) : "absent").Append('\n');
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString())))[..16];
     }
 

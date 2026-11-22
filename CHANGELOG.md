@@ -12,6 +12,9 @@ On `dev`, since 0.4.0-beta.
 
 ### Added
 
+- **Data specs edit other mods' resources.** An `edit` with `"source": {"mod": "<id>"}` changes a model or texture
+  another installed mod ships, without changing that mod. It is built from that mod's own files, staged right after
+  them, and built again when that mod updates; without it, only that patch is left out ([data](docs/modding/data.md#edits-of-another-mods-resources)).
 - **Tabs on the Armory's tab bar (SDK 26).** `add_armory_tab` puts a mod's label on the Armory's own tab bar: the
   overview's categories, the weapons page, the armour page or the third category's page. Clicks and Q/E reach it as
   the game's tabs, and the mod is called back when it is picked and left ([ui](docs/modding/ui.md#tabs-on-the-armorys-tab-bar)).

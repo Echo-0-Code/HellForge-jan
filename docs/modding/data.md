@@ -10,7 +10,8 @@ community's format, or as a data spec that HellForge builds on each player's mac
 mod ships no game bytes.
 
 - [Patch files](#patch-files) and [cosmetic packs](#cosmetic-packs)
-- [Data specs](#data-specs): copies and recolours, your own models, icons, sounds, edits to game shaders
+- [Data specs](#data-specs): copies and recolours, your own models, icons, sounds, edits to game shaders and to
+  [other mods' resources](#edits-of-another-mods-resources)
 - [Shaders](shaders.md): your own pixel shaders in a data spec
 - [Native edits in the manifest](#native-edits-in-the-manifest)
 
@@ -276,6 +277,28 @@ A unit edit can instead rename material slots, so a weapon body on a slot of its
 - Code that drives a material by its old slot name, such as a heat glow, no longer finds it.
 - `slots` takes no `stages`, `bytes` or `gpu`, and it counts as an edit for mod sync, as other edits do.
 
+### Edits of another mod's resources
+
+An `edit` with `"source": {"mod": "<mod id>"}` edits a resource that another installed mod ships in its patch files,
+such as a model only that mod adds. That mod keeps its own files; each player's HellForge builds the edit from them.
+
+```json
+{ "resources": [
+  { "type": "unit", "edit": "0x404214812BA6400C", "slots": { "0x93132D51": "m_weapon" }, "source": { "mod": "author.other-mod" } } ] }
+```
+
+- Such a patch holds only edits of that one mod's resources, and no `archives` or `package`. It is written for each
+  bundle the mod ships each resource in, edited from the copy the game loads from that mod: its highest patch there.
+- It is staged right after that mod's own patches, wherever your mod sits in the load order, so it stands for that
+  mod's version. A mod above both still wins.
+- A new version of that mod builds the edit again from its new files. With the same resource ids, nothing changes in
+  your spec.
+- When that mod is not enabled, no longer ships the resource, or no longer fits the edit (a slot renamed, other bytes),
+  only that patch is left out. The session's problems say which and why; the rest of the spec builds.
+- Only the mod's own `data/` and its chosen pack folders are read, never data another spec built.
+- Mod sync counts it as an edit. The other mod's bytes never leave the player's machine, but players need that mod too.
+- A mod changed while the game runs takes such an edit at the next session.
+
 ### Packages of your own
 
 A patch with `package` becomes a whole archive of its own, `data/<id>`, where the id is the hash of the package's name.
@@ -307,7 +330,8 @@ the built files, because with the same game build they are the same bytes on eve
 ### Building by hand
 
 `HellForge.Cli build-data --mod <folder>` checks a spec. With `--install <installation>` it builds into that
-installation's cache, and with `--game-data <game/data> --out <folder>` anywhere. In the repository, use
+installation's cache, and with `--game-data <game/data> --out <folder>` anywhere (`--source-mods <folders>` names the
+mods whose resources it edits, joined by the system's path separator). In the repository, use
 `scripts/Build-Mod.ps1 <folder> -Install <installation>`.
 
 Examples: `golden-liberator` (a model recoloured gold), `talon-liberator` (blue effect copies

@@ -365,6 +365,86 @@ static class DataBuilderTests
             check(none.Count == 0 && taken.Single().Contains("the game's own resources"), "A copy took a game resource's name: " + string.Join(" | ", taken));
         });
 
+        test("A data spec edits another mod's own resources: built from that mod's files, staged right after it, rebuilt when it changes", () =>
+        {
+            var install = new InstallLayout(Path.Combine(root, "mod-source-install"));
+            install.Create("12345");
+            WriteGameData(Path.Combine(install.Game, "data"));
+            var mods = Path.Combine(install.Root, "mods");
+            var unit = new ResourceKey(ResourceTypes.Unit, 0x7777);
+            void Patch(string file, byte first, byte last)
+            {
+                var (archive, gpu, stream) = ResourceArchive.Write(new Dictionary<ResourceKey, ResourceParts> { [unit] = new("other mod's unit"u8.ToArray(), [first, 8, 8, last], []) });
+                File.WriteAllBytes(file, archive);
+                File.WriteAllBytes(file + ".gpu_resources", gpu);
+                File.WriteAllBytes(file + ".stream", stream);
+            }
+            var source = Path.Combine(mods, "source");
+            Directory.CreateDirectory(Path.Combine(source, "data"));
+            File.WriteAllText(Path.Combine(source, ModCatalog.ManifestName), """{"format":1,"id":"test.source","name":"Source","version":"1"}""");
+            Patch(Path.Combine(source, "data", "1111111111111111.patch_0"), 8, 0); /* under the mod's higher patch: not what the game loads from it */
+            Patch(Path.Combine(source, "data", "1111111111111111.patch_1"), 8, 8);
+            Patch(Path.Combine(source, "data", "2222222222222222.patch_0"), 8, 8);
+            var editor = Path.Combine(mods, "editor");
+            Directory.CreateDirectory(editor);
+            File.WriteAllText(Path.Combine(editor, ModCatalog.ManifestName), """{"format":1,"id":"test.editor","name":"Editor","version":"1"}""");
+            File.WriteAllText(Path.Combine(editor, DataSpecs.FileName), """
+                {"format":1,"patches":[
+                  {"archives":["1111111111111111"],"resources":[{"type":"wwise_bank","include":["0x5555"]}]},
+                  {"resources":[{"type":"unit","edit":"0x7777","bytes":[{"at":"0x0","expect":"08","set":"01"}],"source":{"mod":"test.source"}}]},
+                  {"resources":[{"type":"unit","edit":"0x8888","bytes":[{"at":"0x0","expect":"08","set":"01"}],"source":{"mod":"test.source"}}]},
+                  {"resources":[{"type":"unit","edit":"0x7777","bytes":[{"at":"0x0","expect":"08","set":"01"}],"source":{"mod":"test.absent"}}]}]}
+                """);
+            List<ModManifest> Loaded() { var all = ModCatalog.Load(mods).Mods; return [all.Single(m => m.Id == "test.editor"), all.Single(m => m.Id == "test.source")]; }
+            var (ready, notes) = ModDataCache.Prepare(install, Loaded());
+            check(ready.Count == 2 && notes.Count == 2 && notes[0].Contains("patches[2] is left out: patches[2].resources[0]: test.source does not ship unit 0x0000000000008888") &&
+                notes[1].Contains("patches[3] is left out: test.absent is not enabled"), "The patches that cannot be built were not left out with their reasons: " + string.Join(" | ", notes));
+            var after = Path.Combine(ready[0].GeneratedData!, ModDataBuilder.AfterFolder, "test.source");
+            ResourceParts Built(string file) => ResourceArchive.Read(File.ReadAllBytes(file), File.ReadAllBytes(file + ".gpu_resources"), File.Exists(file + ".stream") ? File.ReadAllBytes(file + ".stream") : [])[unit];
+            check(Directory.GetFiles(after).Length == 4 && Built(Path.Combine(after, "1111111111111111.patch_0")).Gpu.SequenceEqual(new byte[] { 1, 8, 8, 8 }) &&
+                Built(Path.Combine(after, "2222222222222222.patch_0")).Main.SequenceEqual("other mod's unit"u8.ToArray()),
+                "The edit was not built from the other mod's top patch in each bundle it ships the unit in.");
+
+            // the editor loads first, yet its edit comes right after the other mod's patches, as if that mod shipped it
+            var gameData = Path.Combine(install.Game, "data");
+            var staged = ModStaging.Stage(install, ready);
+            check(staged.Count(f => ModCatalog.PatchFile().Match(f).Groups[2].Length == 0) == 6 && File.ReadAllBytes(Path.Combine(gameData, "1111111111111111.patch_4")).SequenceEqual(File.ReadAllBytes(Path.Combine(after, "1111111111111111.patch_0"))) &&
+                File.ReadAllBytes(Path.Combine(gameData, "1111111111111111.patch_3")).SequenceEqual(File.ReadAllBytes(Path.Combine(source, "data", "1111111111111111.patch_1"))) &&
+                File.ReadAllBytes(Path.Combine(gameData, "2222222222222222.patch_1")).SequenceEqual(File.ReadAllBytes(Path.Combine(after, "2222222222222222.patch_0"))),
+                "The edit was not staged right after the other mod's own patches: " + string.Join(", ", staged));
+            ModStaging.Unstage(install);
+
+            var again = ModDataCache.Ensure(install, Loaded()[0], () => throw new Exception("Rebuilt an up-to-date cache."), null, Loaded());
+            check(!again.Built && again.Notes.Count == 2, "The cache was not reused with its notes.");
+            Patch(Path.Combine(source, "data", "1111111111111111.patch_1"), 8, 9);
+            using (var game = new GameDataReader(gameData))
+            {
+                var rebuilt = ModDataCache.Ensure(install, Loaded()[0], () => game, null, Loaded());
+                check(rebuilt.Built && Built(Path.Combine(rebuilt.Folder, ModDataBuilder.AfterFolder, "test.source", "1111111111111111.patch_0")).Gpu.SequenceEqual(new byte[] { 1, 8, 8, 9 }),
+                    "A new version of the other mod did not build the edit again from its files.");
+                var alone = ModDataCache.Ensure(install, Loaded()[0], () => game, null, [Loaded()[0]]);
+                check(alone.Built && alone.Notes.Count(n => n.Contains("test.source is not enabled")) == 2 && !Directory.Exists(Path.Combine(alone.Folder, ModDataBuilder.AfterFolder)) &&
+                    File.Exists(Path.Combine(alone.Folder, "1111111111111111.patch_0")), "Without the other mod, its edit was not left out alone.");
+                Patch(Path.Combine(source, "data", "1111111111111111.patch_1"), 7, 9);
+                var stale = ModDataCache.Ensure(install, Loaded()[0], () => game, null, Loaded());
+                check(stale.Notes.Any(n => n.Contains("not the expected 08")) && !Directory.Exists(Path.Combine(stale.Folder, ModDataBuilder.AfterFolder)) &&
+                    File.Exists(Path.Combine(stale.Folder, "1111111111111111.patch_0")), "An edit that no longer fits the other mod's resource failed more than its patch.");
+            }
+
+            void Refused(string patch, string why)
+            {
+                File.WriteAllText(Path.Combine(editor, DataSpecs.FileName), "{\"format\":1,\"patches\":[" + patch + "]}");
+                try { DataSpecs.Load(editor); throw new Exception("Accepted: " + why); }
+                catch (InvalidDataException error) { check(error.Message.Contains(why), "Refused for another reason: " + error.Message); }
+            }
+            const string Edit = """{"type":"unit","edit":"0x7777","bytes":[{"at":"0x0","expect":"08","set":"01"}],"source":{"mod":"test.source"}}""";
+            Refused("""{"archives":["1111111111111111"],"resources":[EDIT]}""".Replace("EDIT", Edit), "takes no archives or package");
+            Refused("""{"resources":[EDIT,{"type":"wwise_bank","include":["0x5555"]}]}""".Replace("EDIT", Edit), "holds only edits of that one mod's resources");
+            Refused("""{"resources":[EDIT,EDIT2]}""".Replace("EDIT2", Edit.Replace("test.source", "test.other")).Replace("EDIT", Edit), "holds only edits of that one mod's resources");
+            Refused("""{"resources":[{"type":"unit","edit":"0x7777","bytes":[{"at":"0x0","expect":"08","set":"01"}],"source":"steam"}]}""", "an edit's source is");
+            Refused("""{"resources":[EDIT]}""".Replace("EDIT", Edit.Replace("test.source", "Not An Id")), "mod is a mod's id");
+        });
+
         test("A material of a newer build is rebuilt in its shader's layout as the game copy has it, values by name", () =>
         {
             // the game copy's shader: textures A, B; parameters P (scalar), Q (RGB), R (scalar)

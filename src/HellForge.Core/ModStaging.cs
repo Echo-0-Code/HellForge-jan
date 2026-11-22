@@ -89,6 +89,10 @@ public static class ModStaging
         foreach (var root in new[] { Path.Combine(install.Mods, ModArchives.UnpackedFolder), Path.Combine(install.Mods, SyncedStore.FolderName) })
             if (LocalInstall.Within(source, root) && Path.GetRelativePath(root, source).Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) is { Length: > 1 } parts)
                 return Path.Combine(root, parts[0]);
+        // a built spec's whole folder (<mod>/<key>), its after/ edits included: its record makes it whole again only with all of it
+        var built = GameData.ModDataCache.Folder(install);
+        if (LocalInstall.Within(source, built) && Path.GetRelativePath(built, source).Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) is { Length: > 2 } keyed)
+            return Path.Combine(built, keyed[0], keyed[1]);
         return LocalInstall.Within(source, install.Temp) ? Path.GetDirectoryName(Path.GetFullPath(source)) : null;
     }
 
@@ -301,10 +305,14 @@ public static class ModStaging
                     plan.Add((Path.Combine(folder, file), $"{group.Key.Bundle}.patch_{index}{ModCatalog.PatchFile().Match(file).Groups[2].Value}"));
             }
         }
+        // Edits of a mod's own resources by other mods' specs come right after that mod's patches, in load order: each then
+        // stands for that mod's version wherever its own mod sits, and a mod above both still wins.
+        var edits = mods.Where(m => m.GeneratedData != null).SelectMany(m => AfterFolders(m.GeneratedData!)).ToLookup(e => e.Of, e => e.Folder, StringComparer.Ordinal);
         foreach (var mod in mods)
         {
             if (mod.HasDataSpec && mod.GeneratedData == null) throw new InvalidDataException($"{mod.Id}: its data has not been generated.");
             foreach (var (folder, files) in Sources(mod)) Add(folder, files);
+            foreach (var folder in edits[mod.Id]) Add(folder, PatchFiles(folder));
             if (mod.GeneratedData != null) AddPackages(plan, mod, data, previous);
         }
         foreach (var folder in own) Add(folder, PatchFiles(folder));
@@ -321,6 +329,13 @@ public static class ModStaging
             if (!previous.Contains(file) && File.Exists(Path.Combine(data, file))) throw new InvalidDataException($"{mod.Id}: its package's archive {file} is a file of the game's data already.");
             plan.Add((Path.Combine(mod.GeneratedData!, file), file));
         }
+    }
+
+    // A spec's built edits of other mods' resources: <generated data>/after/<that mod's id>/.
+    static IEnumerable<(string Of, string Folder)> AfterFolders(string generated)
+    {
+        var after = Path.Combine(generated, GameData.ModDataBuilder.AfterFolder);
+        return Directory.Exists(after) ? Directory.GetDirectories(after).Order(StringComparer.Ordinal).Select(d => (Path.GetFileName(d), d)) : [];
     }
 
     // A mod's folders of patches and their files: its data/, its pack's chosen folders, its generated data.

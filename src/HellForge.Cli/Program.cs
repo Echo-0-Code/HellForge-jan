@@ -31,7 +31,7 @@ try
             mods-stage --install <folder> [--plan <mod loader plan file> --logs <session folder>] [--modset <file>] [--sync <mod sync session file>] [--sandbox yes|no] [--session-mods <file>]
             mods-live --install <folder> --session-mods <file> --target <file of mod folders, in load order> --seed <text>
             build-source-mods --install <folder> [--progress <file>] [--sync yes|no] [--sandbox yes|no]
-            build-data --mod <mod folder> [--install <folder> | --game-data <game data folder> [--steam-data <Steam's game data folder>] --out <folder>]
+            build-data --mod <mod folder> [--install <folder> | --game-data <game data folder> [--steam-data <Steam's game data folder>] [--source-mods <mod folders>] --out <folder>]
             check-stats --mod <mod folder>
             sdk-headers --repo <HellForge source folder> [--mode write | check]
             new-mod --id <owner.mod-name> --name <name> (--install <folder> | --out <folder>)
@@ -159,7 +159,7 @@ try
         "mods-stage" => ["--install", "--plan", "--logs", "--progress", "--modset", "--sync", "--sandbox", "--premium-snapshot", "--premium-locked", "--session-mods", "--mod-warbonds"],
         "mods-live" => ["--install", "--session-mods", "--target", "--seed"],
         "build-source-mods" => ["--install", "--progress", "--sync", "--sandbox"],
-        "build-data" => ["--mod", "--install", "--game-data", "--steam-data", "--out"],
+        "build-data" => ["--mod", "--install", "--game-data", "--steam-data", "--source-mods", "--out"],
         "unit-joints" => ["--install", "--game-data", "--unit"],
         "check-stats" => ["--mod"],
         "sdk-headers" => ["--repo", "--mode"],
@@ -494,7 +494,8 @@ try
             var changing = livePlan.Changes.Select(c => c.Mod).OfType<ModManifest>().Select(m => m.Id).ToHashSet(StringComparer.Ordinal);
             // every data mod of the target with its data built (the change's, and those that stay: their bytes come back
             // where a removed mod's go); the change's source mods built
-            var (withData, liveProblems) = ModDataCache.Prepare(liveInstall, liveTarget.Where(m => changing.Contains(m.Id) || LiveModPlan.HasData(m)).Where(m => m.AssetsPending == null).ToList(), Console.Error.WriteLine);
+            var (withData, liveProblems) = ModDataCache.Prepare(liveInstall, liveTarget.Where(m => changing.Contains(m.Id) || LiveModPlan.HasData(m)).Where(m => m.AssetsPending == null).ToList(), Console.Error.WriteLine,
+                liveTarget.Where(m => m.AssetsPending == null).ToList());
             liveProblems.InsertRange(0, liveAssetProblems.Select(p => $"{Path.GetFileName(p.Folder)}: {p.Reason}"));
             var (liveBuilt, liveBuildProblems) = ModBuilds.Prepare(liveInstall, ModSdk.Find(liveInstall.Root), withData.Where(m => changing.Contains(m.Id)).ToList(),
                 SupportedBuild.Current.BuildId, Console.Error.WriteLine);
@@ -716,8 +717,9 @@ try
                 GameDataReader? game = null;
                 try
                 {
-                    var (folder, files, built) = ModDataCache.Ensure(dataInstall, mod, () => game = new GameDataReader(Path.Combine(dataInstall.Game, "data")), Console.Error.WriteLine);
-                    result = new { mod = mod.Id, built, folder, files };
+                    var enabled = ModCatalog.Load(dataInstall.Mods).Mods.Where(m => m.Enabled).ToList();
+                    var (folder, files, built, notes) = ModDataCache.Ensure(dataInstall, mod, () => game = new GameDataReader(Path.Combine(dataInstall.Game, "data")), Console.Error.WriteLine, enabled);
+                    result = new { mod = mod.Id, built, folder, files, notes };
                 }
                 finally { game?.Dispose(); }
             }
@@ -728,7 +730,11 @@ try
                 if ((output + Path.DirectorySeparatorChar).StartsWith(game.Folder + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
                     throw new ArgumentException("--out must not be inside the game data folder.");
                 using var steamGame = options.TryGetValue("--steam-data", out var steamData) ? new GameDataReader(steamData) : null;
-                result = new { output, files = ModDataBuilder.Build(spec, modFolder, game, output, steamGame) };
+                // --source-mods: folders of the mods whose own patches the spec edits, as a session finds them enabled
+                var sources = (options.GetValueOrDefault("--source-mods") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(f => new ModPatches(ModCatalog.Parse(Path.GetFullPath(f), EntityProfile.Current))).ToDictionary(m => m.Id, StringComparer.Ordinal);
+                var notes = new List<string>();
+                result = new { output, files = ModDataBuilder.Build(spec, modFolder, game, output, steamGame, sources, notes), notes };
             }
             else result = new { checkedSpec = Path.Combine(modFolder, DataSpecs.FileName), patches = spec.Patches.Count, resources, inputs = spec.Inputs };
             break;
