@@ -440,6 +440,9 @@ On `dev`, since 0.4.0-beta.
 
 ### Fixed
 
+- **A mod can load the game packages it patches.** `load_package` takes a package a session mod's data spec names in
+  `archives`, not only the catalogue's. A copied effect in such a package can then be made resident
+  ([SDK reference](docs/sdk-reference.md)).
 - **Support weapons' paints had no catalogue items.** A support weapon is its stratagem's child, so its paint
   package rewarded items the catalogue lacked and its customize screen had empty cards. Its paints now follow it in
   the catalogue and are held with its stratagem. A support weapon its stratagem lists more items after, such as the

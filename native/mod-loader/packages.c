@@ -157,10 +157,26 @@ static const RefPackage* CataloguePackage(uint64_t id)
     return NULL;
 }
 
+/* archive <mod id> <id hex>: a game package the mod's data spec patches. It is real (the patch was built from it) and
+ * the mod's code may need it resident, so load_package takes it as it takes the catalogue's; never asked for itself. */
+static int ArchivePlanLine(char** f, int n)
+{
+    char* end = NULL;
+    uint64_t id = n == 3 && strlen(f[2]) == 16 ? strtoull(f[2], &end, 16) : 0;
+    if (id == 0 || end == NULL || *end || CataloguePackage(id) != NULL || g_modPackageCount == PKG_MAX_HELD) return 1;
+    ModPackage* p = &g_modPackages[g_modPackageCount++];
+    snprintf(p->name, sizeof p->name, "a game package %s patches", f[1]);
+    p->ref.id = id;
+    p->ref.name = p->name;
+    p->session = 0;
+    return 1;
+}
+
 /* package <mod id> <id hex> <session|request>: a mod's own package. 1 when it is a package line; a malformed one is
  * skipped, as the other modules' plan lines are. */
 static int PackagePlanLine(char** f, int n)
 {
+    if (n >= 1 && !strcmp(f[0], "archive")) return ArchivePlanLine(f, n);
     if (n < 1 || strcmp(f[0], "package")) return 0;
     char* end = NULL;
     uint64_t id = n == 4 && strlen(f[2]) == 16 ? strtoull(f[2], &end, 16) : 0;
@@ -239,7 +255,7 @@ static int PackageHeldState(HeldPackage* held, uint64_t id, int* changed)
  * *added (may be NULL): 1 when this call asked for it first. */
 static int PackageWantAs(uint64_t id, int own, const char** name, const char** why, int* added)
 {
-    static const char* const notInCatalogue = "it is neither a package HellForge's catalogue names nor one of the mods' own";
+    static const char* const notInCatalogue = "it is not a package HellForge's catalogue names, one of the mods' own or one their data specs patch";
     const RefPackage* known = CataloguePackage(id);
     *name = known != NULL ? known->name : "?";
     if (added != NULL) *added = 0;
