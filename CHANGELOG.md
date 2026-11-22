@@ -15,9 +15,12 @@ On `dev`, since 0.4.0-beta.
 - **Data specs edit other mods' resources.** An `edit` with `"source": {"mod": "<id>"}` changes a model or texture
   another installed mod ships, without changing that mod. It is built from that mod's own files, staged right after
   them, and built again when that mod updates; without it, only that patch is left out ([data](docs/modding/data.md#edits-of-another-mods-resources)).
+- **Tabs on the game's other tab bars (SDK 27).** `add_menu_tab` puts a mod's label on the Loadout's, the Democracy
+  Space Station's, the weapon customize screen's and the Info Terminal's tab bars too, and on the Armory's as
+  `add_armory_tab` does ([ui](docs/modding/ui.md#tabs-on-the-games-tab-bars)).
 - **Tabs on the Armory's tab bar (SDK 26).** `add_armory_tab` puts a mod's label on the Armory's own tab bar: the
   overview's categories, the weapons page, the armour page or the third category's page. Clicks and Q/E reach it as
-  the game's tabs, and the mod is called back when it is picked and left ([ui](docs/modding/ui.md#tabs-on-the-armorys-tab-bar)).
+  the game's tabs, and the mod is called back when it is picked and left ([ui](docs/modding/ui.md#tabs-on-the-games-tab-bars)).
 - **Vanilla rounds only ammunition loads.** Mods can now name 65 rounds that no weapon fires, such as the 15x100mm
   High Explosive rocket or the Halt's stun pellets. They work in a projectile edit, an `add_projectile` base or an
   ammunition copy's `set`, where HellForge used to refuse them. Each one loads the packages its effects need

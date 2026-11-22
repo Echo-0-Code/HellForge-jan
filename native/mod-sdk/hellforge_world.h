@@ -63,6 +63,15 @@ typedef struct HfFoundEnemy
 #define HF_ARMORY_TABS_WEAPONS 1u    /* the weapons page: PRIMARY, SECONDARY, THROWABLE */
 #define HF_ARMORY_TABS_ARMOUR 2u     /* the second category's page (3 vanilla labels): helmet, armour, cape */
 #define HF_ARMORY_TABS_COSMETICS 3u  /* the third category's page (6 vanilla labels) */
+/* add_menu_tab's bars (SDK 27): the Armory's four lists above keep their values. Each bar holds 8 labels. */
+#define HF_MENU_TABS_ARMORY_CATEGORIES HF_ARMORY_TABS_CATEGORIES
+#define HF_MENU_TABS_ARMORY_WEAPONS HF_ARMORY_TABS_WEAPONS
+#define HF_MENU_TABS_ARMORY_ARMOUR HF_ARMORY_TABS_ARMOUR
+#define HF_MENU_TABS_ARMORY_COSMETICS HF_ARMORY_TABS_COSMETICS
+#define HF_MENU_TABS_LOADOUT 4u       /* the mission loadout screen (1 or 2 vanilla labels) */
+#define HF_MENU_TABS_SPACE_STATION 5u /* the Democracy Space Station (3 vanilla labels) */
+#define HF_MENU_TABS_CUSTOMIZE 6u     /* the armory's customize screen of one weapon (2 vanilla labels) */
+#define HF_MENU_TABS_INFO_TERMINAL 7u /* the ship's Info Terminal (1 vanilla label) */
 typedef void (*HfArmoryTabCallback)(HfMod* mod, uint32_t tab, int selected, void* user);
 
 /* A new ability (SDK 7, add_ability), moved here from hellforge_mod.h: a vanilla ability HellForge holds hold_seconds

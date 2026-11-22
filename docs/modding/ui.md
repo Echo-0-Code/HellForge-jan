@@ -17,7 +17,7 @@ For a screen drawn with HellForge's own drawing calls (a map, a graph), see [Scr
 - [Changing a screen from code](#changing-a-screen-from-code)
 - [Clicks and closing](#clicks-and-closing)
 - [Texts for the game's own widgets](#texts-for-the-games-own-widgets)
-- [Tabs on the Armory's tab bar](#tabs-on-the-armorys-tab-bar)
+- [Tabs on the game's tab bars](#tabs-on-the-games-tab-bars)
 - [Limits](#limits)
 
 ## A first screen
@@ -129,10 +129,10 @@ uint32_t label = HAS(hf, add_text) ? hf->add_text(mod, "support_tab", "SUPPORT")
 - The key is unique within the mod. The same key gives the same id in every session.
 - The id is served from the call on, on any thread. It returns 0 when refused, and the mod's log says why.
 
-## Tabs on the Armory's tab bar
+## Tabs on the game's tab bars
 
-`add_armory_tab` (SDK 26) puts a label of the mod's on the Armory's own tab bar, after the game's labels. Clicks and
-Q/E reach it as they reach the game's tabs:
+`add_menu_tab` (SDK 27) puts a label of the mod's on one of the game's own tab bars, after the game's labels. Clicks
+and Q/E reach it as they reach the game's tabs. `add_armory_tab` (SDK 26) does the same on the Armory's four lists:
 
 ```c
 static void OnSupport(HfMod* mod, uint32_t tab, int selected, void* user)
@@ -140,19 +140,27 @@ static void OnSupport(HfMod* mod, uint32_t tab, int selected, void* user)
     /* selected 1: the player picked SUPPORT; 0: another tab, or the Armory closed */
 }
 
-uint32_t tab = HAS(hf, add_armory_tab) ? hf->add_armory_tab(mod, HF_ARMORY_TABS_WEAPONS, "SUPPORT", OnSupport, NULL) : 0;
+uint32_t tab = HAS(hf, add_menu_tab) ? hf->add_menu_tab(mod, HF_MENU_TABS_ARMORY_WEAPONS, "SUPPORT", OnSupport, NULL) : 0;
 ```
 
-| List | Where it shows | Vanilla labels |
+| Bar | Where it shows | Vanilla labels |
 | --- | --- | --- |
-| `HF_ARMORY_TABS_CATEGORIES` | the Armory's overview, before a page opens | 5 |
-| `HF_ARMORY_TABS_WEAPONS` | the weapons page: PRIMARY, SECONDARY, THROWABLE | 3 |
-| `HF_ARMORY_TABS_ARMOUR` | the second category's page: helmet, armour, cape | 3 |
-| `HF_ARMORY_TABS_COSMETICS` | the third category's page | 6 |
+| `HF_MENU_TABS_ARMORY_CATEGORIES` | the Armory's overview, before a page opens | 5 |
+| `HF_MENU_TABS_ARMORY_WEAPONS` | the weapons page: PRIMARY, SECONDARY, THROWABLE | 3 |
+| `HF_MENU_TABS_ARMORY_ARMOUR` | the second category's page: helmet, armour, cape | 3 |
+| `HF_MENU_TABS_ARMORY_COSMETICS` | the third category's page | 6 |
+| `HF_MENU_TABS_LOADOUT` | the mission loadout screen | 1 or 2 |
+| `HF_MENU_TABS_SPACE_STATION` | the Democracy Space Station | 3 |
+| `HF_MENU_TABS_CUSTOMIZE` | the armory's customize screen of one weapon | 2 |
+| `HF_MENU_TABS_INFO_TERMINAL` | the ship's Info Terminal | 1 |
 
-- A bar holds 8 labels, so a list takes as many mod tabs as it has room for. Mods get them in the order they ask.
+- The Armory's four values are `HF_ARMORY_TABS_...`, so `add_armory_tab` takes them too.
+- The Escape menu's and Change Bindings' bars are left out: the Vanilla Plus Megapack puts its MODS tabs there and
+  expects the game's labels alone. The Store and Superstore bars are not reviewed yet.
+- A bar holds 8 labels, so a bar takes as many mod tabs as it has room for. Mods get them in the order they ask.
 - Picking a mod's tab does not run the game's select. The page keeps what it showed, and the mod changes it.
-- The callback runs on the game thread, also from inside the game's own tab change. It may call the game's code.
+- The callback runs on the game thread, also from inside the game's own tab change. It is called with 0 when the
+  screen closes. It may call the game's code.
 - The label is the mod's own text, made as `add_text` makes one.
 
 ## Limits

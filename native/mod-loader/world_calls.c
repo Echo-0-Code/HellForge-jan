@@ -427,4 +427,4 @@ static void WorldCallsStart(void)
     g_wcMod.loaded = 1;
 }
 
-#include "armory_tabs.c" /* SDK 26: after this file (its menu reads and pins) */
+#include "menu_tabs.c" /* SDK 26/27: after this file (its menu reads and pins) */
