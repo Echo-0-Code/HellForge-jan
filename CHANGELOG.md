@@ -12,6 +12,9 @@ On `dev`, since 0.4.0-beta.
 
 ### Added
 
+- **Tabs on the Armory's tab bar (SDK 26).** `add_armory_tab` puts a mod's label on the Armory's own tab bar: the
+  overview's categories, the weapons page, the armour page or the third category's page. Clicks and Q/E reach it as
+  the game's tabs, and the mod is called back when it is picked and left ([ui](docs/modding/ui.md#tabs-on-the-armorys-tab-bar)).
 - **Vanilla rounds only ammunition loads.** Mods can now name 65 rounds that no weapon fires, such as the 15x100mm
   High Explosive rocket or the Halt's stun pellets. They work in a projectile edit, an `add_projectile` base or an
   ammunition copy's `set`, where HellForge used to refuse them. Each one loads the packages its effects need
