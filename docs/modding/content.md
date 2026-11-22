@@ -265,6 +265,8 @@ HfRef ref = hf->register_entity(mod, &pelican);   /* registers the turret too; 0
 ### Other rules
 
 - Registering the same block again returns the same entity.
+- An entity draws its unit record's model, its own or its base's, also where the game spawns a model by the entity's id,
+  as a minefield spawns its mines.
 - `add_entity` (SDK 4, `HfEntity`) is the older call; new mods use blocks.
 - A block changes or owns at most 8 components and has at most 8 mounts. HellForge sets no limit on the number of blocks.
 - Entities and weapons share the game's entity map across all mods: 4,096 rows, about 2,187 of them free. A component

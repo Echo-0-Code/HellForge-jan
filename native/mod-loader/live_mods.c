@@ -38,6 +38,7 @@
 
 #include "live_code.c"  /* code mods set up and taken out (SDK 16) */
 #include "live_data.c"  /* game data: hot packages and overrides */
+#include "copy_units.c" /* after live_data.c: copies spawned by their id get its overrides */
 
 #define TXN_MODS 64
 enum { TXN_ADD, TXN_REMOVE, TXN_REPLACE };

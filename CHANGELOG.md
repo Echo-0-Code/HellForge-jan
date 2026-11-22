@@ -448,6 +448,8 @@ On `dev`, since 0.4.0-beta.
 
 ### Fixed
 
+- **Copied mines show their model.** A minefield spawns its mines' models by the mine entity's id, so a mod's copy of a
+  mine drew the purple question mark and vanished. Each copied entity's id now finds the model its unit record names.
 - **A mod can load the game packages it patches.** `load_package` takes a package a session mod's data spec names in
   `archives`, not only the catalogue's. A copied effect in such a package can then be made resident
   ([SDK reference](docs/sdk-reference.md)).
