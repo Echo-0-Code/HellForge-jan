@@ -2,7 +2,7 @@
 
 <!-- diataxis: explanation -->
 
-This page is for people working on HellForge itself. It explains what the SDK 21 calls read and call in the engine.
+This page is for people working on HellForge itself. It explains what the SDK 21 and 27 calls read and call in the engine.
 The mod's side is in [modding/world.md](modding/world.md), and the rest of the mod machinery in
 [internals.md](internals.md).
 
@@ -56,6 +56,32 @@ the same widget inside a menu screen, and each screen reacts to a tab change in 
   there accept the game's 3 labels or its own 4th, and nothing else.
 - The Store (+0x80) labels its bar through another setter (0x17AAFA0) with 12-byte records. The Superstore (+0x90)
   writes the index straight into its page state. Neither is supported yet.
+
+## Sight, projectiles, sides and poses
+
+The SDK 28 calls (`world_sight.c`, `joint_poses.c`) replace reads and hooks that several mods had each made.
+
+| Call | Reads or calls |
+| --- | --- |
+| `line_of_sight` | the exe's world id (0x79F860) of the physics world (game.dll+0x346BFA0), then its raycast (0x7F4590) |
+| `find_projectiles`, `set_projectile` | the projectile pool (game.dll+0x347CEA8): flags +0x203C, flights +0x3040, sources +0x3B040, hits +0x4D040, types +0xE5040 |
+| `faction_of`, `side_of`, `find_entities` | the faction and health managers, as `find_enemies` reads them |
+| `on_render`, `pose_joint`, `joint_pose` | the engine's script render step (exe 0x689BC0), set_local_pose (0x1FCAD0), update_unit (0x1B2DC0) and the Unit calls |
+
+- The raycast takes the game's own preset for its filter (exe+0x27B9440 entry 1: 2, 5, 0x393D9518, 0x80000009).
+  Other values return no hits at all.
+- The raycast calls through the world's scene unchecked (exe+0x27BA870, 0xB0 a world, the scene at +0x20). A world
+  with no scene would crash it, so the scene is read first.
+- The AI casts its rays as 24 jobs over a batch (game.dll+0x347D7E0, rows at +0x40008). A ray is cast only when every
+  row reads done, as they share the scene. Rays merely queued for the next kick do not matter.
+- A hit record is 44 bytes: the distance at +24, the unit at +28.
+- A pool slot is in flight when its flags read 2 (in use, not ended) and its hit record's impact flag (+0xB9) is 0.
+  The hit record's +0 is the peer credited.
+- Sides follow the AI's perception gather (0x887270): a mask sharing a bit with the seer's is friendly, no mask is
+  neutral, and any other mask is hostile.
+- The render step is where the game has animated every unit and the frame has not rendered yet. The terminal camera
+  hooks it for the same reason. Poses queued outside a callback are set there first, then the callbacks run, then each
+  touched unit is updated once.
 
 ## Where to go next
 

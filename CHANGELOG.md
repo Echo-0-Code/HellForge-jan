@@ -12,6 +12,10 @@ On `dev`, since 0.4.0-beta.
 
 ### Added
 
+- **Line of sight, projectiles, sides and joint poses (SDK 28).** `line_of_sight` casts the engine's physics ray.
+  `find_projectiles` and `set_projectile` list and move shots in flight. `faction_of`, `side_of` and `find_entities`
+  tell friend from foe as the game's AI does. `on_render`, `pose_joint` and `joint_pose` pose joints just before a
+  frame renders ([world](docs/modding/world.md#line-of-sight)).
 - **Data specs edit other mods' resources.** An `edit` with `"source": {"mod": "<id>"}` changes a model or texture
   another installed mod ships, without changing that mod. It is built from that mod's own files, staged right after
   them, and built again when that mod updates; without it, only that patch is left out ([data](docs/modding/data.md#edits-of-another-mods-resources)).
