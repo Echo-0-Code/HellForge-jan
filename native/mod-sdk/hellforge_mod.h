@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 27
+#define HF_MOD_SDK_VERSION 28
 #define HF_MOD_EXPORT __declspec(dllexport)
 
 typedef struct HfMod HfMod; /* Identifies the calling mod in logs and status. Opaque, but for SDK 6's HF_API(mod). */
@@ -1715,7 +1715,11 @@ typedef struct HfApi
      * thread. Its handle (1 and up), or 0 refused (the mod's log says why: no room on the bar, or another game build). */
     uint32_t (*add_armory_tab)(HfMod* mod, uint32_t list, const char* label, HfArmoryTabCallback on_select, void* user);
 
-    /* ---- SDK 27: sight, projectiles, sides and joint poses (hellforge_world.h, docs/modding/world.md; check hf->size) */
+    /* ---- SDK 27: a mod's tab on any of the game's tab bars (hellforge_world.h, docs/modding/ui.md; check hf->size) - */
+    /* add_armory_tab for every bar HellForge reviewed (HF_MENU_TABS_...): the Armory's lists, the Loadout, the Space
+     * Station, the customize screen and the Info Terminal. Same rules, callback and handles. */
+    uint32_t (*add_menu_tab)(HfMod* mod, uint32_t bar, const char* label, HfArmoryTabCallback on_select, void* user);
+    /* ---- SDK 28: sight, projectiles, sides and joint poses (hellforge_world.h, docs/modding/world.md; check hf->size) */
     /* Whether the straight line from `from` to `to` is clear, through the engine's physics raycast: HF_SIGHT_CLEAR,
      * HF_SIGHT_BLOCKED (hit, may be NULL, gets the first hit that counts) or HF_SIGHT_UNKNOWN (the mod's log says why).
      * how (may be NULL) leaves units and the ends out. Game thread only, in a mission. */

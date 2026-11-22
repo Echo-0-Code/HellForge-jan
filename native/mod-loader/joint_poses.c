@@ -1,4 +1,4 @@
-/* SDK 27 (hellforge_world.h): on_render, pose_joint and joint_pose, for helldivers2.exe build 25480438. A joint that
+/* SDK 28 (hellforge_world.h): on_render, pose_joint and joint_pose, for helldivers2.exe build 25480438. A joint that
  * follows another (a turret head, a suit's limb on its wearer's bone) must be set after the game has animated every
  * unit and before the frame renders, or it trails a frame behind: that is the engine's script render step, which the
  * terminal camera hooks for the same reason (terminal_camera.c, whose pins this file shares). The poses are set with
@@ -122,7 +122,7 @@ static void JointPosesInstall(void)
     Note("joint poses: on; mods' poses are set just before each frame renders");
 }
 
-/* SDK 27, on_render: 1 added, 0 refused (logged). */
+/* SDK 28, on_render: 1 added, 0 refused (logged). */
 static int ApiOnRender(HfMod* mod, HfRenderCallback callback, void* user)
 {
     if (callback == NULL || ModGone(mod)) { ApiLog(mod, "on_render: refused: no callback"); return 0; }
@@ -146,7 +146,7 @@ static const char* JpWhyNot(uint32_t unit, uint32_t node, const HfJointPose* pos
     return NULL;
 }
 
-/* SDK 27, pose_joint: 1 set (in a render callback) or queued for the next frame, 0 refused (logged at most 8 times). */
+/* SDK 28, pose_joint: 1 set (in a render callback) or queued for the next frame, 0 refused (logged at most 8 times). */
 static int ApiPoseJoint(HfMod* mod, uint32_t unit, uint32_t node, const HfJointPose* pose)
 {
     static volatile LONG logged;
@@ -162,7 +162,7 @@ static int ApiPoseJoint(HfMod* mod, uint32_t unit, uint32_t node, const HfJointP
     return queued;
 }
 
-/* SDK 27, joint_pose: 1 with out filled, 0 when the unit or node does not read. */
+/* SDK 28, joint_pose: 1 with out filled, 0 when the unit or node does not read. */
 static int ApiJointPose(HfMod* mod, uint32_t unit, uint32_t node, uint32_t space, float out[16])
 {
     (void)mod;

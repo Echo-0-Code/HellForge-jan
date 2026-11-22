@@ -1,4 +1,4 @@
-/* SDK 27 (hellforge_world.h): line of sight, projectiles near a point and sides, for game.dll and helldivers2.exe build
+/* SDK 28 (hellforge_world.h): line of sight, projectiles near a point and sides, for game.dll and helldivers2.exe build
  * 25480438. Where each one reads and what it calls: docs/internals-world.md. Included by world_calls.c after its
  * find_enemies scan (WcScan), which find_entities shares. */
 
@@ -93,7 +93,7 @@ static int WsFirstHit(const uint8_t* hits, uint32_t n, const float* from, const 
     return best >= 0;
 }
 
-/* SDK 27, line_of_sight: HF_SIGHT_CLEAR, HF_SIGHT_BLOCKED (hit filled) or HF_SIGHT_UNKNOWN (logged, at most 8 times). */
+/* SDK 28, line_of_sight: HF_SIGHT_CLEAR, HF_SIGHT_BLOCKED (hit filled) or HF_SIGHT_UNKNOWN (logged, at most 8 times). */
 static uint32_t ApiLineOfSight(HfMod* mod, const float from[3], const float to[3], const HfSight* how, HfSightHit* hit)
 {
     static volatile LONG logged;
@@ -178,7 +178,7 @@ static int WsFoundAt(uintptr_t pool, uint32_t s, const float* centre, float radi
     return 1;
 }
 
-/* SDK 27, find_projectiles: how many shots were written to out, nearest first. */
+/* SDK 28, find_projectiles: how many shots were written to out, nearest first. */
 static uint32_t ApiFindProjectiles(HfMod* mod, const float centre[3], float radius, uint32_t type, HfFoundProjectile* out, uint32_t capacity)
 {
     uintptr_t game = ApiModuleBase("game.dll", NULL), pool;
@@ -194,7 +194,7 @@ static uint32_t ApiFindProjectiles(HfMod* mod, const float centre[3], float radi
     return written;
 }
 
-/* SDK 27, set_projectile: 1 done, 0 refused (logged). */
+/* SDK 28, set_projectile: 1 done, 0 refused (logged). */
 static int ApiSetProjectile(HfMod* mod, uint32_t slot, uint32_t type, const float position[3], const float velocity[3])
 {
     uintptr_t game = ApiModuleBase("game.dll", NULL), pool;
@@ -223,7 +223,7 @@ static uint32_t WsSide(uint32_t mask, uint32_t toward, uint64_t resource)
     return (mask & toward) ? HF_SIDE_FRIENDLY : HF_SIDE_HOSTILE;
 }
 
-/* SDK 27, faction_of: the entity's mask, 0 for none. */
+/* SDK 28, faction_of: the entity's mask, 0 for none. */
 static uint32_t ApiFactionOf(HfMod* mod, uint32_t entity)
 {
     (void)mod;
@@ -233,7 +233,7 @@ static uint32_t ApiFactionOf(HfMod* mod, uint32_t entity)
     return WcFaction(&s, entity);
 }
 
-/* SDK 27, side_of: HF_SIDE_..., HF_SIDE_UNKNOWN when it does not read. */
+/* SDK 28, side_of: HF_SIDE_..., HF_SIDE_UNKNOWN when it does not read. */
 static uint32_t ApiSideOf(HfMod* mod, uint32_t entity, uint32_t toward)
 {
     (void)mod;

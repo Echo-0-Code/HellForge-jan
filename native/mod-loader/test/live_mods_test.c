@@ -716,3 +716,74 @@ static void HotDataFixture(void)
     for (int event = 0; event <= HF_EVENT_SESSION_END; event++) InterlockedExchange(&g_fired[event], fired[event]);
     g_modCount = mods;
 }
+
+/* Copied entities' ids (copy_units.c), against a fake engine whose resources have types: a copy's id points at its
+ * unit for "unit" at once and for the unit's other types once it is loaded, never for a type the id names itself; a new
+ * unit record moves them and clears a type the new unit lacks; a copy named after its own unit gets none. */
+typedef struct FakeRes { uint64_t type, name; } FakeRes;
+static FakeRes g_cnPresent[16], g_cnSet[32], g_cnCleared[8];
+static uint64_t g_cnTarget[32], g_cnUnits[2];
+static int g_cnPresentCount, g_cnSetCount, g_cnClearedCount;
+static uint64_t CnType(const char* t) { return Murmur64A(t, strlen(t)); }
+static void CnHave(const char* type, uint64_t name) { g_cnPresent[g_cnPresentCount++] = (FakeRes){CnType(type), name}; }
+static void CnOverride(uint64_t type, uint64_t name, uint64_t target)
+{ g_cnTarget[g_cnSetCount] = target; g_cnSet[g_cnSetCount++] = (FakeRes){type, name}; }
+static void CnClear(uint64_t type, uint64_t name) { g_cnCleared[g_cnClearedCount++] = (FakeRes){type, name}; }
+static uint8_t CnCanGet(uint64_t type, uint64_t name)
+{
+    for (int i = 0; i < g_cnPresentCount; i++) if (g_cnPresent[i].type == type && g_cnPresent[i].name == name) return 1;
+    return 0;
+}
+static uintptr_t CnRecord(const char* name, uint64_t resource, uint32_t* stride, int shared)
+{
+    for (int i = 0; i < 2; i++) if (g_weapons[i].entity == resource) return (uintptr_t)&g_cnUnits[i];
+    return 0;
+}
+static int CnWasSet(const char* type, uint64_t name, uint64_t target)
+{
+    for (int i = 0; i < g_cnSetCount; i++) if (g_cnSet[i].type == CnType(type) && g_cnSet[i].name == name && g_cnTarget[i] == target) return 1;
+    return 0;
+}
+
+static void CopyNamesFixture(void)
+{
+    Weapon* weapons = g_weapons;
+    int count = g_weaponCount;
+    LONG ready = g_fired[HF_EVENT_ENTITIES_READY];
+    int refused = g_copyUnitRefused;
+    free(g_copyNames); g_copyNames = NULL; g_copyNamesCap = 0; g_copyUnitRefused = 0;
+    Weapon fake[2] = {{.plain = 1, .state = 1, .entity = 0xC0C0000000000001ull, .name = "copy"},
+        {.plain = 1, .state = 1, .entity = 0x5E1F000000000002ull, .name = "self"}};
+    const uint64_t mine = 0x693028644D27FFEFull, own = 0x0123456789ABCDEFull;
+    g_weapons = fake;
+    g_weaponCount = 2;
+    g_cnUnits[0] = mine;
+    g_cnUnits[1] = fake[1].entity;
+    g_hotLoad = FakeHotLoad; g_hotOverride = CnOverride; g_hotClear = CnClear; g_hotCanGet = CnCanGet;
+    g_copyUnitRecord = CnRecord;
+    for (int t = 0; t < CU_TYPES; t++) g_copyTypes[t] = CnType(kCopyNameTypes[t]);
+    InterlockedExchange(&g_fired[HF_EVENT_ENTITIES_READY], 1);
+    CnHave("physics", fake[0].entity); /* the copy ships a physics of its own name */
+    CopyUnitNamesTick();               /* the mine not loaded yet: only its unit */
+    assert(g_cnSetCount == 1 && CnWasSet("unit", fake[0].entity, mine) && !g_copyNames[0].checked);
+    CnHave("unit", mine); CnHave("physics", mine); CnHave("state_machine", mine); CnHave("entity", mine);
+    for (int i = 0; i < 2; i++) CopyUnitName(i); /* loaded: its state machine too; never physics or entity */
+    assert(g_cnSetCount == 2 && CnWasSet("state_machine", fake[0].entity, mine) && g_copyNames[0].checked);
+    CopyUnitName(0);
+    assert(g_cnSetCount == 2);
+    g_cnUnits[0] = own; /* its record now names a unit of its own, with bones and no state machine */
+    CnHave("unit", own); CnHave("bones", own);
+    CopyUnitName(0);
+    assert(CnWasSet("unit", fake[0].entity, own) && CnWasSet("bones", fake[0].entity, own) && g_cnSetCount == 4 &&
+        g_cnClearedCount == 1 && g_cnCleared[0].type == CnType("state_machine") && g_cnCleared[0].name == fake[0].entity);
+    printf("  copy names: a copy's id finds its unit's resources of 2 more types, its own physics kept, moved to a new unit\n");
+
+    free(g_copyNames); g_copyNames = NULL; g_copyNamesCap = 0;
+    memset(g_copyTypes, 0, sizeof g_copyTypes);
+    g_copyUnitRecord = ComponentRecordOf;
+    g_copyUnitRefused = refused;
+    g_hotLoad = NULL; g_hotOverride = NULL; g_hotClear = NULL; g_hotCanGet = NULL;
+    InterlockedExchange(&g_fired[HF_EVENT_ENTITIES_READY], ready);
+    g_weapons = weapons;
+    g_weaponCount = count;
+}

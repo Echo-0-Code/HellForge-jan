@@ -370,7 +370,7 @@ static void AiPathBudgetTick(void); /* perf_ai_path_budget.c */
 static void PerfCorpseFreezeTick(void); /* perf_corpse_freeze.c */
 static void HeapTrimTick(void); /* perf_heap_trim.c */
 static void EnemyDensityTick(void); /* perf_steer_lod.c: HELLFORGE_PERF_DENSITY only */
-static void CopyUnitNamesTick(void); /* copy_units.c: copies spawned by their id (minefield mines) */
+static void CopyUnitNamesTick(void); /* copy_units.c: copies found by their id (minefield mines) */
 static void TickDetour(void* manager, float dt)
 {
     InterlockedExchange64(&g_tickLast, (LONG64)GetTickCount64());

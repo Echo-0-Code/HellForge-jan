@@ -446,6 +446,6 @@ static void WorldCallsStart(void)
     g_wcMod.loaded = 1;
 }
 
-#include "armory_tabs.c" /* SDK 26: after this file (its menu reads and pins) */
-#include "world_sight.c"  /* SDK 27: after this file (its scan of the health records) */
-#include "joint_poses.c"  /* SDK 27: after terminal_camera.c (the render step's pins) */
+#include "menu_tabs.c" /* SDK 26/27: after this file (its menu reads and pins) */
+#include "world_sight.c"  /* SDK 28: after this file (its scan of the health records) */
+#include "joint_poses.c"  /* SDK 28: after terminal_camera.c (the render step's pins) */

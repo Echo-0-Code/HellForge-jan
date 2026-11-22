@@ -1123,7 +1123,7 @@ static void ApiInit(void)
         ApiSyncState, ApiSyncMod, ApiSyncAnswer, ApiStatsSource, ApiBrowseState, ApiBrowseLobby, ApiBrowseAsk, ApiFunction, ApiHookFunction, ApiGlobal, ApiSetStatus, ApiIsAuthority,
         ApiEntityOfNetwork, ApiSend, ApiShareSet, ApiShareGet, ApiShareRow, ApiLoadPhase, ApiUnhook, ApiAddExplosion, ApiExplosionRow, ApiAddBeam, ApiBeamRow, ApiAddArc, ApiArcRow, ApiAddAttachment,
         ApiAddEnemy, ApiAddEnemySwap, ApiAddEnemySquad, ApiRpcListen, ApiRpcSend, ApiAddScreen, ApiScreenShow, ApiGenerationCapacity, ApiAddPattern, ApiUiOpen, ApiUiSet, ApiUiOn, ApiUiClose,
-        ApiPlayEffect, ApiStopEffect, ApiFindEnemies, ApiArmoryWeapon, ApiAddText, ApiPlaceStratagem, ApiSetStratagemIcon, ApiPlaceModStratagem, ApiWeaponPick, ApiSetWeaponPick, ApiAddArmoryTab,
+        ApiPlayEffect, ApiStopEffect, ApiFindEnemies, ApiArmoryWeapon, ApiAddText, ApiPlaceStratagem, ApiSetStratagemIcon, ApiPlaceModStratagem, ApiWeaponPick, ApiSetWeaponPick, ApiAddArmoryTab, ApiAddMenuTab,
         ApiLineOfSight, ApiFindProjectiles, ApiSetProjectile, ApiFactionOf, ApiSideOf, ApiFindEntities, ApiOnRender, ApiPoseJoint, ApiJointPose};
 }
 

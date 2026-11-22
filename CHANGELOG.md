@@ -12,16 +12,19 @@ On `dev`, since 0.4.0-beta.
 
 ### Added
 
-- **Line of sight, projectiles, sides and joint poses (SDK 27).** `line_of_sight` casts the engine's physics ray.
+- **Line of sight, projectiles, sides and joint poses (SDK 28).** `line_of_sight` casts the engine's physics ray.
   `find_projectiles` and `set_projectile` list and move shots in flight. `faction_of`, `side_of` and `find_entities`
   tell friend from foe as the game's AI does. `on_render`, `pose_joint` and `joint_pose` pose joints just before a
   frame renders ([world](docs/modding/world.md#line-of-sight)).
 - **Data specs edit other mods' resources.** An `edit` with `"source": {"mod": "<id>"}` changes a model or texture
   another installed mod ships, without changing that mod. It is built from that mod's own files, staged right after
   them, and built again when that mod updates; without it, only that patch is left out ([data](docs/modding/data.md#edits-of-another-mods-resources)).
+- **Tabs on the game's other tab bars (SDK 27).** `add_menu_tab` puts a mod's label on the Loadout's, the Democracy
+  Space Station's, the weapon customize screen's and the Info Terminal's tab bars too, and on the Armory's as
+  `add_armory_tab` does ([ui](docs/modding/ui.md#tabs-on-the-games-tab-bars)).
 - **Tabs on the Armory's tab bar (SDK 26).** `add_armory_tab` puts a mod's label on the Armory's own tab bar: the
   overview's categories, the weapons page, the armour page or the third category's page. Clicks and Q/E reach it as
-  the game's tabs, and the mod is called back when it is picked and left ([ui](docs/modding/ui.md#tabs-on-the-armorys-tab-bar)).
+  the game's tabs, and the mod is called back when it is picked and left ([ui](docs/modding/ui.md#tabs-on-the-games-tab-bars)).
 - **Vanilla rounds only ammunition loads.** Mods can now name 65 rounds that no weapon fires, such as the 15x100mm
   High Explosive rocket or the Halt's stun pellets. They work in a projectile edit, an `add_projectile` base or an
   ammunition copy's `set`, where HellForge used to refuse them. Each one loads the packages its effects need
@@ -461,6 +464,9 @@ On `dev`, since 0.4.0-beta.
 
 - **No crash at the title screen with copied entities.** The loader points a copy's id at its model on the game
   thread now. From its own thread it could fault while the game loaded the loadout's packages.
+- **Copied entities find all their model's resources by their id.** Where the game finds a resource by an entity's
+  id, a copy's id now names its unit's physics, state machine, bones, effects, materials and sounds too, not only the
+  unit.
 - **Copied mines show their model.** A minefield spawns its mines' models by the mine entity's id, so a mod's copy of a
   mine drew the purple question mark and vanished. Each copied entity's id now finds the model its unit record names.
 - **A mod can load the game packages it patches.** `load_package` takes a package a session mod's data spec names in

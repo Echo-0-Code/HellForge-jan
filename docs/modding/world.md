@@ -4,7 +4,7 @@
 
 Three SDK 21 calls let a code mod act on the world around the player. `play_effect` hangs particles on an entity, on
 this machine or on every machine of the lobby. `find_enemies` lists the enemies near a point. `armory_weapon` names the
-weapon the armory's customize screen shows. SDK 27 adds line of sight, projectiles near a point, the side an entity
+weapon the armory's customize screen shows. SDK 28 adds line of sight, projectiles near a point, the side an entity
 is on, and joint poses set just before a frame renders. The types are in `hellforge_world.h`, which `hellforge_mod.h`
 includes.
 
@@ -22,7 +22,7 @@ includes.
 
 ## Before you call
 
-- The manifest needs `"sdk": 21` (27 for the SDK 27 calls), and the code checks `hf->size` before each call.
+- The manifest needs `"sdk": 21` (28 for the SDK 28 calls), and the code checks `hf->size` before each call.
 - `play_effect` and `stop_effect` run on the game thread only: in a game event, or in an `on_game_thread` callback
   ([the game thread](runtime.md#the-game-thread)). Elsewhere they are refused, and your log says so.
 - `line_of_sight` and `set_projectile` run on the game thread only too.

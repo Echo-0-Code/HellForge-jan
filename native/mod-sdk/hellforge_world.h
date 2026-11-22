@@ -1,7 +1,7 @@
-/* HellForge mod SDK 21 and 27: effects on entities (play_effect, stop_effect), enemies near a point (find_enemies), the
- * weapon the armory shows (armory_weapon), line of sight, projectiles near a point, sides and joint poses;
- * docs/modding/world.md. It also holds the spawn director's enemy constants (SDK 17, add_enemy). Included by
- * hellforge_mod.h. */
+/* HellForge mod SDK 21, 27 and 28: effects on entities (play_effect, stop_effect), enemies near a point
+ * (find_enemies), the weapon the armory shows (armory_weapon), menu tabs, line of sight, projectiles near a point,
+ * sides and joint poses; docs/modding/world.md. It also holds the spawn director's enemy constants (SDK 17,
+ * add_enemy). Included by hellforge_mod.h. */
 #pragma once
 #include <stdint.h>
 
@@ -55,7 +55,7 @@ typedef struct HfFoundEnemy
 #define HF_FOUND_DOWNED 0x1u    /* downed, not dead */
 #define HF_FOUND_AUTHORITY 0x2u /* this machine simulates it (is_authority) */
 
-/* ---- SDK 27 --------------------------------------------------------------------------------------------------------- */
+/* ---- SDK 28 --------------------------------------------------------------------------------------------------------- */
 
 /* line_of_sight's answers */
 #define HF_SIGHT_UNKNOWN 0u /* not known now (the mod's log says why): treat it as the caller sees fit */
@@ -176,6 +176,15 @@ typedef struct HfHoming
 #define HF_ARMORY_TABS_WEAPONS 1u    /* the weapons page: PRIMARY, SECONDARY, THROWABLE */
 #define HF_ARMORY_TABS_ARMOUR 2u     /* the second category's page (3 vanilla labels): helmet, armour, cape */
 #define HF_ARMORY_TABS_COSMETICS 3u  /* the third category's page (6 vanilla labels) */
+/* add_menu_tab's bars (SDK 27): the Armory's four lists above keep their values. Each bar holds 8 labels. */
+#define HF_MENU_TABS_ARMORY_CATEGORIES HF_ARMORY_TABS_CATEGORIES
+#define HF_MENU_TABS_ARMORY_WEAPONS HF_ARMORY_TABS_WEAPONS
+#define HF_MENU_TABS_ARMORY_ARMOUR HF_ARMORY_TABS_ARMOUR
+#define HF_MENU_TABS_ARMORY_COSMETICS HF_ARMORY_TABS_COSMETICS
+#define HF_MENU_TABS_LOADOUT 4u       /* the mission loadout screen (1 or 2 vanilla labels) */
+#define HF_MENU_TABS_SPACE_STATION 5u /* the Democracy Space Station (3 vanilla labels) */
+#define HF_MENU_TABS_CUSTOMIZE 6u     /* the armory's customize screen of one weapon (2 vanilla labels) */
+#define HF_MENU_TABS_INFO_TERMINAL 7u /* the ship's Info Terminal (1 vanilla label) */
 typedef void (*HfArmoryTabCallback)(HfMod* mod, uint32_t tab, int selected, void* user);
 
 /* A new ability (SDK 7, add_ability), moved here from hellforge_mod.h: a vanilla ability HellForge holds hold_seconds
