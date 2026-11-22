@@ -208,9 +208,9 @@ References are HD2R Editor's payload swaps. Fields marked `"ref"` in the mapping
   from 1;
 - the damage of an explosion and of a projectile.
 
-A new value must be a row the reference catalogue knows: a projectile type another weapon fires, a catalogued
-explosion, or an attachable status effect. The catalogue is `mappings/references.json`, built from HD2Runtime's
-reviewed catalogues with `scripts/ExportReferences.py`.
+A new value must be a row the reference catalogue knows: a projectile another weapon fires or ammunition loads, a
+catalogued explosion, or an attachable status effect. The catalogue is `mappings/references.json`, from HD2Runtime's
+catalogues and `mappings/ammo-rounds.json` (`scripts/ExportReferences.py`).
 
 A value is written once the packages its effects need are resident. Until then the edit waits (logged), and it fails if
 they do not load within 90 seconds. An explosion whose shrapnel leads back to the projectile it is set on is refused. A

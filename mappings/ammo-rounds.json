@@ -1,0 +1,841 @@
+{
+ "format": 1,
+ "build": "25480438",
+ "source": "FileDiver tables of build 25480438 (projectile, explosion, entity tables) against reference_data.h; HD2Mods ammo-types/research/tools/ammo_rounds.py",
+ "packages": {
+  "0x0B831A7DD55E8736": "unnamed loadout package of entity BCC2177439D231BE",
+  "0x522BE23400CC6086": "packages/generated/loadout/pump_shotgun_stun",
+  "0xF230D2D2ADCC034A": "unnamed loadout package of Defender",
+  "0x99F20DF1C4CF885A": "packages/generated/loadout/automatic_pistol",
+  "0xE0807831D6F456C8": "packages/generated/loadout/jet_rifle_phoenix",
+  "0x0827284B048BED82": "packages/generated/loadout/personal_defense_weapon_pepper",
+  "0xDBD9381F9EA9788F": "packages/generated/loadout/assault_rifle",
+  "0x44DD33AF0EF2B0D1": "packages/generated/loadout/shotgun_nacho",
+  "0x2404FA21FE49C32D": "packages/generated/loadout/marksman_rifle_vigilance",
+  "0xE566E3AAF90DB459": "packages/generated/loadout/pump_shotgun",
+  "0x8C3B838D05731044": "packages/generated/loadout/revolver_pistol_long",
+  "0xBF2250DE0B17285C": "packages/generated/loadout/standard_pistol"
+ },
+ "projectiles": [
+  {
+   "type": 1,
+   "label": "SHOTGUN 10g. DUAL SABOT (ammo)",
+   "items": [
+    "SHOTGUN 10g. DUAL SABOT",
+    "SHOTGUN 10g. DUAL SABOT ALTERNATE"
+   ],
+   "packages": [
+    "0x0B831A7DD55E8736",
+    "0x522BE23400CC6086"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 3,
+   "label": "PISTOL-SMG 12x25mm. FULL METAL JACKET (ammo)",
+   "items": [
+    "PISTOL-SMG 12x25mm. FULL METAL JACKET"
+   ],
+   "packages": [
+    "0xF230D2D2ADCC034A"
+   ],
+   "how": "default",
+   "defaultOf": [
+    "Defender"
+   ]
+  },
+  {
+   "type": 4,
+   "label": "PISTOL-SMG 9x20mm. PLASMA (ammo)",
+   "items": [
+    "PISTOL-SMG 9x20mm. PLASMA"
+   ],
+   "packages": [
+    "0x99F20DF1C4CF885A"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 12,
+   "label": "ROCKET 15x100mm. THERMITE (ammo)",
+   "items": [
+    "ROCKET 15x100mm. THERMITE"
+   ],
+   "packages": [
+    "0xE0807831D6F456C8"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 14,
+   "label": "SHOTGUN 10g. SCATTER SHOT (ammo)",
+   "items": [
+    "SHOTGUN 10g. SCATTER SHOT",
+    "SHOTGUN 10g. SCATTER SHOT ALTERNATE"
+   ],
+   "packages": [
+    "0x0B831A7DD55E8736",
+    "0x522BE23400CC6086"
+   ],
+   "how": "cover",
+   "silent": [
+    "0xF748E363"
+   ]
+  },
+  {
+   "type": 19,
+   "label": "REVOLVER 13x40mm. MAGNUM (ammo)",
+   "items": [
+    "REVOLVER 13x40mm. MAGNUM"
+   ],
+   "packages": [
+    "0x0827284B048BED82"
+   ],
+   "how": "cover",
+   "silent": [
+    "0x41AE155E"
+   ]
+  },
+  {
+   "type": 20,
+   "label": "ROCKET 15x100mm. TOXIC (ammo)",
+   "items": [
+    "ROCKET 15x100mm. TOXIC"
+   ],
+   "packages": [
+    "0xE0807831D6F456C8"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 21,
+   "label": "ROCKET 15x100mm. PLASMA (ammo)",
+   "items": [
+    "ROCKET 15x100mm. PLASMA"
+   ],
+   "packages": [
+    "0xE0807831D6F456C8"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 28,
+   "label": "REVOLVER 13x40mm. HOLLOW POINT (ammo)",
+   "items": [
+    "REVOLVER 13x40mm. HOLLOW POINT"
+   ],
+   "packages": [
+    "0x0827284B048BED82"
+   ],
+   "how": "cover",
+   "silent": [
+    "0x41AE155E"
+   ]
+  },
+  {
+   "type": 35,
+   "label": "RIFLE 9x70mm. SOCOM ASSASSIN (ammo)",
+   "items": [
+    "RIFLE 9x70mm. SOCOM ASSASSIN"
+   ],
+   "packages": [
+    "0xDBD9381F9EA9788F"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 37,
+   "label": "SHOTGUN 10g. HIGH VELOCITY SABOT (ammo)",
+   "items": [
+    "SHOTGUN 10g. HIGH VELOCITY SABOT",
+    "SHOTGUN 10g. HIGH VELOCITY SABOT ALTERNATE"
+   ],
+   "packages": [
+    "0x0B831A7DD55E8736",
+    "0x522BE23400CC6086"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 46,
+   "label": "ROCKET 15x100mm. HIGH VELOCITY (ammo)",
+   "items": [
+    "ROCKET 15x100mm. HIGH VELOCITY"
+   ],
+   "packages": [
+    "0xE0807831D6F456C8"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 47,
+   "label": "SHOTGUN 10g. TRI-BALL (ammo)",
+   "items": [
+    "SHOTGUN 10g. TRI-BALL",
+    "SHOTGUN 10g. TRI-BALL ALTERNATE"
+   ],
+   "packages": [
+    "0x0B831A7DD55E8736",
+    "0x44DD33AF0EF2B0D1"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 59,
+   "label": "RIFLE 5,5x50mm. RIPPER (ammo)",
+   "items": [
+    "RIFLE 5,5x50mm. RIPPER"
+   ],
+   "packages": [
+    "0xDBD9381F9EA9788F"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 73,
+   "label": "SHOTGUN 10g. MAGNUM TRIBALL (ammo)",
+   "items": [
+    "SHOTGUN 10g. MAGNUM TRIBALL",
+    "SHOTGUN 10g. MAGNUM TRIBALL ALTERNATE"
+   ],
+   "packages": [
+    "0x0B831A7DD55E8736"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 91,
+   "label": "SHOTGUN 12g. BUGSHOT (ammo)",
+   "items": [
+    "SHOTGUN 12g. BUGSHOT"
+   ],
+   "packages": [
+    "0x0B831A7DD55E8736",
+    "0x44DD33AF0EF2B0D1"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 95,
+   "label": "RIFLE 8x60mm. EXPLOSIVE (ammo)",
+   "items": [
+    "RIFLE 8x60mm. EXPLOSIVE"
+   ],
+   "packages": [
+    "0xDBD9381F9EA9788F",
+    "0xE0807831D6F456C8"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 97,
+   "label": "REVOLVER 13x40mm. RIPPER (ammo)",
+   "items": [
+    "REVOLVER 13x40mm. RIPPER"
+   ],
+   "packages": [
+    "0x0827284B048BED82"
+   ],
+   "how": "cover",
+   "silent": [
+    "0x41AE155E"
+   ]
+  },
+  {
+   "type": 101,
+   "label": "RIFLE 8x60mm. DEVASTATOR (ammo)",
+   "items": [
+    "RIFLE 8x60mm. DEVASTATOR"
+   ],
+   "packages": [
+    "0xDBD9381F9EA9788F"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 104,
+   "label": "RIFLE 9x70mm. SUPER URANIUM CORE (ammo)",
+   "items": [
+    "RIFLE 9x70mm. SUPER URANIUM CORE"
+   ],
+   "packages": [
+    "0xDBD9381F9EA9788F"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 105,
+   "label": "PISTOL-SMG 12x25mm. HOLLOW POINT (ammo)",
+   "items": [
+    "PISTOL-SMG 12x25mm. HOLLOW POINT"
+   ],
+   "packages": [
+    "0xF230D2D2ADCC034A"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 108,
+   "label": "RIFLE 8x60mm. LIBERTY FIRE (ammo)",
+   "items": [
+    "RIFLE 8x60mm. LIBERTY FIRE"
+   ],
+   "packages": [
+    "0x2404FA21FE49C32D",
+    "0xDBD9381F9EA9788F"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 109,
+   "label": "PISTOL-SMG 12x25mm. Ripper (ammo)",
+   "items": [
+    "PISTOL-SMG 12x25mm. Ripper"
+   ],
+   "packages": [
+    "0xF230D2D2ADCC034A"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 113,
+   "label": "ROCKET 15x100mm. EMP-ROUNDS (ammo)",
+   "items": [
+    "ROCKET 15x100mm. EMP-ROUNDS"
+   ],
+   "packages": [
+    "0xE0807831D6F456C8"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 114,
+   "label": "REVOLVER 13x40mm. PENETRATOR (ammo)",
+   "items": [
+    "REVOLVER 13x40mm. PENETRATOR"
+   ],
+   "packages": [
+    "0x0827284B048BED82",
+    "0xDBD9381F9EA9788F"
+   ],
+   "how": "cover",
+   "silent": [
+    "0x41AE155E"
+   ]
+  },
+  {
+   "type": 118,
+   "label": "RIFLE 8x60mm. AIRBURST (ammo)",
+   "items": [
+    "RIFLE 8x60mm. AIRBURST"
+   ],
+   "packages": [
+    "0xDBD9381F9EA9788F"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 134,
+   "label": "RIFLE 9x70mm. SELF PROPELLED (ammo)",
+   "items": [
+    "RIFLE 9x70mm. SELF PROPELLED"
+   ],
+   "packages": [
+    "0xDBD9381F9EA9788F"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 156,
+   "label": "PISTOL-SMG 9x20mm. TOXIC (ammo)",
+   "items": [
+    "PISTOL-SMG 9x20mm. TOXIC"
+   ],
+   "packages": [
+    "0x99F20DF1C4CF885A"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 160,
+   "label": "SHOTGUN 12g. MAGNUM (ammo)",
+   "items": [
+    "SHOTGUN 12g. MAGNUM"
+   ],
+   "packages": [
+    "0x0B831A7DD55E8736"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 163,
+   "label": "RIFLE 8x60mm. SUPER URANIUM CORE (ammo)",
+   "items": [
+    "RIFLE 8x60mm. SUPER URANIUM CORE"
+   ],
+   "packages": [
+    "0xDBD9381F9EA9788F"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 168,
+   "label": "PISTOL-SMG 12x25mm. HIGH VELOCITY (ammo)",
+   "items": [
+    "PISTOL-SMG 12x25mm. HIGH VELOCITY",
+    "PISTOL-SMG 12x25mm. Plasma"
+   ],
+   "packages": [
+    "0xF230D2D2ADCC034A"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 173,
+   "label": "PISTOL-SMG 9x20mm. EXPLOSIVE (ammo)",
+   "items": [
+    "PISTOL-SMG 9x20mm. EXPLOSIVE"
+   ],
+   "packages": [
+    "0x99F20DF1C4CF885A",
+    "0xE0807831D6F456C8"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 183,
+   "label": "SHOTGUN 10g. FLECHETTES (ammo)",
+   "items": [
+    "SHOTGUN 10g. FLECHETTES",
+    "SHOTGUN 10g. FLECHETTES ALTERNATE"
+   ],
+   "packages": [
+    "0x522BE23400CC6086"
+   ],
+   "how": "default",
+   "defaultOf": [
+    "Halt"
+   ]
+  },
+  {
+   "type": 189,
+   "label": "RIFLE 5,5x50mm. SUPER URANIUM CORE (ammo)",
+   "items": [
+    "RIFLE 5,5x50mm. SUPER URANIUM CORE"
+   ],
+   "packages": [
+    "0xDBD9381F9EA9788F"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 191,
+   "label": "SHOTGUN 10g. Stun (ammo)",
+   "items": [
+    "SHOTGUN 10g. Stun",
+    "SHOTGUN 10g. Stun ALTERNATE"
+   ],
+   "packages": [
+    "0x522BE23400CC6086"
+   ],
+   "how": "default",
+   "defaultOf": [
+    "Halt alt"
+   ]
+  },
+  {
+   "type": 199,
+   "label": "SHOTGUN 10g. BUGSHOT (ammo)",
+   "items": [
+    "SHOTGUN 10g. BUGSHOT",
+    "SHOTGUN 10g. BUGSHOT ALTERNATE"
+   ],
+   "packages": [
+    "0x0B831A7DD55E8736",
+    "0x44DD33AF0EF2B0D1"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 200,
+   "label": "RIFLE 9x70mm. PENETRATOR (ammo)",
+   "items": [
+    "RIFLE 9x70mm. PENETRATOR"
+   ],
+   "packages": [
+    "0xDBD9381F9EA9788F"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 204,
+   "label": "PISTOL-SMG 12x25mm. TOXIC (ammo)",
+   "items": [
+    "PISTOL-SMG 12x25mm. TOXIC"
+   ],
+   "packages": [
+    "0xF230D2D2ADCC034A"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 205,
+   "label": "RIFLE 5,5x50mm. HOLLOW-POINT (ammo)",
+   "items": [
+    "RIFLE 5,5x50mm. HOLLOW-POINT"
+   ],
+   "packages": [
+    "0xDBD9381F9EA9788F"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 206,
+   "label": "ROCKET 15x100mm. HIGH EXPLOSIVE (ammo)",
+   "items": [
+    "ROCKET 15x100mm. HIGH EXPLOSIVE"
+   ],
+   "packages": [
+    "0xE0807831D6F456C8"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 211,
+   "label": "RIFLE 8x60mm. HIGH VELOCITY (ammo)",
+   "items": [
+    "RIFLE 8x60mm. HIGH VELOCITY"
+   ],
+   "packages": [
+    "0xDBD9381F9EA9788F"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 212,
+   "label": "RIFLE 8x60mm. DOUBLE POWER (ammo)",
+   "items": [
+    "RIFLE 8x60mm. DOUBLE POWER"
+   ],
+   "packages": [
+    "0xDBD9381F9EA9788F"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 217,
+   "label": "SHOTGUN 10g. MAGNUM (ammo)",
+   "items": [
+    "SHOTGUN 10g. MAGNUM",
+    "SHOTGUN 10g. MAGNUM ALTERNATE"
+   ],
+   "packages": [
+    "0x0B831A7DD55E8736"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 227,
+   "label": "SHOTGUN 12g. TRI-BALL (ammo)",
+   "items": [
+    "SHOTGUN 12g. TRI-BALL"
+   ],
+   "packages": [
+    "0x0B831A7DD55E8736"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 230,
+   "label": "PISTOL-SMG 12x25mm. Explosive (ammo)",
+   "items": [
+    "PISTOL-SMG 12x25mm. Explosive"
+   ],
+   "packages": [
+    "0xE0807831D6F456C8",
+    "0xF230D2D2ADCC034A"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 232,
+   "label": "SHOTGUN 10g. BIRDSHOT (ammo)",
+   "items": [
+    "SHOTGUN 10g. BIRDSHOT",
+    "SHOTGUN 10g. BUCKSHOT ALTERNATE"
+   ],
+   "packages": [
+    "0x0B831A7DD55E8736",
+    "0x44DD33AF0EF2B0D1"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 244,
+   "label": "PISTOL-SMG 9x20mm. RIPPER (ammo)",
+   "items": [
+    "PISTOL-SMG 9x20mm. RIPPER"
+   ],
+   "packages": [
+    "0x99F20DF1C4CF885A"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 252,
+   "label": "SHOTGUN 12g. SCATTER SHOT (ammo)",
+   "items": [
+    "SHOTGUN 12g. SCATTER SHOT"
+   ],
+   "packages": [
+    "0xDBD9381F9EA9788F"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 255,
+   "label": "RIFLE 5,5x50mm. DOUBLE POWER (ammo)",
+   "items": [
+    "RIFLE 5,5x50mm. DOUBLE POWER"
+   ],
+   "packages": [
+    "0xDBD9381F9EA9788F"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 257,
+   "label": "ROCKET 15x100mm. FRAGMENTATION (ammo)",
+   "items": [
+    "ROCKET 15x100mm. FRAGMENTATION"
+   ],
+   "packages": [
+    "0xE0807831D6F456C8"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 258,
+   "label": "RIFLE 8x60mm. SNIPER ARMOR PIERCING (ammo)",
+   "items": [
+    "RIFLE 8x60mm. SNIPER ARMOR PIERCING"
+   ],
+   "packages": [
+    "0xDBD9381F9EA9788F"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 260,
+   "label": "SHOTGUN 10g. BUCKSHOT (ammo)",
+   "items": [
+    "SHOTGUN 10g. BUCKSHOT",
+    "SHOTGUN 10g. BUCKSHOT ALTERNATE"
+   ],
+   "packages": [
+    "0xE566E3AAF90DB459"
+   ],
+   "how": "default",
+   "defaultOf": [
+    "Punisher"
+   ]
+  },
+  {
+   "type": 264,
+   "label": "RIFLE 9x70mm. Sniper Armor Piercing (ammo)",
+   "items": [
+    "RIFLE 9x70mm. Sniper Armor Piercing"
+   ],
+   "packages": [
+    "0xDBD9381F9EA9788F"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 265,
+   "label": "SHOTGUN 12g. FLECHETTES (ammo)",
+   "items": [
+    "SHOTGUN 12g. FLECHETTES"
+   ],
+   "packages": [
+    "0x0B831A7DD55E8736",
+    "0x44DD33AF0EF2B0D1"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 278,
+   "label": "RIFLE 5,5x50mm. DEVASTATOR (ammo)",
+   "items": [
+    "RIFLE 5,5x50mm. DEVASTATOR"
+   ],
+   "packages": [
+    "0xDBD9381F9EA9788F"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 283,
+   "label": "PISTOL-SMG 9x20mm. THERMITE (ammo)",
+   "items": [
+    "PISTOL-SMG 9x20mm. THERMITE"
+   ],
+   "packages": [
+    "0x99F20DF1C4CF885A"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 291,
+   "label": "PISTOL-SMG 9x20mm. FULL METAL JACKET (ammo)",
+   "items": [
+    "PISTOL-SMG 9x20mm. FULL METAL JACKET"
+   ],
+   "packages": [
+    "0x99F20DF1C4CF885A"
+   ],
+   "how": "default",
+   "defaultOf": [
+    "Redeemer"
+   ]
+  },
+  {
+   "type": 292,
+   "label": "SHOTGUN 10g. LIBERTY FIRE (ammo)",
+   "items": [
+    "SHOTGUN 10g. LIBERTY FIRE",
+    "SHOTGUN 10g. LIBERTY FIRE ALTERNATE"
+   ],
+   "packages": [
+    "0x0B831A7DD55E8736"
+   ],
+   "how": "default",
+   "defaultOf": [
+    "entity BCC2177439D231BE"
+   ]
+  },
+  {
+   "type": 307,
+   "label": "SHOTGUN 12g. MAGNUM TRIBALL (ammo)",
+   "items": [
+    "SHOTGUN 12g. MAGNUM TRIBALL"
+   ],
+   "packages": [
+    "0x0B831A7DD55E8736"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 309,
+   "label": "REVOLVER 13x40mm. FULL METAL JACKET (ammo)",
+   "items": [
+    "REVOLVER 13x40mm. FULL METAL JACKET"
+   ],
+   "packages": [
+    "0x8C3B838D05731044"
+   ],
+   "how": "default",
+   "defaultOf": [
+    "Senator/Ombudsman"
+   ]
+  },
+  {
+   "type": 321,
+   "label": "RIFLE 5,5x50mm. SELF PROPELLED (ammo)",
+   "items": [
+    "RIFLE 5,5x50mm. SELF PROPELLED"
+   ],
+   "packages": [
+    "0xDBD9381F9EA9788F"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 332,
+   "label": "SHOTGUN 10g. DUAL SABOT (ammo)",
+   "items": [
+    "SHOTGUN 10g. DUAL SABOT",
+    "SHOTGUN 10g. DUAL SABOT ALTERNATE"
+   ],
+   "packages": [
+    "0x0B831A7DD55E8736",
+    "0x522BE23400CC6086"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 333,
+   "label": "RIFLE 8x60mm. PENETRATOR (ammo)",
+   "items": [
+    "RIFLE 8x60mm. PENETRATOR"
+   ],
+   "packages": [
+    "0xDBD9381F9EA9788F"
+   ],
+   "how": "cover"
+  },
+  {
+   "type": 337,
+   "label": "PISTOL-SMG 9x20mm. HOLLOW POINT (ammo)",
+   "items": [
+    "PISTOL-SMG 9x20mm. HOLLOW POINT"
+   ],
+   "packages": [
+    "0xBF2250DE0B17285C"
+   ],
+   "how": "default",
+   "defaultOf": [
+    "Peacemaker"
+   ]
+  },
+  {
+   "type": 345,
+   "label": "RIFLE 5,5x50mm. HIGH VELOCITY (ammo)",
+   "items": [
+    "RIFLE 5,5x50mm. HIGH VELOCITY"
+   ],
+   "packages": [
+    "0xDBD9381F9EA9788F"
+   ],
+   "how": "cover"
+  }
+ ],
+ "explosions": [
+  {
+   "type": 339,
+   "label": "Primary_Airburst",
+   "of": "RIFLE 8x60mm. AIRBURST (ammo)",
+   "packages": [],
+   "shrapnel": false,
+   "damage": 335
+  }
+ ],
+ "left_out": [
+  {
+   "type": 171,
+   "label": "explosion 171 (of round 14)",
+   "why": "no SDK name yet; its round carries its packages"
+  },
+  {
+   "type": 240,
+   "label": "SHOTGUN 10g. SLUG (ammo)",
+   "why": [
+    "icon b7812fa260a5f64f"
+   ]
+  },
+  {
+   "type": 287,
+   "label": "PISTOL-SMG 12x25mm. THERMITE (ammo)",
+   "why": [
+    "fx dfe818da7417e445"
+   ]
+  },
+  {
+   "type": 322,
+   "label": "SHOTGUN 10g. FRAGMENTATION (ammo)",
+   "why": [
+    "icon 8dc0ec9ce217ab7f"
+   ]
+  }
+ ]
+}
