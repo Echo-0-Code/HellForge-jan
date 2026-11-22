@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 25
+#define HF_MOD_SDK_VERSION 26
 #define HF_MOD_EXPORT __declspec(dllexport)
 
 typedef struct HfMod HfMod; /* Identifies the calling mod in logs and status. Opaque, but for SDK 6's HF_API(mod). */
@@ -1736,6 +1736,13 @@ typedef struct HfApi
      * is not rebuilt; the pick shows when the game next builds it. The item must be for that slot, and an attachment must be offered on the weapon. Made on the
      * game thread: weapon_pick shows it a frame later. 0 queued, 1 refused (the mod's log says why). */
     int (*set_weapon_pick)(HfMod* mod, uint32_t weapon, uint32_t slot, uint32_t item);
+
+    /* ---- SDK 26: a mod's tab on the Armory's tab bar (hellforge_world.h, docs/modding/ui.md; check hf->size) ---- */
+    /* Adds label after the vanilla labels of one of the Armory's tab lists (HF_ARMORY_TABS_...); a click or Q/E reaches
+     * it as the game's own. The game's select is not run for it: the page keeps what it showed, for the mod to change.
+     * on_select runs on the game thread, selected 1 when picked, 0 when another tab is or the Armory closes. Any
+     * thread. Its handle (1 and up), or 0 refused (the mod's log says why: no room on the bar, or another game build). */
+    uint32_t (*add_armory_tab)(HfMod* mod, uint32_t list, const char* label, HfArmoryTabCallback on_select, void* user);
 } HfApi;
 
 /* SDK 6: an HfMod starts with the API, so these need only the mod. */
