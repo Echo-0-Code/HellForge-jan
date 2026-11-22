@@ -70,6 +70,7 @@ public partial class MainWindow : Window
     internal MainWindow(LauncherPaths paths)
     {
         this.paths = paths;
+        playedRuntime = paths.InstallRoot != null ? SessionRuntime.Of(paths) : null;
         InitializeComponent();
         BuildSteps();
         BuildPaths();
@@ -212,6 +213,19 @@ public partial class MainWindow : Window
 
         PlatformText.Text = $"{RuntimeInformation.OSDescription} · .NET {Environment.Version}";
         VersionText.Text = $"HellForge {HellForge.Core.AppVersion.Text}\nHELLDIVERS 2 build {HellForge.Core.SupportedBuild.Current.BuildId}";
+        // A newer HellForge on GitHub: shown above the version, with a link to its release page (nothing is downloaded).
+        // Not asked for the development pictures, so they stay the same, and not asked with the settings' switch off
+        // (read when the window opens, before anything is sent).
+        NewReleaseButton.Click += (_, _) => { if (update != null) OpenLink(update.Url); };
+        UpdateCheckBox.IsChecked = ProfileStore.LoadUpdateCheck(paths);
+        UpdateCheckBox.IsCheckedChanged += (_, _) => ProfileStore.SaveUpdateCheck(paths, UpdateCheckBox.IsChecked == true);
+        if (Environment.GetEnvironmentVariable("HELLFORGE_LAUNCHER_SHOT") is not { Length: > 0 })
+            Opened += async (_, _) =>
+            {
+                // Best effort: nothing in the check may reach the window as an error.
+                try { ShowUpdate(await HellForge.Core.LauncherUpdate.CheckAsync(HellForge.Core.AppVersion.Text, ProfileStore.LoadUpdateCheck(paths), line => Append(line, Grey))); }
+                catch (Exception) { }
+            };
         if (SessionRunner.IsSupported)
         {
             SetStatus("Ready. Steam must be running and signed in.", Phase.Idle,
@@ -337,6 +351,7 @@ public partial class MainWindow : Window
         if (gameOptions.Count > 0) Append("Launch options: " + HellForge.Core.GameLaunchOptions.CommandLine(gameOptions), LauncherLine);
         foreach (var warning in HellForge.Core.GameLaunchOptions.Warnings(gameOptions)) Append(warning, Orange);
         AppendSandboxLine();
+        AppendRuntimeLines();
         var appControl = HellForge.Core.SmartAppControl.Current;
         if (HellForge.Core.SmartAppControl.Warning(appControl) is { } blockWarning) Append(blockWarning, Orange);
         try
@@ -383,7 +398,7 @@ public partial class MainWindow : Window
                 return false;
             }
         // None ships, so the session runner would stop at once; on Linux only after Steam and Proton had started.
-        if (paths.InstallRoot != null && HellForge.Core.GameCatalog.Missing(paths.InstallRoot))
+        if (paths.InstallRoot != null && playedRuntime is not { NeedsCatalogue: false } && HellForge.Core.GameCatalog.Missing(paths.InstallRoot))
         {
             SetStatus("Sync your inventory before the first session.", Phase.Attention, HellForge.Core.GameCatalog.SyncFirst);
             return false;
@@ -1020,6 +1035,20 @@ public partial class MainWindow : Window
 
     // The HellForge Discord server: support, news and mods (the sidebar's Discord button).
     const string DiscordInvite = "https://discord.gg/3Yye92xCzh";
+
+    HellForge.Core.LauncherUpdate.Release? update;
+
+    // The update notice: "HellForge 0.5.0-beta is out", which opens that release's page.
+    void ShowUpdate(HellForge.Core.LauncherUpdate.Release? release)
+    {
+        if (release == null) return;
+        update = release;
+        var version = HellForge.Core.LauncherUpdate.Number.Parse(release.Tag)?.ToString() ?? release.Tag;
+        NewReleaseTitle.Text = $"HellForge {version} is out";
+        ToolTip.SetTip(NewReleaseButton, "You have " + HellForge.Core.AppVersion.Text + ". Opens " + release.Url);
+        NewReleaseButton.IsVisible = true;
+        Append($"HellForge {version} is out: {release.Url}", Gold);
+    }
 
     // A web page in the player's browser.
     async void OpenLink(string url)

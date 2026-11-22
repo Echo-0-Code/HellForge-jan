@@ -12,6 +12,50 @@ On `dev`, since 0.4.0-beta.
 
 ### Added
 
+- **Your installation keeps its own installer.** Setup copies itself into the installation's `installer` folder on
+  every install and update, replacing the older copy, with its SHA-256 beside it; the Linux installer keeps its
+  package. Settings, Installation has Copy the installer, which puts it on a USB stick or shared folder and checks the
+  copy against that hash. With a downpatch file beside it, a friend or a laptop needs nothing from the releases page.
+  Installations from before keep one after their next update. The CLI has `installer` and `installer-copy`
+  ([installing on another PC](docs/offline-kit.md), #530).
+- **Downpatch files, for the day Steam's download stops working.** Settings, Installation has Make a downpatch file:
+  it turns the HELLDIVERS 2 build your Steam has into the build HellForge runs, as one file you send a friend yourself.
+  Setup's card has a fourth way, Use a downpatch file, which installs from it with no download. It works only on the
+  Steam build it was made from, and every file is checked against Steam's hashes. HellForge doesn't host these; you
+  make one and share it yourself. The CLI has `downpatch-create` and `downpatch-apply`
+  ([downpatch files](docs/local-downpatch.md), #521).
+- **One launcher plays every kept version, without a restart.** Pick a version in the launcher's corner and the open
+  launcher plays with it: that version's programs and data are swapped in within about a second. PLAY starts its own
+  session runner with the command line it takes ([going back](docs/README.md#going-back-to-an-earlier-version)).
+  - It plays 0.4.0-beta and 0.3.0-beta. Their sessions have no HellForge war, so a saved one plays the frozen war.
+    Inventory sync, account import, Check and repair and making a downpatch file wait for the installed version.
+  - The Mods page names the mods the version played with can't load.
+  - An update or Setup's Switch to first plays with the installed version again. Where an earlier test build switched
+    the whole app, it puts the newest launcher back.
+  - Setup's switch leaves its outcome for the launcher, so the note under the dropdown no longer names the previous
+    switch. A refusal names programs as a player knows them ("another HellForge window"), and the import note names
+    the commit.
+- **The version in the launcher's corner is a dropdown** once an update has kept a version: the running one, then the
+  kept ones with their commit and date. Picking one switches; while the game runs it is greyed and says why (#533).
+- **Switching versions is one click, and each version has its own mod list.** Picking a version in the launcher's
+  corner switches at once, with no confirmation: nothing is lost. After an update the new version's mod list starts
+  empty, and its Mods page offers Import all mods from `<version>`: on and off, order and trust choices. Profiles,
+  settings, syncs and the catalogue still carry over. `versions-keep` takes `--fresh-mods no`
+  ([going back](docs/README.md#going-back-to-an-earlier-version), #532).
+- **Go back to the version before an update.** An update on Windows keeps the version it replaces (the last two;
+  Settings sets 1 to 5), each with its HellForge data: profiles, account-sync snapshots, catalogue, launcher settings.
+  Pick one from the version in the launcher's corner to play with it. Your mods and the game
+  copy stay, and each version has its own mod list: a mod added under another version is off until you turn it on.
+  From a version without the list (0.4), the newest Setup offers Switch to buttons
+  ([going back](docs/README.md#going-back-to-an-earlier-version), #531).
+- **Enemies' death explosions in the editor.** A Hulk's burst and final blast, a Rocket Devastator's backpack, the
+  turrets', tanks', Factory Striders' and spore and bile bugs' death explosions are on their enemy pages. Pick another
+  explosion (a mod's too) or none, for that enemy only. Stats mods take them as well, and in co-op the host's choice is
+  what everyone sees ([stats mods](docs/modding/stats-mods.md#death-explosions), #525).
+- **The launcher says when a newer HellForge is out.** On start it checks HellForge's GitHub releases; when one is
+  newer, the sidebar shows "HellForge X is out" above the version, and pressing it opens the release page. Nothing is
+  downloaded: you still install the new version by hand. Settings, UPDATES has a switch to turn the check off
+  ([roadmap](docs/roadmap.md#launcher-updates), #387).
 - **48 mod paints a weapon.** A weapon's customize screen lists up to 127 cards instead of 64, so mods' paints go up to
   48 on one weapon instead of 16. Only on game build 25480438; otherwise the limit stays 16 (#498).
 - **Languages in Settings.** A Languages card lists the language packs pinned for the build and adds one to the game
@@ -261,6 +305,10 @@ On `dev`, since 0.4.0-beta.
 
 ### Changed
 
+- **Explosions have readable names.** 310 of the game's 422 explosion types now have a plain name, such as "Hulk and
+  turret death blast" or "Rocket Devastator backpack explosion". Many showed a code name, a wrong owner or a number
+  before. The names show in the editor's pickers and pages, stats files and the SDK's comments. Each comes from what
+  fires that explosion. Old labels still work in stats files, and the SDK's constants keep their names (#524).
 - **The game offers only the voices in the game copy.** Steam answered the game for the player's own install, so a voice
   whose pack the copy lacked was offered and crashed the game. HellForge now answers from the copy
   ([Steam Cloud](docs/steam-cloud.md#the-stand-in), #493). Engine bump with the next build.
@@ -330,11 +378,11 @@ On `dev`, since 0.4.0-beta.
   list, in its order, as the game reads ownership from them. It checks every reply that gives an item last: the
   inventory, purchases (mod warbonds' too), warbond pages, mastery and mission rewards (#386).
 - **A premium weapon's mastery levels and attachments need the weapon.** They were sold and earned without it (#386).
-- **A synced snapshot is signed by your PC and lasts 14 days.** Only administrator or root code holds the signing key:
-  Windows' key storage (the TPM where there is one), or a systemd service on Linux. The capture signs only what
-  Arrowhead's API sent. Sync once after updating, then every 14 days to keep premium content. A HellForge you build
-  yourself signs the same way. On Linux, premium content needs systemd
-  ([premium content is locked](docs/troubleshooting.md#premium-content-is-locked)) (#404).
+- **A synced snapshot is signed by your PC.** Only administrator or root code holds the signing key: Windows' key
+  storage (the TPM where there is one), or a systemd service on Linux. The capture signs only what Arrowhead's API
+  sent. Sync once after updating to keep premium content; the seal then holds until your next sync replaces it.
+  A HellForge you build yourself signs the same way. On Linux, premium content needs systemd
+  ([premium content is locked](docs/troubleshooting.md#premium-content-is-locked)) (#404, #446).
 - **Mods' registered items can no longer name paid items.** An entry whose id, or a child's id, is the game's or a paid
   item's is refused, and the backend's log names the mod. Copies of premium patterns and attachments are locked like
   weapons, and a copy of another mod's weapon follows its original, up to 8 copies deep (#386).
@@ -392,6 +440,24 @@ On `dev`, since 0.4.0-beta.
 
 - **An open modal screen draws over every other mod's screens.** A button another mod added later drew over an open
   picker.
+- **A field's default always fits its range in the editor.** The SH-51 Directional Shield's shield radius took 0.1 to
+  100, so its default 0 could not be typed back after an edit. 0 is the barrier's own shape; a radius above 0 makes
+  it a sphere of that radius, and 0.1 left the shield with no hitbox. Every field's range now includes its default,
+  the radius takes 0, and its note says what a radius does (#529).
+- **Premium content on Linux with Proton in the Steam Linux Runtime.** The sync worked, but every session said "This
+  PC has no snapshot signer yet. Sync again." and unlocked no premium warbonds: the signer's public key is in
+  `/var/lib/hellforge`, which the runtime's container does not show. Sessions now share that folder with the container,
+  read-only, so the backend reads the same root-owned file. If it still cannot see it, the message says so instead of
+  asking for another sync ([account sync on Linux](docs/linux-account-sync.md#when-premium-content-stays-locked)).
+- **Items the live game gave you alone are yours in HellForge too.** An item of a premium warbond held without the
+  warbond itself, such as the Killzone weapons some players got for free, was locked with the rest of its warbond.
+  Once synced it is served on every profile; only that item, never the rest of the warbond
+  ([premium content](docs/troubleshooting.md#premium-content-is-locked), #368).
+- **Sync Inventory with a Windows system proxy on.** With a proxy set in Windows' Internet Settings (a proxy app on
+  `127.0.0.1:7897`, say), the game never got past its first request: the capture sent the proxy's CONNECT to
+  Arrowhead's API, which answered 400. The capture now always goes straight to the API (#346).
+- **A capture that crashes as it starts says why.** It wrote nothing when it crashed before it was listening; its
+  `proxy.log` now has the error (#436).
 - **40,960 catalogue items again.** The larger entity table made the game state's arrays stay in place, so the game
   kept 4,096 catalogue items and the backend refused mod paints past them. Both now grow the same block together (#497).
 - **A sandboxed game with DLSS on closes at the first ALT-F4.**
@@ -445,6 +511,20 @@ On `dev`, since 0.4.0-beta.
 - **Decal shaders stay on screen far away.** A mod's `decal` shader vanished once the player was about 90 m from it,
   however large its box was: the game judges draw distance by the box's unscaled 1 m size. The decal host's unit now
   counts as 128 m across, so a decal shows as far as the player can see it ([shaders](docs/modding/shaders.md)).
+- **A synced starter profile says why its warbonds are locked.** Some profiles buy the premium warbonds you own with
+  Forge Credits: starter, and the first profile of older installations. There the card beside PLAY said "Profile
+  synced" while those warbonds stayed locked, and players took it for a sync that failed. It now says they open once
+  bought with Forge Credits, and that a new live-like profile has them open at once (#262, #282).
+- **A sync that reads nothing says why.** It said "pass the title screen" after ten minutes for every stall. The
+  launcher now reads the capture's log while the game runs and says within seconds where the login stopped. The game
+  never reached the sync (a VPN or DNS tool), or the sync could not reach the servers (a firewall, a proxy). Or
+  something showed its own certificate (an antivirus's HTTPS scanning), the game refused the sync's certificate, or the
+  servers refused the login ([troubleshooting](docs/troubleshooting.md)). The Linux launcher's port check no longer shows in the log as a failed
+  TLS handshake.
+- **Sync Inventory says at once when Windows ignores its hosts line.** A VPN, DNS changer or ad blocker that answers
+  name lookups itself sent the game straight to its servers. The sync saw nothing for ten minutes, and the launcher
+  asked to pass the title screen. The capture now checks that the API's name leads to it before the game
+  opens; when it does not, it stops and says what to turn off ([troubleshooting](docs/troubleshooting.md)).
 - **SteamOS: Sync Inventory no longer stops at "Wine could not confirm the capture CA".** With Proton Experimental,
   Wine's `reg export` failed after the certificate was in place, and the sync stopped before the game opened. The
   prefix's `system.reg`, which the game loads, is now the proof; a failed export is logged
@@ -598,10 +678,23 @@ On `dev`, since 0.4.0-beta.
 
 ### For launcher developers
 
+- **The kept installer from the CLI.** `installer` prints the installer an installation keeps (`kept`, `kind`, `file`,
+  `version`, `bytes`, `sha256`, `notKept`), and `installer-copy --out <folder>` copies it with the same checks as
+  Settings ([external launchers](docs/external-launchers.md), #530).
 - **The HellForge war from the CLI.** `play`, `settings` and `fetch-war` take `--war hellforge` (the default for new
   installations) and `--war-server <url>`; `settings` prints `warServer`, and `HELLFORGE_WAR_SERVER` overrides it.
   `fetch-war` fetches the HellForge war unless the saved war is the live one, and prints `war` and `server`
   ([docs/external-launchers.md](docs/external-launchers.md)) (#393).
+- **`versions-switch` picks the version sessions play with.** The installed launcher stays; the version's programs go
+  into `app\` but `app\launcher\`, and the installed version's wait in `app-versions\.installed\`. While one is played
+  with, `app\cli\` is that version's CLI. `versions` prints `playing` and `supported`, each kept version's `playing`, and
+  `problem` for playing with it. `versions-keep` puts the installed version back first, and fails if it can't
+  ([external launchers](docs/external-launchers.md#kept-versions)).
+- **Kept versions from the CLI.** `versions` lists the versions an update kept. `versions-switch --to <name>` swaps
+  one in from a copy in `temp` once the CLI and `--wait-pid` processes end, and writes `logs/version-switch.json`.
+  `versions --keep <1-5>` sets how many updates keep, `versions-keep` is the keep step for a launcher that installs
+  updates itself, and `HellForge-Setup.exe --switch <installation> <name>` switches without the CLI
+  ([external launchers](docs/external-launchers.md#kept-versions), #531).
 - **`mods` lists mods in folders around them.** Such a mod's `folder` is its own folder inside the one in the mods
   folder. `mod-remove` deletes the outermost folder that holds only that mod, and `removed` names it
   ([external launchers](docs/external-launchers.md), #451).
@@ -614,6 +707,18 @@ On `dev`, since 0.4.0-beta.
   on), `url` and `icon`. A source mod also has its `build`: built, failed to compile (with the compiler's message) or
   due at the next session. The tags add `native`, `premium` and `unsupported`
   ([source mod builds](docs/external-launchers.md#source-mod-builds), #390).
+- **The CLI reaches the war options and mod sync.** `settings` takes `--deal-subfactions`, `--deal-seaf` and
+  `--war-seed`, and the Sharing card's switches `--share-mods`, `--list-public`, `--show-edited-stats` and
+  `--host-stats`. The new `mod-sync` lists the trusted, blocked and downloaded mods, and untrusts, blocks, unblocks or
+  deletes the downloads. Both check every option before they change anything, so a refused call has changed
+  nothing ([profiles and settings](docs/external-launchers.md#profiles-and-settings),
+  [mod sync lists](docs/external-launchers.md#mod-sync-lists), #391).
+- **The CLI reaches weapon levels and the MOD SYNC prompt.** `weapon-levels` reads and sets a profile's weapon mastery
+  levels between sessions, as the profile page does. `mod-sync-offer` shows the running session's MOD SYNC offer, with
+  each mod's TRUST warning and the answers that apply to it, and sends the player's answer, as the Play page's card
+  does. It is cheap to poll, shows only the running session's offer, and leaves the answer to the game when the game
+  shows the prompt itself
+  ([weapon levels](docs/external-launchers.md#weapon-levels), [the MOD SYNC prompt](docs/external-launchers.md#the-mod-sync-prompt), #392).
 
 ## 0.4.0-beta (2026-11-05)
 
