@@ -319,7 +319,7 @@ public static class ModDataBuilder
                 DataSpecs.InModFolder(Path.Combine(dir, uri).Replace('\\', '/')) ? File.ReadAllBytes(Path.Combine(modFolder, dir, uri)) : throw new InvalidDataException($"buffer {uri} is outside the mod folder."));
             // a game unit's animations: its bones and state machine are named after it (every unit's header points at its own)
             var animations = model.AnimationsFrom ?? 0;
-            var unit = ModelUnit.Build(nodes, model.Materials, model.LodSizes, animations, animations);
+            var unit = ModelUnit.Build(nodes, model.Materials, model.LodSizes, animations, animations) with { CullMargin = model.CullMargin };
             if (animated is { } a) ModelUnit.CheckAnimations(unit, a.Unit, a.Bones);
             var (main, gpu) = UnitWriter.Write(unit);
             return new(main, gpu, []);

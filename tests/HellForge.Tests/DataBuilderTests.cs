@@ -816,6 +816,12 @@ static class DataBuilderTests
             var rigid = UnitWriter.Write(ModelUnit.Build([.. nodes[..3], nodes[3] with { Skin = null }], new Dictionary<string, ulong> { ["Belt"] = 0x3333 }, null)).Main;
             uint R(int at) => BinaryPrimitives.ReadUInt32LittleEndian(rigid.AsSpan(at));
             check(R((int)R(0x5C) + (int)R((int)R(0x5C) + 4) + 356) == 36, "A model without weights changed its layout.");
+            var grown = UnitWriter.Write(model with { CullMargin = 1.5 }).Main;
+            float F(byte[] unit, int at) => BinaryPrimitives.ReadSingleLittleEndian(unit.AsSpan(at));
+            int MeshBox(byte[] unit) => (int)BinaryPrimitives.ReadUInt32LittleEndian(unit.AsSpan(0x64)) + (int)BinaryPrimitives.ReadUInt32LittleEndian(unit.AsSpan((int)BinaryPrimitives.ReadUInt32LittleEndian(unit.AsSpan(0x64)) + 4)) + 8;
+            check(Enumerable.Range(0, 3).All(k => Math.Abs(F(grown, MeshBox(grown) + 4 * k) - (F(main, MeshBox(main) + 4 * k) - 1.5)) < 1e-4
+                && Math.Abs(F(grown, MeshBox(grown) + 12 + 4 * k) - (F(main, MeshBox(main) + 12 + 4 * k) + 1.5)) < 1e-4)
+                && F(grown, MeshBox(grown) + 0x18) > F(main, MeshBox(main) + 0x18) + 2.5, "cullMargin does not grow the mesh's cull box and radius.");
             reject(() => UnitWriter.Write(model with { Meshes = [model.Meshes[0] with { Parts = [model.Meshes[0].Parts[0] with { Vertices = [.. v.Select(x => x with { Weights = [(1, 0.5), (2, 0.4)] })] }] }] }));
         });
 
@@ -836,10 +842,14 @@ static class DataBuilderTests
             check(spec.Inputs.SequenceEqual(["models/gun.glb"]) && spec.Patches[0].Resources[0] is ModelResource { Name: "test/mod/gun", Physics: 0x3333, LodSizes: null } m && m.Materials["Body"] == 0x1111,
                 "The model and its file are not part of the spec.");
             check(DataSpecs.Unchecked(spec) == null, "A model is not content HellForge checks itself.");
+            check(spec.Patches[0].Resources[0] is ModelResource { CullMargin: 0 } && Spec(model[..^1] + ",\"cullMargin\":1.5}").Patches[0].Resources[0] is ModelResource { CullMargin: 1.5 },
+                "The model's cullMargin is not read.");
+            spec = Spec(model);
             foreach (var (bad, why) in new[] { ("""{"model":"../gun.glb","name":"test/mod/gun","materials":{"Body":"0x1"}}""", "a .glb or .gltf file in the mod folder"),
                 ("""{"model":"models/none.glb","name":"test/mod/gun","materials":{"Body":"0x1"}}""", "is missing"),
                 ("""{"model":"models/gun.glb","name":"test/mod/gun","materials":{}}""", "names a material resource"),
                 ("""{"model":"models/gun.glb","name":"test/mod/gun","materials":{"Body":"0x1"},"lods":[0]}""", "share of the screen"),
+                ("""{"model":"models/gun.glb","name":"test/mod/gun","materials":{"Body":"0x1"},"cullMargin":0}""", "cullMargin is the metres"),
                 ("""{"model":"models/gun.glb","name":"test/mod/gun","materials":{"Body":"0x1"},"colour":1}""", "unknown field colour") })
             {
                 try { Spec(bad); throw new Exception("Accepted: " + bad); }
