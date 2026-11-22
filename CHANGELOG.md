@@ -12,6 +12,9 @@ On `dev`, since 0.4.0-beta.
 
 ### Added
 
+- **A new version keeps your mods on.** After an update the new version starts with a copy of the earlier version's mod
+  list instead of an empty one; from then on each version's list is its own. `versions-keep` starts it empty with
+  `--fresh-mods yes` ([going back](docs/README.md#going-back-to-an-earlier-version)).
 - **Line of sight, projectiles, sides and joint poses (SDK 28).** `line_of_sight` casts the engine's physics ray.
   `find_projectiles` and `set_projectile` list and move shots in flight. `faction_of`, `side_of` and `find_entities`
   tell friend from foe as the game's AI does. `on_render`, `pose_joint` and `joint_pose` pose joints just before a
@@ -73,6 +76,42 @@ On `dev`, since 0.4.0-beta.
 - **Skinned models bend.** A mod model's skinned glTF mesh keeps up to four weighted joints per vertex, in the
   game's own skinned layout, so belts, straps and cables bend between joints as clips move them
   (#3, [models](docs/modding/models.md#meshes-lods-and-shadows)). Models without weights build as before.
+- **Your installation keeps its own installer.** Setup copies itself into the installation's `installer` folder on
+  every install and update, replacing the older copy, with its SHA-256 beside it; the Linux installer keeps its
+  package. Settings, Installation has Copy the installer, which puts it on a USB stick or shared folder and checks the
+  copy against that hash. With a downpatch file beside it, a friend or a laptop needs nothing from the releases page.
+  Installations from before keep one after their next update. The CLI has `installer` and `installer-copy`
+  ([installing on another PC](docs/offline-kit.md), #530).
+- **Downpatch files, for the day Steam's download stops working.** Settings, Installation has Make a downpatch file:
+  it turns the HELLDIVERS 2 build your Steam has into the build HellForge runs, as one file you send a friend yourself.
+  Setup's card has a fourth way, Use a downpatch file, which installs from it with no download. It works only on the
+  Steam build it was made from, and every file is checked against Steam's hashes. HellForge doesn't host these; you
+  make one and share it yourself. The CLI has `downpatch-create` and `downpatch-apply`
+  ([downpatch files](docs/local-downpatch.md), #521).
+- **One launcher plays every kept version, without a restart.** Pick a version in the launcher's corner and the open
+  launcher plays with it: that version's programs and data are swapped in within about a second. PLAY starts its own
+  session runner with the command line it takes ([going back](docs/README.md#going-back-to-an-earlier-version)).
+  - It plays 0.4.0-beta and 0.3.0-beta. Their sessions have no HellForge war, so a saved one plays the frozen war.
+    Inventory sync, account import, Check and repair and making a downpatch file wait for the installed version.
+  - The Mods page names the mods the version played with can't load.
+  - An update or Setup's Switch to first plays with the installed version again. Where an earlier test build switched
+    the whole app, it puts the newest launcher back.
+  - Setup's switch leaves its outcome for the launcher, so the note under the dropdown no longer names the previous
+    switch. A refusal names programs as a player knows them ("another HellForge window"), and the import note names
+    the commit.
+- **The version in the launcher's corner is a dropdown** once an update has kept a version: the running one, then the
+  kept ones with their commit and date. Picking one switches; while the game runs it is greyed and says why (#533).
+- **Switching versions is one click, and each version has its own mod list.** Picking a version in the launcher's
+  corner switches at once, with no confirmation: nothing is lost. After an update the new version's mod list starts
+  empty, and its Mods page offers Import all mods from `<version>`: on and off, order and trust choices. Profiles,
+  settings, syncs and the catalogue still carry over. `versions-keep` takes `--fresh-mods no`
+  ([going back](docs/README.md#going-back-to-an-earlier-version), #532).
+- **Go back to the version before an update.** An update on Windows keeps the version it replaces (the last two;
+  Settings sets 1 to 5), each with its HellForge data: profiles, account-sync snapshots, catalogue, launcher settings.
+  Pick one from the version in the launcher's corner to play with it. Your mods and the game
+  copy stay, and each version has its own mod list: a mod added under another version is off until you turn it on.
+  From a version without the list (0.4), the newest Setup offers Switch to buttons
+  ([going back](docs/README.md#going-back-to-an-earlier-version), #531).
 - **Enemies' death explosions in the editor.** A Hulk's burst and final blast, a Rocket Devastator's backpack, the
   turrets', tanks', Factory Striders' and spore and bile bugs' death explosions are on their enemy pages. Pick another
   explosion (a mod's too) or none, for that enemy only. Stats mods take them as well, and in co-op the host's choice is
@@ -402,11 +441,11 @@ On `dev`, since 0.4.0-beta.
   list, in its order, as the game reads ownership from them. It checks every reply that gives an item last: the
   inventory, purchases (mod warbonds' too), warbond pages, mastery and mission rewards (#386).
 - **A premium weapon's mastery levels and attachments need the weapon.** They were sold and earned without it (#386).
-- **A synced snapshot is signed by your PC.** Only administrator or root code holds the signing key: Windows' key
-  storage (the TPM where there is one), or a systemd service on Linux. The capture signs only what Arrowhead's API
-  sent. Sync once after updating to keep premium content; the seal then holds until your next sync replaces it.
-  A HellForge you build yourself signs the same way. On Linux, premium content needs systemd
-  ([premium content is locked](docs/troubleshooting.md#premium-content-is-locked)) (#404, #446).
+- **A synced snapshot is signed by your PC on Windows.** Only administrator code holds the signing key, in Windows'
+  key storage (the TPM where there is one). The capture signs only what Arrowhead's API sent. Sync once after updating
+  to keep premium content; the seal then holds until your next sync replaces it. A HellForge you build yourself signs
+  the same way. Linux keeps 0.4's seal, bound to the machine id: the backend runs under Wine there, and Wine cannot
+  check the signer's key ([the snapshot seal](docs/linux-account-sync.md#the-snapshot-seal)) (#404, #446, #500, #542).
 - **Mods' registered items can no longer name paid items.** An entry whose id, or a child's id, is the game's or a paid
   item's is refused, and the backend's log names the mod. Copies of premium patterns and attachments are locked like
   weapons, and a copy of another mod's weapon follows its original, up to 8 copies deep (#386).
@@ -490,11 +529,19 @@ On `dev`, since 0.4.0-beta.
   game build 25480438, so `function` and `hook_function` answered "not a mapped function" for the rest, `UnitWorldPose`,
   `UnitNode` and `LightSetEnabled` among them. It now has room for 1,024, and a mappings update that outgrows that fails
   the build (#10).
-- **Premium content on Linux with Proton in the Steam Linux Runtime.** The sync worked, but every session said "This
-  PC has no snapshot signer yet. Sync again." and unlocked no premium warbonds: the signer's public key is in
-  `/var/lib/hellforge`, which the runtime's container does not show. Sessions now share that folder with the container,
-  read-only, so the backend reads the same root-owned file. If it still cannot see it, the message says so instead of
-  asking for another sync ([account sync on Linux](docs/linux-account-sync.md#when-premium-content-stays-locked)).
+- **A field's default always fits its range in the editor.** The SH-51 Directional Shield's shield radius took 0.1 to
+  100, so its default 0 could not be typed back after an edit. 0 is the barrier's own shape; a radius above 0 makes
+  it a sphere of that radius, and 0.1 left the shield with no hitbox. Every field's range now includes its default,
+  the radius takes 0, and its note says what a radius does (#529).
+- **Linux: premium content unlocks again.** Test builds since the snapshot signer unlocked none on Linux and the Steam
+  Deck: every session said "The snapshot signer's public key cannot be read (Unknown error (0x80090029))". The
+  backend runs under Wine, whose crypto cannot import that key. Linux snapshots now use 0.4's seal again, bound to the
+  machine id ([the snapshot seal](docs/linux-account-sync.md#the-snapshot-seal), #500, #542).
+  - It needs no systemd service, SELinux labels or key in `/var/lib/hellforge`.
+  - A snapshot a test build signed says "Sync once more": sync once. That sync installs the updated helper, which
+    removes what the signer left.
+  - A seal check that fails on the PC's side says so instead of asking for another sync.
+  - A Linux session's log names the Proton Sync Inventory uses beside its own.
 - **Items the live game gave you alone are yours in HellForge too.** An item of a premium warbond held without the
   warbond itself, such as the Killzone weapons some players got for free, was locked with the rest of its warbond.
   Once synced it is served on every profile; only that item, never the rest of the warbond
@@ -575,17 +622,6 @@ On `dev`, since 0.4.0-beta.
   Wine's `reg export` failed after the certificate was in place, and the sync stopped before the game opened. The
   prefix's `system.reg`, which the game loads, is now the proof; a failed export is logged
   ([the certificate check](docs/linux-account-sync.md)).
-- **Linux: Sync Inventory opens the game again.** With the snapshot signer, every sync on Linux and SteamOS stopped at
-  "The Linux capture did not start within 45 seconds". The capture was listening all along. systemd keeps the signing
-  service's files in `/run/private`, which only root can open, so the launcher never saw it listen. The helper now
-  copies the service's log, state and certificate to `/run/hellforge/capture-evidence` for the launcher. The next
-  sync asks to install the updated helper once
-  ([the snapshot signer](docs/linux-account-sync.md#the-snapshot-signer)).
-- **Fedora and Bazzite: Sync Inventory gets past SELinux.** With SELinux enforcing, systemd could not start the
-  snapshot signer, so the sync stopped and premium content stayed locked. The helper's installer now labels the
-  signer's program so that systemd may start it. A sync SELinux still blocks says so and names the denial. The next
-  sync asks to install the updated helper once
-  ([SELinux](docs/linux-account-sync.md#selinux-fedora-bazzite-and-nobara)) (#487).
 - **Steam Deck: Sync Inventory with steamapps on the microSD card.** A `steamapps` folder linked to the card's library
   crashed the launcher with "Linked/reparse paths are not supported". HellForge now follows that link and still
   refuses a link at the game folder or inside it. A Steam library HellForge cannot read stops the sync with a message
@@ -744,10 +780,23 @@ On `dev`, since 0.4.0-beta.
 
 ### For launcher developers
 
+- **The kept installer from the CLI.** `installer` prints the installer an installation keeps (`kept`, `kind`, `file`,
+  `version`, `bytes`, `sha256`, `notKept`), and `installer-copy --out <folder>` copies it with the same checks as
+  Settings ([external launchers](docs/external-launchers.md), #530).
 - **The HellForge war from the CLI.** `play`, `settings` and `fetch-war` take `--war hellforge` (the default for new
   installations) and `--war-server <url>`; `settings` prints `warServer`, and `HELLFORGE_WAR_SERVER` overrides it.
   `fetch-war` fetches the HellForge war unless the saved war is the live one, and prints `war` and `server`
   ([docs/external-launchers.md](docs/external-launchers.md)) (#393).
+- **`versions-switch` picks the version sessions play with.** The installed launcher stays; the version's programs go
+  into `app\` but `app\launcher\`, and the installed version's wait in `app-versions\.installed\`. While one is played
+  with, `app\cli\` is that version's CLI. `versions` prints `playing` and `supported`, each kept version's `playing`, and
+  `problem` for playing with it. `versions-keep` puts the installed version back first, and fails if it can't
+  ([external launchers](docs/external-launchers.md#kept-versions)).
+- **Kept versions from the CLI.** `versions` lists the versions an update kept. `versions-switch --to <name>` swaps
+  one in from a copy in `temp` once the CLI and `--wait-pid` processes end, and writes `logs/version-switch.json`.
+  `versions --keep <1-5>` sets how many updates keep, `versions-keep` is the keep step for a launcher that installs
+  updates itself, and `HellForge-Setup.exe --switch <installation> <name>` switches without the CLI
+  ([external launchers](docs/external-launchers.md#kept-versions), #531).
 - **`mods` lists mods in folders around them.** Such a mod's `folder` is its own folder inside the one in the mods
   folder. `mod-remove` deletes the outermost folder that holds only that mod, and `removed` names it
   ([external launchers](docs/external-launchers.md), #451).
