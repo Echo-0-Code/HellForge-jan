@@ -263,7 +263,6 @@ for changing and adding content; [Hooks and game memory](modding/hooks.md) for `
 - `pose_joint`: `int (HfMod* mod, uint32_t unit, uint32_t node, const HfJointPose* pose)`. Sets one joint of a unit (node: hf_node_id of its name, 0 the root) to a pose in its parent's frame, for this frame: inside an on_render callback at once, else at the next frame's render. The game's animation sets animated joints again each frame, so pose them every frame. 1 done or queued, 0 refused (no such unit or node).
 - `joint_pose`: `int (HfMod* mod, uint32_t unit, uint32_t node, uint32_t space, float out[16])`. A joint's pose now (node as pose_joint takes it): HF_POSE_WORLD as a 4x4 matrix, or HF_POSE_LOCAL as an HfJointPose, in out (16 floats). Game thread or an on_render callback. 1 read, 0 not (no such unit or node).
 
-
 ## Functions
 
 Game functions by name (`hellforge_functions.h`, SDK 16), from `mappings/functions.json`. `hf_fn_<Name>(mod)` gives

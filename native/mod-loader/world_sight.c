@@ -74,21 +74,23 @@ static const char* WsSightWhyNot(uintptr_t game, const float* from, const float*
     return why;
 }
 
-/* The first of n hits that counts: 1 with *hit filled (when not NULL). */
+/* The nearest of n hits that counts (the engine does not sort them): 1 with *hit filled (when not NULL). */
 static int WsFirstHit(const uint8_t* hits, uint32_t n, const float* from, const float* dir, float range, const HfSight* how, HfSightHit* hit)
 {
-    float skipFrom = how ? how->skip_from : 0, skipTo = how ? how->skip_to : 0;
+    float skipFrom = how ? how->skip_from : 0, skipTo = how ? how->skip_to : 0, best = -1;
+    uint32_t bestUnit = 0;
     for (uint32_t h = 0; h < n && h < WS_RAY_HITS; h++)
     {
         float d;
         uint32_t unit;
         memcpy(&d, hits + h * WS_HIT_SIZE + WS_HIT_DISTANCE, 4);
         memcpy(&unit, hits + h * WS_HIT_SIZE + WS_HIT_DISTANCE + 4, 4);
-        if (!isfinite(d) || d < skipFrom || d > range - skipTo || WsIgnored(how, unit)) continue;
-        if (hit) *hit = (HfSightHit){d, unit == 0xFFFFFFFFu ? 0 : unit, {from[0] + dir[0] * d, from[1] + dir[1] * d, from[2] + dir[2] * d}};
-        return 1;
+        if (!isfinite(d) || d < skipFrom || d > range - skipTo || WsIgnored(how, unit) || (best >= 0 && d >= best)) continue;
+        best = d;
+        bestUnit = unit == 0xFFFFFFFFu ? 0 : unit;
     }
-    return 0;
+    if (best >= 0 && hit) *hit = (HfSightHit){best, bestUnit, {from[0] + dir[0] * best, from[1] + dir[1] * best, from[2] + dir[2] * best}};
+    return best >= 0;
 }
 
 /* SDK 27, line_of_sight: HF_SIGHT_CLEAR, HF_SIGHT_BLOCKED (hit filled) or HF_SIGHT_UNKNOWN (logged, at most 8 times). */
