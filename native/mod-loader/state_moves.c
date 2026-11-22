@@ -76,6 +76,7 @@ static CatalogueLayout g_catalogue = MOVE_LAYOUT(MOVE_CATALOGUE_OLD, MOVE_ITEMS_
 /* The Game block is this state: entity_table.c, run first, makes it larger with the move's room in it, so then its size
  * is what the size sites read before the move and keep after it. */
 static uint32_t EntityTableBlockSize(void); /* entity_table.c: 0 when it left the block's size alone */
+/* The size the size sites hold before the move, and after it. */
 static int32_t MoveSizeFound(void) { return (int32_t)(EntityTableBlockSize() ? EntityTableBlockSize() : MOVE_STATE_BYTES); }
 static int32_t MoveSizeMoved(void) { return (int32_t)(EntityTableBlockSize() ? EntityTableBlockSize() : MOVE_STATE_BYTES + MOVE_EXTRA_BYTES); }
 
@@ -138,7 +139,7 @@ static uint32_t MoveUnread(uintptr_t game, char* why, size_t size)
 {
     MoveSite reset = {MOVE_RESET_CALL, 0, 5, 1, 0, {0}};
     memcpy(reset.code, kMoveResetCall, 5);
-    MoveSite sizes[MOVE_COUNT(kMoveStateSizes)];
+    MoveSite sizes[MOVE_COUNT(kMoveStateSizes)]; /* the size sites as reviewed, with the size they hold now */
     int32_t found = MoveSizeFound();
     memcpy(sizes, kMoveStateSizes, sizeof sizes);
     for (size_t i = 0; i < MOVE_COUNT(sizes); i++) memcpy(sizes[i].code + sizes[i].at, &found, 4);

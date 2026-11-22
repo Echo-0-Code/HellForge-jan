@@ -43,6 +43,12 @@
               <Border x:Name="SidebarDot" Classes="dot" Background="{StaticResource MutedBrush}" VerticalAlignment="Center" />
               <TextBlock x:Name="SidebarState" Text="Idle" FontWeight="SemiBold" VerticalAlignment="Center" />
             </StackPanel>
+            <Button x:Name="NewReleaseButton" Classes="ghost" IsVisible="False" HorizontalAlignment="Left" Margin="0,10,0,0">
+              <StackPanel Spacing="2">
+                <TextBlock x:Name="NewReleaseTitle" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" TextWrapping="Wrap" />
+                <TextBlock Text="Open the release page" Classes="muted" FontSize="11" />
+              </StackPanel>
+            </Button>
             <TextBlock x:Name="VersionText" Classes="muted" FontSize="11" Margin="0,10,0,0" TextWrapping="Wrap" />
           </StackPanel>
 
@@ -399,6 +405,23 @@
               </StackPanel>
             </Border>
 
+            <Border x:Name="LanguagesCard" Classes="card" IsVisible="False">
+              <StackPanel Spacing="8">
+                <TextBlock Text="LANGUAGES" Classes="h2" Margin="0" />
+                <TextBlock Classes="muted" TextWrapping="Wrap"
+                           Text="Every text language is in the game copy. A voice other than English is a free pack from Steam: add it here, then choose it in the game's options, which list only the voices in the copy. Only the packs listed are known for this build." />
+                <StackPanel x:Name="LanguageList" Spacing="8" />
+                <Border x:Name="LanguageQr" Background="White" Padding="14" HorizontalAlignment="Left" IsVisible="False">
+                  <Panel Width="200" Height="200">
+                    <Path x:Name="LanguageQrCode" Fill="Black" Stretch="Uniform" RenderOptions.EdgeMode="Aliased" />
+                  </Panel>
+                </Border>
+                <ProgressBar x:Name="LanguageProgress" Minimum="0" Maximum="1000" IsVisible="False" />
+                <TextBlock x:Name="LanguageStatus" Classes="muted" TextWrapping="Wrap" />
+                <Button x:Name="LanguageCancelButton" Classes="ghost" Content="Cancel" HorizontalAlignment="Left" IsVisible="False" />
+              </StackPanel>
+            </Border>
+
             <Border x:Name="LinuxBackupCard" Classes="card" IsVisible="False">
               <StackPanel Spacing="8">
                 <TextBlock Text="PREFIX BACKUP" Classes="h2" Margin="0" />
@@ -536,6 +559,15 @@
                 <CheckBox x:Name="CrashDumpBox" Content="Crash dump" Margin="0,6,0,0" />
                 <TextBlock Classes="muted" TextWrapping="Wrap"
                            Text="A crash always leaves a small dump in the session's logs (the game's threads and the memory they point to, not all of it). This writes a full memory dump instead (about 1 GB), for a bug report about crashes that needs it. A dump holds what the game had in memory (your Steam account name, for one): only send it to someone you trust. Off unless you need it. Applies to the next session." />
+              </StackPanel>
+            </Border>
+
+            <Border Classes="card">
+              <StackPanel Spacing="8">
+                <TextBlock Text="UPDATES" Classes="h2" />
+                <CheckBox x:Name="UpdateCheckBox" Content="Check for a newer HellForge when the launcher opens" />
+                <TextBlock Classes="muted" TextWrapping="Wrap"
+                           Text="When the launcher opens it reads HellForge's list of releases from GitHub (api.github.com) and says in the sidebar when one is newer. Nothing is downloaded or installed, and the request says nothing about you or your PC: as with any web request, GitHub sees your IP address. Off, the launcher asks nothing. Applies the next time the launcher opens." />
               </StackPanel>
             </Border>
 

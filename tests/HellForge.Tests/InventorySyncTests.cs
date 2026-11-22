@@ -88,6 +88,12 @@ static class InventorySyncTests
         test("allow-capture.sh installs the helper only in a folder the account cannot change, and a removal runs no other", () =>
             HelperInstallerFolders(root, check));
 
+        test("Where SELinux is on, allow-capture.sh labels the helper, relay and capture bin_t, with semanage or else chcon, and a removal drops its rules", () =>
+            HelperInstallerSelinux(root, check));
+
+        test("The capture helper refuses a capture SELinux would keep systemd from starting, and names SELinux's denial in plain words", () =>
+            HelperSelinux(root, check));
+
         test("The launcher finds the helper in the folder this system's installer chose", () => HelperFolders(check));
 
         test("A sudo that still asks for a password is a reason to install the helper again, and is said after an install", () =>
@@ -97,7 +103,7 @@ static class InventorySyncTests
 
         test("The capture helper holds its lock and ends when the watched proxy pid is gone or its lifetime ends", () => HelperWatch(root, check));
 
-        test("A snapshot seal holds only for its files under this PC's signer, names an older seal, another signer and an expired one", () =>
+        test("A snapshot seal holds only for its files under this PC's signer, at any age, and names an older seal and another signer", () =>
             Seals(root, check));
 
         test("The signer's public key reads back from PEM, a Linux key file others can change is refused, and the Linux key file is the service's alone", () =>
@@ -965,6 +971,188 @@ static class InventorySyncTests
         check(Line("planted") == "0", "A removal ran a helper that another account could have written.");
     }
 
+    // SELinux stand-ins on PATH, as root of a stand-in system: selinuxenabled says it is on, stat -c %C reads the labels
+    // chcon and restorecon wrote to /tmp/labels, and semanage keeps its local rules in /tmp/rules. Every call is logged
+    // in /tmp/selinux.log.
+    static readonly (string Name, string Body)[] FakeSelinuxTools =
+    [
+        ("selinuxenabled", "exit 0"),
+        ("stat", """
+            if [ "${1:-}" = -c ] && [ "${2:-}" = %C ]; then
+              shift 2; [ "${1:-}" != -- ] || shift
+              t="$(awk -v f="$1" '$1 == f { t = $2 } END { print t }' /tmp/labels 2>/dev/null)"
+              [ -n "$t" ] || exit 1
+              echo "system_u:object_r:$t:s0"; exit 0
+            fi
+            exec /usr/bin/stat "$@"
+            """),
+        ("chcon", """
+            echo "chcon $*" >> /tmp/selinux.log
+            [ ! -e /tmp/chcon-fails ] || exit 1
+            [ "$1" = -R ] && [ "$2" = -t ] || exit 2
+            t="$3"; shift 3; [ "${1:-}" != -- ] || shift
+            find "$@" -print | while IFS= read -r f; do echo "$f $t" >> /tmp/labels; done
+            """),
+        ("restorecon", """
+            echo "restorecon $*" >> /tmp/selinux.log
+            shift; [ "${1:-}" != -- ] || shift
+            [ -s /tmp/rules ] || exit 0
+            find "$@" -print | while IFS= read -r f; do echo "$f bin_t" >> /tmp/labels; done
+            """),
+        ("semanage", """
+            if [ "$*" = "fcontext -l -C" ]; then
+              printf '%s\n\n' 'SELinux fcontext type Context'
+              [ ! -f /tmp/rules ] || awk '{ print $1 "    all files    system_u:object_r:bin_t:s0" }' /tmp/rules
+              exit 0
+            fi
+            [ "$1" = import ] || exit 2
+            touch /tmp/rules
+            while read -r command op rest; do
+              echo "semanage $command $op $rest" >> /tmp/selinux.log
+              spec="${rest##* }"; spec="${spec#\'}"; spec="${spec%\'}"
+              case "$op" in
+                -a) if grep -qxF -- "$spec" /tmp/rules; then exit 1; fi; echo "$spec" >> /tmp/rules ;;
+                -m) grep -qxF -- "$spec" /tmp/rules || exit 1 ;;
+                -d) grep -vxF -- "$spec" /tmp/rules > /tmp/rules.new || true; mv /tmp/rules.new /tmp/rules ;;
+              esac
+            done
+            """)
+    ];
+
+    // The real installer with SELinux stand-ins: with semanage it adds one local rule per installed file (bin_t) in one
+    // import and restores the labels, a second install modifies the same rules, and --remove deletes them. Without
+    // semanage it labels the files with chcon. A label that cannot be set warns, and the install still succeeds.
+    static void HelperInstallerSelinux(string root, Action<bool, string> check)
+    {
+        if (!OperatingSystem.IsLinux()) { Console.WriteLine("  (skipped: the installer's SELinux labels)"); return; }
+        if (FakeRootScripts(root, "helper-selinux") is not { } scripts) return;
+        foreach (var (name, withSemanage) in new[] { ("fake-selinux", true), ("fake-selinux-plain", false) })
+        {
+            var tools = Directory.CreateDirectory(Path.Combine(scripts, name)).FullName;
+            foreach (var (tool, body) in FakeSelinuxTools)
+            {
+                if (tool == "semanage" && !withSemanage) continue;
+                var path = Path.Combine(tools, tool);
+                File.WriteAllText(path, "#!/bin/bash\n" + body + "\n");
+                File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+                    UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+            }
+        }
+        const string folder = "/usr/local/lib/hellforge";
+        const string files = folder + "/capture-helper " + folder + "/capture-relay " + folder + "/capture-proxy";
+        var script = string.Join("\n",
+            "with() { local tools=$1; shift; PATH=/scripts/$tools:/usr/bin:/usr/sbin:/bin:/sbin \"$@\"; }",
+            "with fake-selinux env PKEXEC_UID=1000 bash " + FakeRootInstaller + " > /tmp/out 2>&1",
+            "echo \"said:$(grep -c 'SELinux: labelled the helper' /tmp/out)\"",
+            "echo \"first:$(grep '^semanage' /tmp/selinux.log | tr '\\n' ' ')\"",
+            "echo \"restored:$(grep -c '^restorecon -RF -- " + files + "$' /tmp/selinux.log)\"",
+            "echo \"chcon1:$(grep -c '^chcon' /tmp/selinux.log)\"",
+            "echo \"type:$(with fake-selinux stat -c %C " + folder + "/capture-proxy/HellForge.CaptureProxy)\"",
+            ": > /tmp/selinux.log",
+            "with fake-selinux env PKEXEC_UID=1000 bash " + FakeRootInstaller + " >/dev/null 2>&1",
+            "echo \"again:$(grep '^semanage' /tmp/selinux.log | tr '\\n' ' ')\"",
+            ": > /tmp/selinux.log",
+            "with fake-selinux bash " + FakeRootInstaller + " --remove >/dev/null 2>&1",
+            "echo \"removed:$(grep '^semanage' /tmp/selinux.log | tr '\\n' ' ')\"",
+            "echo \"rules:$(wc -l < /tmp/rules)\"",
+            "rm -f /tmp/labels /tmp/rules; : > /tmp/selinux.log",
+            "with fake-selinux-plain env PKEXEC_UID=1000 bash " + FakeRootInstaller + " > /tmp/out 2>&1",
+            "echo \"plain:$(grep '^chcon' /tmp/selinux.log | tr '\\n' ' ')\"",
+            "echo \"plainsaid:$(grep -c 'SELinux: labelled the helper' /tmp/out)\"",
+            "bash " + FakeRootInstaller + " --remove >/dev/null 2>&1",
+            "rm -f /tmp/labels; touch /tmp/chcon-fails",
+            "if with fake-selinux-plain env PKEXEC_UID=1000 bash " + FakeRootInstaller + " > /tmp/out 2>&1; then echo failed:installed; else echo failed:refused; fi",
+            "echo \"warned:$(grep -c 'could not be relabelled' /tmp/out) $(grep -c 'status 203/EXEC' /tmp/out)\"",
+            "echo \"rule:$(ls " + LinuxCapture.SudoersPath + " | wc -l)\"");
+        if (RunAsFakeRoot(root, "helper-selinux", script) is not { } run) return;
+        check(run.ExitCode == 0, "The SELinux installs did not run to the end: " + run.Output);
+        string Line(string name) => FakeRootLine(run.Output, name);
+        string[] specs = [folder + "/capture-helper", folder + "/capture-relay", folder + "/capture-proxy(/.*)?"];
+        string Commands(string op) => string.Join(' ', specs.Select(spec => "semanage fcontext " + op + " '" + spec + "'"));
+        check(Line("first") == Commands("-a -t bin_t"),
+            "The first install did not add one bin_t rule for the helper, the relay and the capture copy: " + Line("first"));
+        check(Line("restored") == "1" && Line("chcon1") == "0" && Line("said") == "1",
+            "With semanage the installer did not restore the labels from its rules alone, or did not say so: " + run.Output);
+        check(Line("type") == "system_u:object_r:bin_t:s0", "The capture copy is not labelled bin_t: " + Line("type"));
+        check(Line("again") == Commands("-m -t bin_t"), "A second install did not modify the same rules: " + Line("again"));
+        check(Line("removed") == Commands("-d") && Line("rules") == "0", "--remove did not delete the rules: " + Line("removed"));
+        check(Line("plain") == "chcon -R -t bin_t -- " + files && Line("plainsaid") == "1",
+            "Without semanage the installer did not label the files with chcon: " + Line("plain"));
+        check(Line("failed") == "installed" && Line("warned") == "1 1" && Line("rule") == "1",
+            "A label that could not be set failed the install, or was not said with the 203/EXEC it causes: " + run.Output);
+    }
+
+    // The helper's test-only selinux command, with the mode, the capture copy's type and a journal given: check refuses
+    // only a label an enforcing SELinux denies, and a service that ends with 203/EXEC names SELinux only with its denial
+    // or such a label.
+    static void HelperSelinux(string root, Action<bool, string> check)
+    {
+        var folder = Directory.CreateDirectory(Path.Combine(root, "helper-selinux-check")).FullName;
+        check(InventorySync.StoppedBeforeListening("", "It wrote no log.") == "The Linux capture stopped before it listened. It wrote no log.",
+            "Without helper output the launcher's message changed.");
+        var description = LinuxCapture.HelperInstallDescription(folder, steamOs: false, selinux: true);
+        check(description.Contains("labels them bin_t", StringComparison.Ordinal) &&
+            !LinuxCapture.HelperInstallDescription(folder, steamOs: false).Contains("SELinux", StringComparison.Ordinal),
+            "The install confirmation does not say SELinux's label where it is on, or says it where it is off.");
+
+        if (!OperatingSystem.IsLinux()) { Console.WriteLine("  (skipped: the capture helper's SELinux checks)"); return; }
+        var script = Path.GetFullPath(Path.Combine("linux", LinuxCapture.HelperScript));
+        if (!File.Exists(script)) { Console.WriteLine("  (skipped: linux/capture-helper.sh is not in the test working directory)"); return; }
+        var journal = Path.Combine(folder, "journal.txt");
+        File.WriteAllText(journal, string.Join("\n",
+            "hellforge-capture.service: Failed to execute /usr/local/lib/hellforge/capture-proxy/HellForge.CaptureProxy: Permission denied",
+            "hellforge-capture.service: Main process exited, code=exited, status=203/EXEC",
+            "audit: type=1400 audit(1763510000.123:456): avc:  denied  { execute } for  pid=4242 comm=\"(eProxy)\" " +
+                "name=\"HellForge.CaptureProxy\" dev=\"dm-0\" ino=1234 scontext=system_u:system_r:init_t:s0 " +
+                "tcontext=system_u:object_r:var_lib_t:s0 tclass=file permissive=0",
+            "audit: type=1400 audit(1763510001.000:457): avc:  denied  { read } for  pid=99 comm=\"firefox\" name=\"x\" " +
+                "scontext=a tcontext=b tclass=file permissive=0") + "\n");
+        var quiet = Path.Combine(folder, "quiet.txt");
+        File.WriteAllText(quiet, "hellforge-capture.service: Main process exited, code=exited, status=203/EXEC\n");
+        var empty = Path.Combine(folder, "empty.txt");
+        File.WriteAllText(empty, "");
+        (int ExitCode, string Output) Run(params string[] arguments) => RunHelper(script, ["selinux", .. arguments]);
+
+        foreach (var (mode, type, refused) in new[] { ("Enforcing", "var_lib_t", true), ("Enforcing", "user_home_t", true),
+            ("Enforcing", "bin_t", false), ("Enforcing", "usr_t", false), ("Permissive", "var_lib_t", false), ("Disabled", "var_lib_t", false) })
+        {
+            var result = Run("--selinux-mode", mode, "--selinux-type", type);
+            check(result.ExitCode == 0 && result.Output.Contains("check: SELinux is enforcing", StringComparison.Ordinal) == refused &&
+                (!refused || result.Output.Contains("run allow-capture.sh again", StringComparison.Ordinal) &&
+                    result.Output.Contains("203/EXEC", StringComparison.Ordinal) && result.Output.Contains(type, StringComparison.Ordinal)),
+                $"The helper's check of a {type} capture under {mode} SELinux is wrong: " + result.Output);
+            if (refused)
+                check(LinuxCapture.InstallFixesCheck(LinuxCapture.HelperCheckProblem(new LinuxCapture.WineResult(1, "", result.Output))!),
+                    "A capture SELinux would refuse does not make the launcher offer the install again.");
+        }
+
+        var denied = Run("--selinux-mode", "Enforcing", "--selinux-type", "var_lib_t", "--journal-file", journal, "--status", "203");
+        var lines = denied.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        check(lines.Any(line => line.StartsWith("hellforge-capture-helper: SELinux blocked the snapshot signer", StringComparison.Ordinal) &&
+                line.Contains("status 203/EXEC", StringComparison.Ordinal) && line.Contains("labelled var_lib_t", StringComparison.Ordinal) &&
+                line.Contains("sudo ausearch -m avc -ts recent", StringComparison.Ordinal)) &&
+            lines.Count(line => line.StartsWith("SELinux denial: ", StringComparison.Ordinal)) == 1 &&
+            lines[^1].Contains("name=\"HellForge.CaptureProxy\"", StringComparison.Ordinal),
+            "A service SELinux denied was not named with its denial, last, and only HellForge's: " + denied.Output);
+        var launcher = InventorySync.StoppedBeforeListening(denied.Output, "It wrote no log.");
+        check(launcher.Contains("SELinux blocked the snapshot signer", StringComparison.Ordinal) &&
+            launcher.Contains("avc:  denied  { execute }", StringComparison.Ordinal) && launcher.EndsWith("It wrote no log.", StringComparison.Ordinal),
+            "The launcher's message does not carry the helper's SELinux lines: " + launcher);
+
+        var labelled = Run("--selinux-mode", "Enforcing", "--selinux-type", "bin_t", "--journal-file", quiet, "--status", "203");
+        check(!labelled.Output.Contains("SELinux blocked", StringComparison.Ordinal) &&
+            labelled.Output.Contains("systemd could not start the snapshot signer", StringComparison.Ordinal) &&
+            labelled.Output.Contains("no denial naming HellForge", StringComparison.Ordinal) &&
+            labelled.Output.Contains("status=203/EXEC", StringComparison.Ordinal),
+            "A 203/EXEC with a right label and no denial was blamed on SELinux, or systemd's line was not given: " + labelled.Output);
+        var permissive = Run("--selinux-mode", "Permissive", "--selinux-type", "var_lib_t", "--journal-file", journal, "--status", "203");
+        check(!permissive.Output.Contains("SELinux blocked", StringComparison.Ordinal) &&
+            permissive.Output.Contains("systemd could not start the snapshot signer", StringComparison.Ordinal),
+            "A permissive SELinux was named as the blocker: " + permissive.Output);
+        var ran = Run("--selinux-mode", "Disabled", "--selinux-type", "x", "--journal-file", empty, "--status", "1");
+        check(ran.ExitCode == 0 && ran.Output.Length == 0, "A capture that ran and failed on its own got a systemd or SELinux line: " + ran.Output);
+    }
+
     // Checked on every system, also where the installer cannot be run as root of a namespace: the launcher, the installer
     // and the helper name the same folders in the same order, and the launcher looks where the installer installs.
     static void HelperFolders(Action<bool, string> check)
@@ -1512,8 +1700,7 @@ static class InventorySyncTests
         File.WriteAllText(Path.Combine(folder, SnapshotSeal.ProgressionFile), Progression);
         var captured = DateTime.UtcNow.AddDays(-1);
         TestSigner.Seal(folder, Account, captured);
-        check(SnapshotSeal.Verify(folder) is { SteamAccount: Account } info && info.CapturedUtc == captured &&
-            info.ExpiresUtc == captured + SnapshotSeal.MaxAge, "A fresh seal does not verify.");
+        check(SnapshotSeal.Verify(folder) is { SteamAccount: Account } info && info.CapturedUtc == captured, "A fresh seal does not verify.");
         var sealPath = Path.Combine(folder, SnapshotSeal.FileName);
         var sealText = File.ReadAllText(sealPath);
         check(sealText.Contains("\"version\":2", StringComparison.Ordinal) &&
@@ -1537,11 +1724,16 @@ static class InventorySyncTests
         File.WriteAllText(sealPath, sealText);
 
         var publicKey = TestSigner.Key.ExportSubjectPublicKeyInfo();
-        check(SnapshotSeal.Verify(folder, publicKey, captured + SnapshotSeal.MaxAge - TimeSpan.FromMinutes(1), out _) != null,
-            "A seal inside its 14 days does not verify.");
-        check(SnapshotSeal.Verify(folder, publicKey, captured + SnapshotSeal.MaxAge + TimeSpan.FromMinutes(1), out var expired) == null &&
-            expired == SnapshotSeal.ExpiredMessage, "An expired seal verifies, or does not say it expired.");
-        check(SnapshotSeal.Verify(folder, null, captured, out var noKey) == null && noKey == null, "A seal verifies with no signer key.");
+        // A seal has no age limit: one from 15 days or a year ago holds until the next sync replaces it.
+        foreach (var days in new[] { 15, 365 })
+        {
+            var old = DateTime.UtcNow.AddDays(-days);
+            TestSigner.Seal(folder, Account, old);
+            check(SnapshotSeal.Verify(folder, out var oldProblem) is { SteamAccount: Account } oldInfo && oldInfo.CapturedUtc == old && oldProblem == null,
+                $"A seal from {days} days ago no longer holds.");
+        }
+        File.WriteAllText(sealPath, sealText);
+        check(SnapshotSeal.Verify(folder, null, out var noKey) == null && noKey == null, "A seal verifies with no signer key.");
 
         using var otherKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         TestSigner.Seal(folder, Account, captured, otherKey);
@@ -1897,7 +2089,8 @@ static class InventorySyncTests
 
         // Every capture-side problem has an exit code of its own that reads back, clear of 0, 1 and 2.
         foreach (var problem in new[] { CaptureProblem.EvidenceFolder, CaptureProblem.LeftoverCapture, CaptureProblem.HostsBusy,
-            CaptureProblem.HostsDenied, CaptureProblem.Offline, CaptureProblem.Certificate, CaptureProblem.PortInUse, CaptureProblem.PortDenied, CaptureProblem.Signer })
+            CaptureProblem.HostsDenied, CaptureProblem.Offline, CaptureProblem.Certificate, CaptureProblem.PortInUse, CaptureProblem.PortDenied, CaptureProblem.Signer,
+            CaptureProblem.HostsIgnored })
         {
             var code = CaptureStart.ExitCode(problem);
             check(code >= 20 && CaptureStart.FromExitCode(code) == problem, problem + ": its exit code does not read back.");

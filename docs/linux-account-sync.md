@@ -31,7 +31,9 @@ It:
   beside them, the last over a sorted list of the folder's file hashes;
 - adds `/etc/sudoers.d/zz-hellforge-capture`, a rule for that one root-owned helper's exact `check`, `start`, `stop`
   and `cleanup` commands, and removes the rule's earlier name, `hellforge-capture`;
-- removes a helper an earlier install left in another of the folders.
+- removes a helper an earlier install left in another of the folders;
+- where SELinux is on, labels the helper, the relay and the capture copy `bin_t`
+  ([SELinux](#selinux-fedora-bazzite-and-nobara)).
 
 The helper folder is the first of these that can be made and that only root can change:
 
@@ -75,7 +77,7 @@ a systemd service with its own dynamic user, so the signer's private key is out 
 - The capture signs only when its connection validates for `api.live.prod.thehelldiversgame.com` and the chain holds
   one of HellForge's pinned Let's Encrypt roots. A CA the player adds cannot stand in.
 - It signs the SHA-256 of the bytes it received, the Steam account and the time from the API's `Date` header.
-- A seal lasts 14 days. Then the snapshot gives no premium content until the next sync.
+- A seal has no age limit: it holds until the next sync replaces it.
 - The launcher refuses a public key that a group or other accounts can change, or that sits in such a folder.
 - Without systemd, the helper's `check` refuses: the signer needs a systemd service.
 - A HellForge update that changes the capture makes the next sync offer the helper install again.
@@ -83,6 +85,42 @@ a systemd service with its own dynamic user, so the signer's private key is out 
 The service stops at the capture's 10-minute timeout plus two minutes (`RuntimeMaxSec`). Root moves no file the player
 can change: it copies the sealed files into its own folder, `seal.json` last, then hands that folder over. It copies
 only plain files and never reads one through a link the service left in its place.
+
+### SELinux: Fedora, Bazzite and Nobara
+
+On a system with SELinux enforcing (Fedora, Bazzite, Silverblue, Kinoite, Nobara), systemd may start a service only
+from a program file with the right label. Fedora's policy lets it start one from `bin_t` (the label of `/usr/bin`) or
+`usr_t`. A file in `/var/lib/hellforge` is `var_lib_t`, and systemd fails with status `203/EXEC`. On Fedora Atomic
+desktops (Bazzite, Silverblue, Kinoite), `/usr/local` is `/var/usrlocal` and `/opt` is `/var/opt`.
+
+- `allow-capture.sh` labels the helper, the relay and the capture copy `bin_t`. With `semanage` it adds a local rule
+  for each, so a relabel keeps them, and runs `restorecon`. Without it (the atomic desktops ship none) it uses
+  `chcon`. It does not change SELinux's mode or policy.
+- `--remove` deletes those rules.
+- Before each sync, the helper's `check` refuses a capture copy SELinux would block, and the launcher offers the
+  install again.
+- If the service still cannot start, the sync names SELinux's denial (the AVC line from `ausearch` or the journal), or
+  systemd's own line when SELinux denied nothing.
+
+Two commands show what blocked it:
+
+```fish
+sudo ausearch -m avc -ts recent | grep -i hellforge
+ls -Z /usr/local/lib/hellforge/capture-proxy/HellForge.CaptureProxy
+```
+
+### When premium content stays locked
+
+The session's backend is a Windows program. Under Proton it reads the public key through Wine's `Z:` drive, as
+`Z:\var\lib\hellforge\snapshot-signer.pub`. When Proton runs inside the Steam Linux Runtime
+([the Steam Linux Runtime](linux-isolation.md#the-steam-linux-runtime)), it sees only what pressure-vessel shares, and
+that does not include `/var/lib`. So every session adds `/var/lib/hellforge` to `PRESSURE_VESSEL_FILESYSTEMS_RO`
+(after any value already set). The folder is shared read-only, so the key inside is still the one only root writes.
+
+| Message | Cause and what to do |
+|---|---|
+| "This PC has no snapshot signer yet. Sync again." | No key on this PC. Run Sync Inventory. `ls -l /var/lib/hellforge/snapshot-signer.pub` on the host shows whether the helper published it: owned by root, mode `-rw-r--r--`. |
+| "The snapshot signer's key is on this PC (...) but not visible inside the Steam Linux Runtime, so syncing again does not help..." | The host has the key, but the container the session ran in did not show it: a HellForge older than this fix, or a runtime that refused the share. Update HellForge. Until then, `HELLFORGE_STEAM_RUNTIME=off` runs Proton on the host, where the file is visible ([Proton in the Steam Linux Runtime](linux.md#proton-in-the-steam-linux-runtime)). |
 
 ## Which Proton opens the game's prefix
 

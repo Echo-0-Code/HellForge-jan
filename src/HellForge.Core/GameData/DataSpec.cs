@@ -616,18 +616,12 @@ public static partial class DataSpecs
     // half float holds is taken.
     static double[] LutCell(JsonElement e, string at)
     {
-        if (e.ValueKind == JsonValueKind.Array && e.GetArrayLength() == 4 && e.EnumerateArray().All(v => v.ValueKind == JsonValueKind.Number))
-        {
-            var rgba = e.EnumerateArray().Select(v => v.GetDouble()).ToArray();
-            if (rgba.All(v => double.IsFinite(v) && Math.Abs(v) <= 65504)) return rgba;
-            throw new InvalidDataException($"{at}: a cell's values are numbers from -65504 to 65504.");
-        }
-        if (e.ValueKind == JsonValueKind.Array && e.GetArrayLength() == 3 && e.EnumerateArray().All(v => v.ValueKind == JsonValueKind.Number))
-        {
-            var rgb = e.EnumerateArray().Select(v => v.GetDouble()).ToArray();
-            if (rgb.All(v => double.IsFinite(v) && Math.Abs(v) <= 65504)) return rgb;
-        }
-        return e.ValueKind == JsonValueKind.String ? Colour(e, at) : throw new InvalidDataException($"{at}: a cell is [r, g, b], [r, g, b, a] or \"#RRGGBB\".");
+        if (e.ValueKind == JsonValueKind.String) return Colour(e, at);
+        if (e.ValueKind != JsonValueKind.Array || e.GetArrayLength() is not (3 or 4) || !e.EnumerateArray().All(v => v.ValueKind == JsonValueKind.Number))
+            throw new InvalidDataException($"{at}: a cell is [r, g, b], [r, g, b, a] or \"#RRGGBB\".");
+        var values = e.EnumerateArray().Select(v => v.GetDouble()).ToArray();
+        return values.All(v => double.IsFinite(v) && Math.Abs(v) <= 65504) ? values
+            : throw new InvalidDataException($"{at}: a cell's values are numbers from -65504 to 65504.");
     }
 
     static int Index(string text, string at) =>
