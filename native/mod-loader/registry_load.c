@@ -888,8 +888,9 @@ static void RegisterNetworkTypes(void)
  * room for (CopyLoadoutAndList), and a margin. */
 static size_t ArmoryBytes(void) { return (size_t)(REG_ARMORY_FIRST + REG_LOADOUT_RECORDS + RegRoom() + 8) * 32; }
 
-/* The armory object's entries and per-type starts and counts, from the loadout table's records. */
-static void ArmoryFill(uint8_t* armory, uint8_t* table, uint32_t count)
+/* The armory object's entries and per-type starts and counts, from the loadout table's records; a record whose bit is
+ * set in left (NULL: none) gets no entry. */
+static void ArmoryFill(uint8_t* armory, uint8_t* table, uint32_t count, const uint8_t* left)
 {
     memset(armory, 0, ArmoryBytes());
     uint8_t* records = table + (size_t)SlotsOf(REG_LOADOUT) * 16;
@@ -898,7 +899,7 @@ static void ArmoryFill(uint8_t* armory, uint8_t* table, uint32_t count)
     {
         uint32_t type;
         memcpy(&type, records + (size_t)r * REG_LOADOUT_STRIDE + 4, 4);
-        if (type < REG_ARMORY_TYPES) counts[type]++;
+        if (type < REG_ARMORY_TYPES && !(left != NULL && left[r >> 3] & (1u << (r & 7)))) counts[type]++;
     }
     uint32_t next = REG_ARMORY_FIRST;
     for (int t = 0; t < REG_ARMORY_TYPES; t++) { starts[t] = next; next += counts[t]; }
@@ -907,7 +908,7 @@ static void ArmoryFill(uint8_t* armory, uint8_t* table, uint32_t count)
         const uint8_t* rec = records + (size_t)r * REG_LOADOUT_STRIDE;
         uint32_t type;
         memcpy(&type, rec + 4, 4);
-        if (type >= REG_ARMORY_TYPES) continue;
+        if (type >= REG_ARMORY_TYPES || (left != NULL && left[r >> 3] & (1u << (r & 7)))) continue;
         uint8_t* entry = armory + (size_t)(starts[type] + placed[type]++) * 32;
         uint64_t owner = ArmoryEntity(table, r);
         memcpy(entry, rec, 4);          /* loadout id */
@@ -919,6 +920,9 @@ static void ArmoryFill(uint8_t* armory, uint8_t* table, uint32_t count)
     memcpy(armory + 0x1B40, counts, sizeof counts);
 }
 
+typedef uint8_t* (*EncyclopediaFn)(uint64_t entity);
+#include "registry_armory_unnamed.c" /* game items with no text, which the armory leaves out */
+
 /* The armory's list, built from the loadout table in use into HellForge's larger object. */
 static void BuildArmory(void)
 {
@@ -927,14 +931,12 @@ static void BuildArmory(void)
     uint8_t* table = LoadoutTable(state, &count);
     if (g_armory == NULL) g_armory = (uint8_t*)VirtualAlloc(NULL, ArmoryBytes(), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     if (g_armory == NULL || table == NULL) return;
-    ArmoryFill(g_armory, table, count);
+    uint8_t left[(REG_LOADOUT_RECORDS + 7) / 8];
+    ArmoryFill(g_armory, table, count, ArmoryLeftOut(table, count, left));
     ApiWrite(g_game + REG_ARMORY_GLOBAL, &g_armory, 8);
 }
-
-typedef uint8_t* (*EncyclopediaFn)(uint64_t entity);
 typedef uint8_t* (*ArmoryEntryFn)(uint32_t id);
 typedef uint32_t (*ArmoryListFn)(uint64_t entity);
-#define REG_ENCYCLOPEDIA_LOOKUP 0x4F8A50u /* component 76 record of an entity */
 #define REG_ARMORY_LOOKUP 0x11E7C60u      /* armory entry of a loadout id (walks the per-type ranges) */
 #define REG_ARMORY_LIST 0x11E7AE0u        /* the armory list (1-6) whose entries name an entity, 0 none (ArmoryEntity) */
 static const uint8_t kArmoryListPin[32] = {0x48, 0x89, 0x5c, 0x24, 0x08, 0x48, 0x8b, 0x1d, 0xfc, 0xee, 0x13, 0x02, 0x41, 0xbb, 0x01, 0x00,

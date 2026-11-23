@@ -374,7 +374,8 @@ static void LiveArmory(void)
     uint8_t* table = LoadoutTable(EntityState(), &count);
     uint8_t* armory = table != NULL ? (uint8_t*)VirtualAlloc(NULL, ArmoryBytes(), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) : NULL;
     if (armory == NULL) { Note("registry: no memory for the armory; the live weapons are not in it"); return; }
-    ArmoryFill(armory, table, count);
+    uint8_t left[(REG_LOADOUT_RECORDS + 7) / 8];
+    ArmoryFill(armory, table, count, ArmoryLeftOut(table, count, left));
     MemoryBarrier();
     if (!ApiWrite(g_game + REG_ARMORY_GLOBAL, &armory, 8)) g_armory = armory;
 }

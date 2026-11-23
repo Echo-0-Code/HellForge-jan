@@ -517,6 +517,9 @@ On `dev`, since 0.4.0-beta.
 
 ### Fixed
 
+- **No nameless items in the armory.** The game ships a few unfinished items with no name: a secondary with the
+  Solo Silo remote's model and three throwables. The game's own armory list has them, so SECONDARY showed a nameless
+  pistol you could equip. The armory now leaves out game items with no text at all, and modloader.log names each one.
 - **No crash at the title screen with copied entities.** The loader points a copy's id at its model on the game
   thread now. From its own thread it could fault while the game loaded the loadout's packages.
 - **Copied entities find all their model's resources by their id.** Where the game finds a resource by an entity's

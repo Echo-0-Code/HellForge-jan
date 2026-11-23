@@ -68,7 +68,7 @@ static void ArmoryListFixture(void)
 
     uint8_t* armory = (uint8_t*)calloc(1, ArmoryBytes());
     assert(armory != NULL);
-    ArmoryFill(armory, table, 5);
+    ArmoryFill(armory, table, 5, NULL);
     memcpy(code + AL_SLOT_AT, &armory, 8);
     assert(list(eat) == 2 && list(copy) == 2);             /* the copy is in its base's list: it drops as an EAT does */
     assert(list(liberator) == 1 && list(sharedBase) == 1); /* the vanilla owners keep theirs */
@@ -81,6 +81,14 @@ static void ArmoryListFixture(void)
     uint64_t named = 0;
     memcpy(&named, armory + (size_t)(starts[2] + 1) * 32 + 8, 8);
     assert(named == copy);
+
+    /* A record left out (an unnamed game item) has no entry; the others keep theirs, in the same lists. */
+    uint8_t left[1] = {1u << 1}; /* record 1, the Liberator */
+    ArmoryFill(armory, table, 5, left);
+    memcpy(starts, armory + 0x1B24, sizeof starts);
+    memcpy(counts, armory + 0x1B40, sizeof counts);
+    assert(counts[1] == 1 && counts[2] == 2 && counts[3] == 1);
+    assert(list(liberator) == 0 && list(sharedBase) == 1 && list(eat) == 2 && list(copy) == 2);
 
     memcpy(g_weapons, saved, sizeof saved);
     g_weaponCount = savedCount;
