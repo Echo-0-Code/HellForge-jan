@@ -446,6 +446,7 @@ public static class ModDataBuilder
         foreach (var replace in copy.Replace) ResourceEdits.Replace(main, replace.From, replace.To, replace.At);
         if (copy.Curves is { } curves) EditCurves(main, curves);
         if (copy.Colours != null) ResourceEdits.SetMaterialColours(main, copy.Colours);
+        if (copy.Values != null) ResourceEdits.SetMaterialValues(main, copy.Values);
         if (copy.Textures != null) ResourceEdits.SetMaterialTextures(main, copy.Textures);
         if (copy.Lut != null) gpu = ResourceEdits.RecolourLut(main, gpu, copy.Lut);
         if (copy.Shaders is { Count: > 0 } shaders)

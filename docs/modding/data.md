@@ -113,6 +113,8 @@ mod, never a game resource's name. The copy can then be changed, in this order:
   `"colour": "#3070FF"` (that hue and saturation at the key's brightness). `"keys": n` requires exactly n keys to
   change; without it, at least one must.
 - `colours`: a material's RGB parameters by name (`0x<IdString32>` or the name): `{"0xB4138578": [0, 0.35, 1]}`.
+- `values`: a material's scalar and vector parameters by name, as many numbers as the parameter has (1 to 4):
+  `{"burn_scorch": [0.5, 1], "emissive_intensity": [2]}`. A count that does not match the parameter is refused.
 - `textures`: a material's textures by slot (the slot's name or `0x<IdString32>`): `{"base_data":
   "yourname/your_mod/rifle/base_data"}`, your own texture or a game texture ([textures](textures.md)).
 - `lut`: a material's colour lookup texture, with a row per material zone and column 0 the base colour. `zonesFrom`
