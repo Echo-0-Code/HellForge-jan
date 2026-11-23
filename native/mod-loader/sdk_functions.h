@@ -544,6 +544,8 @@ static const SdkFunction kSdkFunctions[] = {
     {"UnitWorldRotation", "helldivers2.exe", 0x1FD1D0u, "48 89 5C 24 08 57 48 83 EC 30 48 8B F9 49 63 D8 8B CA E8 D9 06 EA FF 48 8B C8 48 8B 10 FF 92 E8", 1},
     {"UnitNumMeshes", "helldivers2.exe", 0x200CD0u, "48 83 EC 28 E8 E7 CB E9 FF 48 8B C8 48 8B 10 48 83 C4 28 48 FF A2 F8 00 00 00", 1},
     {"UnitMesh", "helldivers2.exe", 0x200D20u, "48 89 5C 24 08 57 48 83 EC 20 8B FA E8 8F CB E9 FF 48 8B C8 48 8B D8 4C 8B 00 41 FF 90 F8 00 00", 1},
+    {"UnitSetMaterial", "helldivers2.exe", 0x1FF240u, "48 89 5C 24 08 57 48 83 EC 20 49 8B D8 8B FA E8 6C E6 E9 FF 4C 8B CB 48 8D 54 24 40 44 8B C7 48 8B C8", 1},
+    {"UnitResetMaterial", "helldivers2.exe", 0x1FF300u, "40 53 48 83 EC 20 8B DA E8 B3 E5 E9 FF 45 33 C9 48 8D 54 24 40 44 8B C3 48 8B C8 4C 8B 10 41 FF 92", 1},
     {"UnitAlive", "helldivers2.exe", 0x1FEEB0u, "48 83 EC 28 E8 07 EA E9 FF 48 85 C0 0F 95 C0 48 83 C4 28 C3", 1},
     {"UnitHasAnimationBlender", "helldivers2.exe", 0x2016E0u, "48 83 EC 28 E8 D7 C1 E9 FF 48 8B C8 48 8B 10 FF 92 A8 01 00 00 33 C9 48 85 C0 0F 95 C1 8B C1 48", 1},
     {"UnitHasAnimationStateMachine", "helldivers2.exe", 0x2016B0u, "48 83 EC 28 E8 07 C2 E9 FF 48 8B C8 48 8B 10 FF 92 B0 01 00 00 33 C9 48 85 C0 0F 95 C1 8B C1 48", 1},

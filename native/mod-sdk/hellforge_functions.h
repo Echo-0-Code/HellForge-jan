@@ -6619,6 +6619,36 @@ static inline int hf_hook_UnitMesh(HfMod* mod, HfFn_UnitMesh detour, HfFn_UnitMe
     return hf_hook_function_(mod, "UnitMesh", (void*)detour, (void**)original, priority);
 }
 
+/* UnitSetMaterial (helldivers2.exe+0x1FF240; hook or call). Gives the unit's material slot a new material instance of
+ * another material resource, on every mesh that uses the slot; returns the new material: the Unit table's (EngineApi
+ * +0x18, 0x27C8F10) +0x180. Instanced batches (bugs) draw every member with one member's material, so a look of one
+ * unit needs a material resource of its own, not a texture set on its instance.
+ *   unit      the unit's handle
+ *   slot      the material slot's IdString32, as the meshes' +0x60 ids give it
+ *   material  the material resource's name hash; it must be loaded
+ * From the Unit table's slot 48 (+0x180) and its Lua twin Unit.set_material (callback 0x414490, the same unit object
+ * call +0x200); the arguments from the code (build 25480438). */
+typedef void* (*HfFn_UnitSetMaterial)(uint32_t unit, uint32_t slot, uint64_t material);
+static inline HfFn_UnitSetMaterial hf_fn_UnitSetMaterial(HfMod* mod) { return (HfFn_UnitSetMaterial)hf_function_(mod, "UnitSetMaterial"); }
+static inline int hf_hook_UnitSetMaterial(HfMod* mod, HfFn_UnitSetMaterial detour, HfFn_UnitSetMaterial* original, int32_t priority)
+{
+    return hf_hook_function_(mod, "UnitSetMaterial", (void*)detour, (void**)original, priority);
+}
+
+/* UnitResetMaterial (helldivers2.exe+0x1FF300; hook or call). Puts a unit's material slot back on the material resource
+ * the unit's data gives it, as a new instance; returns the new material: the Unit table's (EngineApi +0x18, 0x27C8F10)
+ * +0x190 (UnitSetMaterial with no resource).
+ *   unit  the unit's handle
+ *   slot  the material slot's IdString32
+ * From the Unit table's slot 50 (+0x190) and Unit.set_material without a material (callback 0x414490); the arguments
+ * from the code (build 25480438). */
+typedef void* (*HfFn_UnitResetMaterial)(uint32_t unit, uint32_t slot);
+static inline HfFn_UnitResetMaterial hf_fn_UnitResetMaterial(HfMod* mod) { return (HfFn_UnitResetMaterial)hf_function_(mod, "UnitResetMaterial"); }
+static inline int hf_hook_UnitResetMaterial(HfMod* mod, HfFn_UnitResetMaterial detour, HfFn_UnitResetMaterial* original, int32_t priority)
+{
+    return hf_hook_function_(mod, "UnitResetMaterial", (void*)detour, (void**)original, priority);
+}
+
 /* UnitAlive (helldivers2.exe+0x1FEEB0; hook or call). 1 while the handle names a unit that exists, 0 once it is gone.
  * Only the low byte is the answer: the rest of the register is left over: the Unit table's (EngineApi +0x18, 0x27C8F10)
  * +0x720.

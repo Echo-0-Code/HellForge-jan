@@ -11,6 +11,10 @@ Unreleased, and a release renames that section ([CONTRIBUTING.md](CONTRIBUTING.m
 On `dev`, since 0.4.0-beta.
 
 ### Added
+- **Material looks for status effects (SDK 31).** A look row with texture slot 0 swaps the unit's material slot to a
+  material resource of the mod's own per level. Enemies of one kind are drawn in one batch with one enemy's material.
+  A texture set on one bug showed on others and flickered; a material of its own keeps the look on that enemy
+  ([status effects](docs/modding/status-effects.md#give-each-level-a-look)).
 
 - **Mod settings in OPTIONS > MODS (SDK 30).** `add_option` gives a code mod toggles, choices and sliders in the
   escape menu's MODS tab, through the bundled HellForge Mod Options and the Vanilla Plus Megapack's menu. HellForge

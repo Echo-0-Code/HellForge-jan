@@ -2,7 +2,9 @@
  * mod only queues a note; the meters, levels and looks are worked out on the game thread. A texture is set only when an
  * entity's shown level changes: setting the same texture again shows the material's own for a frame or two, which is
  * a flicker. An entity that loses its unit gets its own textures back while that unit is still alive and still the
- * same resource, so a reused handle is never touched. Included by world_calls.c after joint_poses.c. */
+ * same resource, so a reused handle is never touched. A look row with texture slot 0 swaps the whole material slot to
+ * another material resource (SDK 31): instanced batches (bugs) draw every member with one member's material, so only
+ * a resource of its own keeps a look on one unit. Included by world_calls.c after joint_poses.c. */
 
 #define SE_EFFECTS 64
 #define SE_TARGETS 256
@@ -44,6 +46,8 @@ typedef uint32_t (*SeNumMeshesFn)(uint32_t unit);
 typedef void* (*SeMeshFn)(uint32_t unit, int32_t index);
 typedef uint64_t (*SeUnitNameFn)(uint32_t unit);
 typedef void (*SeSetTextureFn)(void* material, uint32_t slot, uint64_t texture);
+typedef void* (*SeSetMaterialFn)(uint32_t unit, uint32_t slot, uint64_t material);
+typedef void* (*SeResetMaterialFn)(uint32_t unit, uint32_t slot);
 
 static SeEffect g_se[SE_EFFECTS];
 static volatile LONG g_seCount;
@@ -69,6 +73,8 @@ static SeNumMeshesFn g_seNumMeshes;
 static SeMeshFn g_seMesh;
 static SeUnitNameFn g_seUnitName;
 static SeSetTextureFn g_seSetTexture;
+static SeSetMaterialFn g_seSetMaterial;     /* NULL: material looks are off (logged once) */
+static SeResetMaterialFn g_seResetMaterial;
 /* the damage each entity takes now, for the damage consumer (rebuilt every update) */
 typedef struct SeDamageRow { uint32_t entity; float scale; } SeDamageRow;
 static SeDamageRow g_seDamage[SE_TARGETS];
@@ -184,9 +190,18 @@ static uintptr_t SeMaterialAt(uintptr_t mats, uintptr_t slots, uint32_t k, uint3
     return SafeRead(m + 4, &word, 4) || (word & 0xFFFFFFu) == 0xFFFFFFu ? 0 : m;
 }
 
-/* Every drawn material of the unit with this material slot gets the texture. */
+/* A material look: the unit's material slot on another material resource, or (0) back on its own. */
+static void SeSetMaterialOnUnit(uint32_t unit, uint32_t material, uint64_t value)
+{
+    if (g_seSetMaterial == NULL || g_seResetMaterial == NULL) return;
+    if (value) g_seSetMaterial(unit, material, value);
+    else g_seResetMaterial(unit, material);
+}
+
+/* Every drawn material of the unit with this material slot gets the texture; texture slot 0 swaps the material. */
 static void SeSetOnUnit(uint32_t unit, uint32_t material, uint32_t texture, uint64_t value)
 {
+    if (texture == 0) { SeSetMaterialOnUnit(unit, material, value); return; }
     uint32_t meshes = g_seNumMeshes(unit);
     for (uint32_t i = 0; i < meshes && i < 64; i++)
     {
@@ -438,6 +453,9 @@ static int SeReady(void)
     g_seMesh = (SeMeshFn)ApiFunction(&g_seMod, "UnitMesh");
     g_seUnitName = (SeUnitNameFn)ApiFunction(&g_seMod, "UnitResourceName");
     g_seSetTexture = (SeSetTextureFn)ApiFunction(&g_seMod, "MaterialSetTexture");
+    g_seSetMaterial = (SeSetMaterialFn)ApiFunction(&g_seMod, "UnitSetMaterial");
+    g_seResetMaterial = (SeResetMaterialFn)ApiFunction(&g_seMod, "UnitResetMaterial");
+    if (!g_seSetMaterial || !g_seResetMaterial) Note("status effects: material looks are off; UnitSetMaterial is not the reviewed one");
     if (!g_seDescriptor || !g_seAlive || !g_seNumMeshes || !g_seMesh || !g_seUnitName || !g_seSetTexture)
     { g_seState = -1; Note("status effects: off; a unit or material call is not the reviewed one"); return 0; }
     g_seState = 1;
