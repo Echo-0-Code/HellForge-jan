@@ -41,7 +41,13 @@ uint64_t entity = api->register_entity(mod, &walker);
   enemy squad's member that changes side is removed.
 - Enemies shoot a friendly unit, and its brain picks enemies as targets.
 - A copy of an enemy needs the enemy's package loaded, or the game crashes when it spawns. Enemies have no loadout
-  package, so call `load_package` once the game has loaded. The Scout Strider and its pilot are in `0x094394C2A2C22F36`.
+  package, so call `load_package` when a mission starts (`hf_on_mission_start`); it was resident 1 s later in tests.
+  Asking for an enemy package on the ship froze the war table after the mission pick. The Scout Strider and its pilot
+  are in `0x094394C2A2C22F36`.
+- A Scout Strider copy aims but never fires with its native aim (`TargetingComponentData` +8 damping 1, +12 spring
+  10). Damping 10 and spring 25 on the copy's own record let it fire. Its gun is a mount-slot child
+  (`2a346bf4552997e2`) with no faction record of its own: it follows the walker, and its hits carry the gun's network
+  id as dealer, so match a unit's hits by its children too.
 
 ## Obey the comms wheel
 
