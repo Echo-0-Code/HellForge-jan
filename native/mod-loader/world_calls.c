@@ -452,3 +452,4 @@ static void WorldCallsStart(void)
 #include "joint_poses.c"  /* SDK 28: after terminal_camera.c (the render step's pins) */
 #include "status_effects.c" /* SDK 29: after this file (WcEntity and the channel's lines) */
 #include "ai_orders.c"     /* SDK 31: after this file (WcEntity, EvpUnitPosition and the channel's lines) */
+#include "item_traits.c"   /* SDK 34: after this file; fields.c (its deferred edits) and registry.c (the mods' texts) come first */

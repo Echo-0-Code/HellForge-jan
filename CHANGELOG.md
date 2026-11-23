@@ -12,6 +12,9 @@ On `dev`, since 0.4.0-beta.
 
 ### Added
 
+- **Item traits (SDK 34).** `set_item_traits` sets a primary's, secondary's, throwable's or loadout item's trait
+  slots; `set_stratagem_traits` gives any stratagem card up to 4 lines in the mod's order, the mod's own labels
+  included. `hellforge_traits.h` names the game's labels ([Item traits](docs/modding/traits.md)).
 - **HellForge's own MODS tab.** The escape menu gets a MODS tab after OPTIONS with every mod's `add_option` rows, without
   the Vanilla Plus Megapack. With the Megapack's menu on, HellForge leaves the tab to it ([ui](docs/modding/ui.md#settings-in-the-mods-menu)).
 - **Orders for AI units (SDK 31).** `ai_obey` makes a mod's AI units obey the comms wheel's Follow me and Hold

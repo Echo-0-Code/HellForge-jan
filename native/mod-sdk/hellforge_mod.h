@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 33
+#define HF_MOD_SDK_VERSION 34
 #define HF_MOD_EXPORT __declspec(dllexport)
 
 typedef struct HfMod HfMod; /* Identifies the calling mod in logs and status. Opaque, but for SDK 6's HF_API(mod). */
@@ -1785,6 +1785,16 @@ typedef struct HfApi
     int (*ai_order)(HfMod* mod, uint32_t entity, uint32_t order, uint32_t target, const float point[3]);
     /* A unit's order and how it goes, in state (may be NULL); answers its status (HF_AI_...). Any thread. */
     uint32_t (*ai_state)(HfMod* mod, uint32_t entity, HfAiState* state);
+    /* ---- SDK 32: navmesh routes, a build of its own; here they refuse (nav_route_open answers 0) ------------------- */
+    void* sdk32_nav_routes[4]; /* nav_route_open, nav_route_ask, nav_route_read, nav_route_close */
+    /* ---- SDK 34: the traits an item's card shows (include hellforge_traits.h, docs/modding/traits.md; check hf->size) */
+    /* A loadout item's trait slots (a primary, secondary or throwable, or a support weapon's or backpack's armory card),
+     * vanilla or add_weapon's: up to 5 text ids, the rest emptied, written again whenever the game reloads its data.
+     * Any time, best from hellforge_mod_init. 0 queued, 1 refused (the mod's log says why). */
+    int (*set_item_traits)(HfMod* mod, uint64_t entity, const uint32_t* traits, uint32_t count);
+    /* A stratagem card's ITEM TRAITS lines, any type: up to 4 text ids in this order, instead of the lines its flags
+     * give (count 0: the game's again); the flags stay. Any time. 0 done, 1 refused (the mod's log says why). */
+    int (*set_stratagem_traits)(HfMod* mod, uint32_t type, const uint32_t* traits, uint32_t count);
 } HfApi;
 
 /* SDK 6: an HfMod starts with the API, so these need only the mod. */
