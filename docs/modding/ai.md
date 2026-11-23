@@ -46,8 +46,8 @@ uint64_t entity = api->register_entity(mod, &walker);
   are in `0x094394C2A2C22F36`.
 - A Scout Strider copy aims but never fires with its native aim (`TargetingComponentData` +8 damping 1, +12 spring
   10). Damping 10 and spring 25 on the copy's own record let it fire. Its gun is a mount-slot child
-  (`2a346bf4552997e2`) with no faction record of its own: it follows the walker, and its hits carry the gun's network
-  id as dealer, so match a unit's hits by its children too.
+  (`2a346bf4552997e2`) with no faction record of its own, so it follows the walker. Its hits carry the gun's network
+  id as dealer: match a unit's hits by its children too.
 
 ## Obey the comms wheel
 
