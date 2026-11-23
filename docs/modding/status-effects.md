@@ -97,7 +97,7 @@ api->add_effect_looks(mod, g_cryo, kLooks, sizeof kLooks / sizeof kLooks[0], api
 - When two effects have a look on one material, the higher level shows.
 - Until the package is resident, levels change but no texture is set.
 
-On enemies, use material looks (SDK 31). The game draws units of one kind in one instanced batch with one unit's
+On enemies, use material looks (SDK 33). The game draws units of one kind in one instanced batch with one unit's
 material, so a texture set on one bug shows on others of its kind and flickers as the batch order changes.
 
 A row with `texture_slot` 0 names a material resource per level instead (0: the unit's own) and leaves `own` 0. HellForge moves the

@@ -3,7 +3,7 @@
  * entity's shown level changes: setting the same texture again shows the material's own for a frame or two, which is
  * a flicker. An entity that loses its unit gets its own textures back while that unit is still alive and still the
  * same resource, so a reused handle is never touched. A look row with texture slot 0 swaps the whole material slot to
- * another material resource (SDK 31): instanced batches (bugs) draw every member with one member's material, so only
+ * another material resource (SDK 33): instanced batches (bugs) draw every member with one member's material, so only
  * a resource of its own keeps a look on one unit. Included by world_calls.c after joint_poses.c. */
 
 #define SE_EFFECTS 64

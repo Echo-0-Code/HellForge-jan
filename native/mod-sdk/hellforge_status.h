@@ -57,7 +57,7 @@ typedef struct HfStatusEffect
 } HfStatusEffect;
 
 /* A look: one material of a unit (its UnitResourceName and the slot id its meshes give the material), its own texture
- * in a texture slot, and the texture each level shows there (0: its own). SDK 31: texture_slot 0 makes it a material
+ * in a texture slot, and the texture each level shows there (0: its own). SDK 33: texture_slot 0 makes it a material
  * look: each level names a material resource the slot takes (0: the unit's own), and own is unused. Use material
  * looks on enemies: the game draws a kind's units in one batch with one unit's material, so a texture set on one
  * enemy shows on others of its kind and flickers. */
