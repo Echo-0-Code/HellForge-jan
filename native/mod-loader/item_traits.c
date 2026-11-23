@@ -304,11 +304,5 @@ static int ApiSetStratagemTraits(HfMod* mod, uint32_t type, const uint32_t* trai
     return 0;
 }
 
-/* SDK 32's slots (navmesh routes, a pull request of its own): refusals until it is in this build. */
-static uint32_t ApiNavRouteOpenAbsent(HfMod* mod, const void* profile) { (void)profile; ApiLog(mod, "nav_route_open: not in this HellForge build"); return 0; }
-static int ApiNavRouteAskAbsent(HfMod* mod, uint32_t r, const float* a, const float* b) { (void)mod, (void)r, (void)a, (void)b; return 1; }
-static uint32_t ApiNavRouteReadAbsent(HfMod* mod, uint32_t r, const float* a, void* s, float* c, uint32_t m) { (void)mod, (void)r, (void)a, (void)s, (void)c, (void)m; return 0; }
-static void ApiNavRouteCloseAbsent(HfMod* mod, uint32_t r) { (void)mod, (void)r; }
 /* The table's entries from SDK 32 on (ApiInit). */
-#define IT_API {(void*)ApiNavRouteOpenAbsent, (void*)ApiNavRouteAskAbsent, (void*)ApiNavRouteReadAbsent, (void*)ApiNavRouteCloseAbsent}, \
-    ApiSetItemTraits, ApiSetStratagemTraits
+#define IT_API ApiNavRouteOpen, ApiNavRouteAsk, ApiNavRouteRead, ApiNavRouteClose, ApiSetItemTraits, ApiSetStratagemTraits

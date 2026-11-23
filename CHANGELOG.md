@@ -17,6 +17,9 @@ On `dev`, since 0.4.0-beta.
   included. `hellforge_traits.h` names the game's labels ([Item traits](docs/modding/traits.md)).
 - **HellForge's own MODS tab.** The escape menu gets a MODS tab after OPTIONS with every mod's `add_option` rows, without
   the Vanilla Plus Megapack. With the Megapack's menu on, HellForge leaves the tab to it ([ui](docs/modding/ui.md#settings-in-the-mods-menu)).
+- **Navmesh routes for any walker (SDK 32).** `nav_route_open`, `nav_route_ask` and `nav_route_read` give a mod a
+  path agent of its own, so units with none, such as sentries a mod walks, can go round buildings
+  ([Navmesh routes](docs/modding/ai.md#navmesh-routes-for-any-walker)).
 - **Orders for AI units (SDK 31).** `ai_obey` makes a mod's AI units obey the comms wheel's Follow me and Hold
   position. `ai_order` sends one to follow, hold or go to a point through the game's own pathing, with detours when a
   point can't be reached. `hf_on_order` hears the wheel on every machine. `HfFaction` puts an entity copy on the

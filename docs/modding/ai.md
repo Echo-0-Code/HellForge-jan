@@ -2,7 +2,7 @@
 
 <!-- diataxis: how-to -->
 
-SDK 31 lets a code mod give AI units orders. A unit keeps the game's own brain: it aims, fights and walks with its
+SDK 31 lets a code mod give AI units orders, and SDK 32 gives any walker a navmesh route. A unit keeps the game's own brain: it aims, fights and walks with its
 own animations. HellForge only tells its path agent where to go, through the game's own movement call. Orders come
 from the comms wheel's Follow me and Hold position, or from the mod. The types are in `hellforge_ai.h`, which
 `hellforge_mod.h` includes.
@@ -17,6 +17,7 @@ from the comms wheel's Follow me and Hold position, or from the mod. The types a
 - [When a point cannot be reached](#when-a-point-cannot-be-reached)
 - [Co-op](#co-op)
 - [Which units can be ordered](#which-units-can-be-ordered)
+- [Navmesh routes for any walker](#navmesh-routes-for-any-walker)
 
 ## Before you call
 
@@ -143,7 +144,37 @@ A unit needs a brain and a navmesh path agent. These come with the unit it copie
 |---|---|
 | S.E.A.F. troopers, Helldivers | Yes |
 | Scout Striders, Automaton infantry and walkers | Yes |
-| Sentries, emplacements, props | No: `ai_order` is refused |
+| Sentries, emplacements, props | No: `ai_order` is refused; use [navmesh routes](#navmesh-routes-for-any-walker) |
 
 A model on a copied unit must be rigged to that unit's skeleton, because the brain sends animation events its body
 plan expects.
+
+## Navmesh routes for any walker
+
+SDK 32 gives a mod its own path agent, so a unit with none (a sentry your mod walks, a prop, a camera) can still go
+round buildings. The game answers in one or two updates; your code moves the walker along the corners.
+
+1. Check `hf->size >= offsetof(HfApi, nav_route_close) + sizeof(void*)` and set `"sdk": 32`.
+2. Open a route per walker with `nav_route_open` and an `HfNavProfile`:
+   - `preset`: `HF_NAV_TROOPER` (0.79 m), `HF_NAV_VEHICLE` (1.05 m) or `HF_NAV_VEHICLE_WIDE` (2.1 m);
+   - or `entity`: path as that entity does (its Navigation record);
+   - or `profile` and `radius`.
+3. On the game thread, `nav_route_ask(mod, route, from, to)`. HellForge moves `to` onto the ground there.
+4. Every update, `nav_route_read(mod, route, from, &state, corners, 64)`. Steer at the first corner farther than
+   your walker's radius.
+5. `nav_route_close` when the walker goes.
+
+| `state.status` | Meaning | What to do |
+|---|---|---|
+| `HF_ROUTE_SEARCHING` | No answer yet | Keep the last route, or walk straight |
+| `HF_ROUTE_READY` | Corners to the goal | Follow them |
+| `HF_ROUTE_PARTIAL` | Corners that stop short | Follow them, then ask again |
+| `HF_ROUTE_FAILED` | No answer in 3 s | Walk straight; ask again later |
+| `HF_ROUTE_NONE`, `HF_ROUTE_OFF` | Nothing asked this mission, or no mission | Walk straight |
+
+- Each ask restarts the search. Ask again only when the goal moved more than about 2 m, or after 2 s without
+  headway; asking every update never finishes a route.
+- A route belongs to one mission. In the next one it reads `HF_ROUTE_NONE` until you ask again.
+- Routes are found on the machine that asks. Walk the walker on the host and send its position to the other players.
+- Keep a simple mover beside it. A walker that steps straight at its goal, with ground rays for its footing, is enough
+  in open ground and is the fallback whenever there is no route.

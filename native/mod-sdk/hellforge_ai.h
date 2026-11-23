@@ -1,4 +1,4 @@
-/* HellForge mod SDK 31: orders for AI units (docs/modding/ai.md). Included by hellforge_mod.h.
+/* HellForge mod SDK 31-32: orders for AI units and navmesh routes (docs/modding/ai.md). Included by hellforge_mod.h.
  * A unit keeps its own brain: it aims, fights and walks with the game's AI. HellForge only tells it where to go, through
  * the game's own path agent (the navmesh), the way the S.E.A.F. troopers' brains do. Orders come from the comms wheel
  * (Follow me, Hold position) or from the mod (ai_order). A unit needs a navmesh path agent: walkers and troopers have
@@ -62,5 +62,41 @@ typedef struct HfAiState
     uint32_t moving;      /* 1 while it walks: it moved since the last step (a quarter second) */
     uint32_t behaviour;   /* its brain (behaviour id) */
 } HfAiState;
+
+/* ---- SDK 32: navmesh routes (nav_route_open .. nav_route_close) ---- */
+
+/* HfNavProfile.preset: the sizes the game's own walkers path as. */
+#define HF_NAV_TROOPER 1u      /* a trooper: radius 0.79 m */
+#define HF_NAV_VEHICLE 2u      /* a vehicle-sized walker: radius 1.05 m */
+#define HF_NAV_VEHICLE_WIDE 3u /* a wide vehicle: radius 2.1 m */
+
+/* Who a route is for. Zero-initialize it, set size and one of: preset, entity (its Navigation record), or profile + radius. */
+typedef struct HfNavProfile
+{
+    uint32_t size;    /* sizeof(HfNavProfile) */
+    uint32_t preset;  /* HF_NAV_..., or 0 */
+    uint64_t entity;  /* an entity resource with a Navigation record (a walker, a trooper), or 0 */
+    uint32_t profile; /* a navigation profile hash, with radius */
+    float radius;     /* metres, up to 2.6 */
+    float value;      /* the profile's companion value (default 0.5) */
+} HfNavProfile;
+
+/* nav_route_read's answer (HfNavRoute.status) */
+#define HF_ROUTE_NONE 0u      /* nothing asked in this mission yet */
+#define HF_ROUTE_SEARCHING 1u /* asked: no answer yet (one or two updates) */
+#define HF_ROUTE_READY 2u     /* a route to the goal */
+#define HF_ROUTE_PARTIAL 3u   /* a route that stops short of the goal (the goal is off the navmesh or cut off) */
+#define HF_ROUTE_FAILED 4u    /* no answer within 3 s */
+#define HF_ROUTE_OFF 5u       /* not in a mission, or the game's code is not the reviewed one */
+
+typedef struct HfNavRoute
+{
+    uint32_t size;   /* sizeof(HfNavRoute) */
+    uint32_t status; /* HF_ROUTE_... */
+    uint32_t count;  /* its corners, from the walker to the end (at most 64) */
+    float length;    /* metres along the corners */
+    float end[3];    /* its last corner */
+    float goal[3];   /* the goal asked for, on the ground */
+} HfNavRoute;
 
 #endif

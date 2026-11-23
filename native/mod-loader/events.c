@@ -66,6 +66,7 @@ static void Raise(HfEventInfo* event) { RaiseTo(event, NULL); }
 
 static int AnyListener(uint32_t kind) { return (g_listening >> kind) & 1; }
 static void AiStartWanted(void); /* ai_orders.c: HF_ON_ORDER's source is its update */
+static void NavRoutesTick(void); /* nav_routes.c: a route's agent never outlives its mission */
 
 static void EventSourcesTick(void); /* EVENT SOURCES */
 static void ActionsTick(void);      /* actions.c */
@@ -91,6 +92,7 @@ static void EventsTick(void)
     }
     EventSourcesTick();
     AiStartWanted();
+    NavRoutesTick();
     ActionsTick();
     PaidGuardTick();
 }

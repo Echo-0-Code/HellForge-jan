@@ -1786,8 +1786,14 @@ typedef struct HfApi
     int (*ai_order)(HfMod* mod, uint32_t entity, uint32_t order, uint32_t target, const float point[3]);
     /* A unit's order and how it goes, in state (may be NULL); answers its status (HF_AI_...). Any thread. */
     uint32_t (*ai_state)(HfMod* mod, uint32_t entity, HfAiState* state);
-    /* ---- SDK 32: navmesh routes, a build of its own; here they refuse (nav_route_open answers 0) ------------------- */
-    void* sdk32_nav_routes[4]; /* nav_route_open, nav_route_ask, nav_route_read, nav_route_close */
+    /* ---- SDK 32: navmesh routes (hellforge_ai.h, docs/modding/ai.md; check hf->size) ----------------------------------- */
+    uint32_t (*nav_route_open)(HfMod* mod, const HfNavProfile* profile); /* a route of the mod's own: its id, 0 refused */
+    /* Asks for a route from `from` to `to` (to is moved onto the ground there). Game thread, in a mission. 0 asked, 1 refused. */
+    int (*nav_route_ask)(HfMod* mod, uint32_t route, const float from[3], const float to[3]);
+    /* How the route stands (HF_ROUTE_...); state, corners (x, y, z each, up to max) and from (the walker now) may be NULL. */
+    uint32_t (*nav_route_read)(HfMod* mod, uint32_t route, const float from[3], HfNavRoute* state, float* corners, uint32_t max);
+    /* The route goes. Game thread. */
+    void (*nav_route_close)(HfMod* mod, uint32_t route);
     /* ---- SDK 34: the traits an item's card shows (include hellforge_traits.h, docs/modding/traits.md; check hf->size) */
     /* A loadout item's trait slots (a primary, secondary or throwable, or a support weapon's or backpack's armory card),
      * vanilla or add_weapon's: up to 5 text ids, the rest emptied, written again whenever the game reloads its data.
@@ -1927,14 +1933,11 @@ static inline int hf_on_stat(HfMod* mod, HfStatListener listener, void* user, in
 static inline int hf_on_weapon(HfMod* mod, HfWeaponListener listener, void* user, int32_t priority)
 { return hf_subscribe_(mod, HF_ON_WEAPON, HF_LISTENER_(listener), user, priority); }
 /* HF_ON_EXPLOSION (SDK 11): an explosion was requested in this machine's world. */
-static inline int hf_on_explosion(HfMod* mod, HfExplosionListener listener, void* user, int32_t priority)
-{ return hf_subscribe_(mod, HF_ON_EXPLOSION, HF_LISTENER_(listener), user, priority); }
+static inline int hf_on_explosion(HfMod* mod, HfExplosionListener listener, void* user, int32_t priority) { return hf_subscribe_(mod, HF_ON_EXPLOSION, HF_LISTENER_(listener), user, priority); }
 /* HF_ON_BUGHOLE (SDK 11): a bug hole was closed, on every machine. */
-static inline int hf_on_bughole(HfMod* mod, HfBugholeListener listener, void* user, int32_t priority)
-{ return hf_subscribe_(mod, HF_ON_BUGHOLE, HF_LISTENER_(listener), user, priority); }
+static inline int hf_on_bughole(HfMod* mod, HfBugholeListener listener, void* user, int32_t priority) { return hf_subscribe_(mod, HF_ON_BUGHOLE, HF_LISTENER_(listener), user, priority); }
 /* HF_ON_ORDER (SDK 31): a player gave Follow me or Hold position on the comms wheel, on every machine. */
-static inline int hf_on_order(HfMod* mod, HfOrderListener listener, void* user, int32_t priority)
-{ return hf_subscribe_(mod, HF_ON_ORDER, HF_LISTENER_(listener), user, priority); }
+static inline int hf_on_order(HfMod* mod, HfOrderListener listener, void* user, int32_t priority) { return hf_subscribe_(mod, HF_ON_ORDER, HF_LISTENER_(listener), user, priority); }
 
 /* The load events (on): the callback once the game reaches that point of its start, at once if it has. */
 static inline int hf_on_game_loaded(HfMod* mod, HfEventCallback callback, void* user)
