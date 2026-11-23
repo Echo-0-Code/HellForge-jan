@@ -150,7 +150,8 @@ if(Test-Path -LiteralPath $editorTranslations){Copy-Item -LiteralPath $editorTra
 # icon is made by its data spec from each player's game copy. Mod Options is Lua only: its built patch is tracked.
 foreach($name in @('hell-forge','vanilla-plus','mod-options-menu')){
     $mod=Join-Path $project ('examples/mods/'+$name)
-    $code=(Get-Content -Raw -LiteralPath (Join-Path $mod 'hellforge-mod.json')|ConvertFrom-Json).code
+    $code=(Get-Content -Raw -LiteralPath (Join-Path $mod 'hellforge-mod.json')|ConvertFrom-Json).PSObject.Properties['code']
+    if($code){$code=$code.Value}
     if($code){& (Join-Path $PSScriptRoot 'Build-Mod.ps1') $mod|Out-Null}
     $target=Join-Path $staging ('bundled-mods/'+$name)
     foreach($file in @(git -C $project ls-files ('examples/mods/'+$name))|Where-Object {$_ -notlike ('examples/mods/'+$name+'/src/*')}){
