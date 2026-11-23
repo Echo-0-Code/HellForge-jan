@@ -330,6 +330,10 @@ def main(runtime, out_json, out_header):
     # Packages mods load for sounds no catalogue entry carries (HfAbility.package): the Launch ICBM objective's, whose bank
     # obj_gen_icbm holds the ICBM launch sequence (HD2Runtime research/sound-events: the bank ships in this package).
     used.setdefault('0x20BDEC2A51065E1F', 'packages/content/gen_icbm (the Launch ICBM objective: its launch sounds)')
+    # Enemy units have no loadout package, so a mod that drops a copy of one (custom AI) loads the unit's own package with
+    # load_package. The Scout Strider's also holds its conscript pilot (FileDiver, build 25480438).
+    used.setdefault('0x094394C2A2C22F36', 'packages/generated/enemies/cyborg_walker_scout (Scout Strider and its pilot)')
+    used.setdefault('0x2C8D8CC831D0C732', 'packages/generated/enemies/cyborg_walker_scout_tier2')
 
     loader = residency['loader']
     engine = loader['engine']

@@ -40,8 +40,8 @@ uint64_t entity = api->register_entity(mod, &walker);
 - Do not change a living unit's side in the game's faction table. The game writes it back within seconds, and an
   enemy squad's member that changes side is removed.
 - Enemies shoot a friendly unit, and its brain picks enemies as targets.
-- A stratagem that drops a copy of an enemy must load the enemy's package: set `HfStratagem.package` to the package
-  that holds its unit. The Scout Strider and its pilot are in `0x094394C2A2C22F36`.
+- A copy of an enemy needs the enemy's package loaded, or the game crashes when it spawns. Enemies have no loadout
+  package, so call `load_package` once the game has loaded. The Scout Strider and its pilot are in `0x094394C2A2C22F36`.
 
 ## Obey the comms wheel
 
