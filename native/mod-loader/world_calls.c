@@ -449,3 +449,4 @@ static void WorldCallsStart(void)
 #include "menu_tabs.c" /* SDK 26/27: after this file (its menu reads and pins) */
 #include "world_sight.c"  /* SDK 28: after this file (its scan of the health records) */
 #include "joint_poses.c"  /* SDK 28: after terminal_camera.c (the render step's pins) */
+#include "status_effects.c" /* SDK 29: after this file (WcEntity and the channel's lines) */
