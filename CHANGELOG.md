@@ -12,6 +12,8 @@ On `dev`, since 0.4.0-beta.
 
 ### Added
 
+- **HellForge's own MODS tab.** The escape menu gets a MODS tab after OPTIONS with every mod's `add_option` rows, without
+  the Vanilla Plus Megapack. With the Megapack's menu on, HellForge leaves the tab to it ([ui](docs/modding/ui.md#settings-in-the-mods-menu)).
 - **Orders for AI units (SDK 31).** `ai_obey` makes a mod's AI units obey the comms wheel's Follow me and Hold
   position. `ai_order` sends one to follow, hold or go to a point through the game's own pathing, with detours when a
   point can't be reached. `hf_on_order` hears the wheel on every machine. `HfFaction` puts an entity copy on the

@@ -188,8 +188,8 @@ if (HAS(hf, add_option) && hf->add_option(mod, &speed)) hf->get_option(mod, "spe
 | `HF_OPTION_CHOICE` | the index into `choices`, from 0 | `choice_count` (2 to 16), `choices` |
 | `HF_OPTION_SLIDER` | a number, snapped to `step` | `min`, `max`, `step` |
 
-- The menu is the Vanilla Plus Megapack's Mod Options Menu. The bundled HellForge Mod Options mod shows the rows
-  there, and needs Bingus Shared Loader. Without them, options keep their saved values.
+- HellForge draws the MODS tab itself, one button per mod. With the Vanilla Plus Megapack's Mod Options Menu on, the
+  rows show in that menu instead, through the bundled HellForge Mod Options mod and Bingus Shared Loader.
 - The id keys the saved value: a-z, 0-9, `_ . -`, up to 48. Keep it from one version to the next.
 - Values are saved in `<logs>\sessions\mod-options\<mod id>.txt`. HellForge's value wins over the menu's own.
 - `set_option` changes a value from code, and the menu's row follows. It does not call the mod's own `on_change`.

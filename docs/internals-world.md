@@ -52,10 +52,32 @@ the same widget inside a menu screen, and each screen reacts to a tab change in 
 
 - The label setter and the bar's update (0x17AA950) and visual (0x17AA5D0) are left unhooked. The Vanilla Plus
   Megapack places its own detours there, pinned to their first bytes.
-- The Escape menu (+0xC8) and Change Bindings (+0xD0) bars, both at +0x4E0, are left out. The Megapack's MODS tabs
-  there accept the game's 3 labels or its own 4th, and nothing else.
+- The Escape menu (+0xC8) and Change Bindings (+0xD0) bars, both at +0x4E0, take no mod tabs. The Escape bar's 4th
+  label is the MODS tab (below). The Megapack's MODS tabs accept the game's 3 labels or a 4th MODS, and nothing else.
 - The Store (+0x80) labels its bar through another setter (0x17AAFA0) with 12-byte records. The Superstore (+0x90)
   writes the index straight into its page state. Neither is supported yet.
+
+## The escape menu's MODS tab
+
+`mods_tab.c` and `mods_tab_model.c` show the `add_option` (SDK 30) rows in a MODS tab after GAME, SOCIAL and OPTIONS.
+They port the Vanilla Plus Megapack's Mod Options Menu (0BSD) and keep its review of every offset and function.
+
+- The tab is a 4th label set through the label setter, which is called and never hooked. The game draws it and cycles
+  Q/E over it.
+- On MODS, the OPTIONS content shows with its category buttons relabelled, one per mod. The shown panel's rows are
+  rebuilt from HellForge's own setting descriptors.
+- Every row names setting 139, whose value type is none, so no game setting is read or written.
+- Edits wait for APPLY (Tab), which saves them and calls each mod's `on_change`. Leaving with edits opens the game's
+  UNAPPLIED CHANGES dialog, whose confirm discards them.
+- Past 8 mods, the buttons show 7 at a time and the 8th turns the pages.
+- It waits up to 60 s after the game loads for the 25 functions, the tab and category labels and setting 139.
+
+It steps aside so the menu never shows two MODS tabs:
+
+- When the Megapack is loaded and its `mod_options_menu` component is on (its `settings.ini`), that menu draws the tab.
+  HellForge's rows reach it through the bundled HellForge Mod Options Lua mod.
+- When the bar already has a 4th tab that is not HellForge's, its tab stays off for the session.
+- `modloader.log` says which with a `mods tab:` line.
 
 ## Sight, projectiles, sides and poses
 

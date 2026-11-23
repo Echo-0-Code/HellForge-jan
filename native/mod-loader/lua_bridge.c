@@ -443,3 +443,4 @@ HF_LUA_API void hellforge_lua_log(HfMod* mod, const char* text) { if (LuaMod(mod
 HF_LUA_API const char* hellforge_lua_last(HfMod* mod) { return LuaMod(mod) ? mod->last : ""; }
 
 #include "mod_options.c" /* SDK 30: code mods' options for the OPTIONS > MODS menu */
+#include "mods_tab.c" /* after mod_options.c: HellForge's own MODS tab over its options */

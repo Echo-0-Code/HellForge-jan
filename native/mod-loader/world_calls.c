@@ -444,6 +444,7 @@ static void WorldCallsStart(void)
     snprintf(g_wcMod.id, sizeof g_wcMod.id, "hellforge.effects");
     g_wcMod.log = g_log;
     g_wcMod.loaded = 1;
+    ModsTabStart(); /* mods_tab.c: the escape menu's MODS tab, unless the Megapack draws it */
 }
 
 #include "menu_tabs.c" /* SDK 26/27: after this file (its menu reads and pins) */
