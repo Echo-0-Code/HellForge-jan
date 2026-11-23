@@ -16,13 +16,13 @@ jobs:
       - name: Download the artifact and publish it
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: '45285285705'
-          TAG: test-dac15d3
+          RUN_ID: '45289170174'
+          TAG: test-67ca93b
         run: |
           gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n test-package -D pkg
           find pkg -type f -exec ls -la {} \;
           cp "$(find pkg -name HellForge-Setup.exe | head -1)" HellForge-Setup.exe
           sha256sum HellForge-Setup.exe | tee SHA256SUMS
-          gh release create "$TAG" -R "$GITHUB_REPOSITORY" --prerelease --target dac15d31f064f41d4556c1602e27ec4076a5a7a9 \
-            --title "Test build dac15d3, test-a72e796 + armory bitmap fix for mods' records (PR #56) (run $RUN_ID)" --notes "test-package artifact of run $RUN_ID, republished for download." \
+          gh release create "$TAG" -R "$GITHUB_REPOSITORY" --prerelease --target 67ca93b6fc49b0723cf2ce6a915c60acad28e925 \
+            --title "Test build 67ca93b, test-dac15d3 + SDK 34 item traits (set_item_traits, set_stratagem_traits), branch feature/item-trait-sdk (run $RUN_ID)" --notes "test-package artifact of run $RUN_ID, republished for download." \
             HellForge-Setup.exe SHA256SUMS
