@@ -90,6 +90,23 @@ static void ArmoryListFixture(void)
     assert(counts[1] == 1 && counts[2] == 2 && counts[3] == 1);
     assert(list(liberator) == 0 && list(sharedBase) == 1 && list(eat) == 2 && list(copy) == 2);
 
+    /* A mod's record past the game's own (REG_LOADOUT_RECORDS) has no bit in left: whatever follows the bitmap, it keeps
+     * its entry (0.4.0-beta bf2ee6d read past the stack bitmap and dropped the GR-12 Sleet and both exosuit packs). */
+    {
+        uint8_t* big = (uint8_t*)calloc(1, (size_t)SlotsOf(REG_LOADOUT) * 16 + (REG_LOADOUT_RECORDS + 2) * REG_LOADOUT_STRIDE);
+        assert(big != NULL);
+        const uint32_t mod = REG_LOADOUT_RECORDS + 1;
+        AlRecord(big, 0, 0xCB778090u, 2); AlRow(big, eat, 0);
+        AlRecord(big, mod, 0x4C17F039u, 2);
+        uint8_t poisoned[(REG_LOADOUT_RECORDS + 7) / 8 + 16];
+        memset(poisoned, 0, sizeof poisoned);
+        memset(poisoned + (REG_LOADOUT_RECORDS + 7) / 8, 0xFF, 16); /* what lay past the bitmap on the stack */
+        ArmoryFill(armory, big, mod + 1, poisoned);
+        memcpy(counts, armory + 0x1B40, sizeof counts);
+        assert(counts[2] == 2);
+        free(big);
+    }
+
     memcpy(g_weapons, saved, sizeof saved);
     g_weaponCount = savedCount;
     free(armory);
