@@ -420,12 +420,38 @@ static inline HfFn_BehaviourOwnPosition hf_fn_BehaviourOwnPosition(HfMod* mod) {
 typedef void (*HfFn_BehaviourOrbitStep)(void* ctx, const float* position, void* unused, float height, float radius);
 static inline HfFn_BehaviourOrbitStep hf_fn_BehaviourOrbitStep(HfMod* mod) { return (HfFn_BehaviourOrbitStep)hf_function_(mod, "BehaviourOrbitStep"); }
 
-/* BehaviourMoveTo (game.dll+0x4D1150; call only). Sends a flying behaviour's mover to a point.
+/* BehaviourMoveTo (game.dll+0x4D1150; call only). Sends a behaviour's entity to a point through the first mover it has:
+ * its navmesh path agent (walking units: it paths there), a flight controller (a Pelican) or a third mover.
  *   ctx     {EntityInfo*, P*}
  *   target  the point to fly to (3 floats)
- * From HellForge's behaviours (behaviours.c). */
+ * From HellForge's behaviours (behaviours.c); custom AI research (custom-ai/FINDINGS.md "How SEAF moves"). */
 typedef void (*HfFn_BehaviourMoveTo)(void* ctx, const float* target);
 static inline HfFn_BehaviourMoveTo hf_fn_BehaviourMoveTo(HfMod* mod) { return (HfFn_BehaviourMoveTo)hf_function_(mod, "BehaviourMoveTo"); }
+
+/* BehaviourStop (game.dll+0x4D1640; call only). Stops a behaviour's entity where it is: clears its path agent's points
+ * and moving flag (BehaviourMoveTo's counterpart).
+ *   ctx  {EntityInfo*, P*}
+ * From custom AI research (custom-ai/FINDINGS.md: the SEAF trooper brain calls it; it held a Scout Strider on its
+ * point). */
+typedef void (*HfFn_BehaviourStop)(void* ctx);
+static inline HfFn_BehaviourStop hf_fn_BehaviourStop(HfMod* mod) { return (HfFn_BehaviourStop)hf_function_(mod, "BehaviourStop"); }
+
+/* CommsWheelPick (game.dll+0x182BFB0; hook or call). The comms wheel's pick on this machine: plays the item's line and,
+ * for Follow me and Hold position, sends the AI event (0xE5764925 follow, 0x71382183 hold) to the peers as
+ * rpc_trigger_avatar_comms_notify.
+ *   state  the local player's comms state
+ *   item   the item's index in the comms table (game.dll+0x3317C30, 0x20 bytes each, +0 its id): 7 Follow me
+ *          (0xD6208139), 1 Hold position (0x0DAE042E); 0xFFFFFFFF none
+ *   r8     not reviewed: pass it on
+ *   r9     not reviewed: pass it on
+ * From custom AI research (custom-ai/FINDINGS.md "How SEAF troops get Follow me / Hold position"; hooked in game by its
+ * probe). */
+typedef uint64_t (*HfFn_CommsWheelPick)(void* state, uint32_t item, uint64_t r8, uint64_t r9);
+static inline HfFn_CommsWheelPick hf_fn_CommsWheelPick(HfMod* mod) { return (HfFn_CommsWheelPick)hf_function_(mod, "CommsWheelPick"); }
+static inline int hf_hook_CommsWheelPick(HfMod* mod, HfFn_CommsWheelPick detour, HfFn_CommsWheelPick* original, int32_t priority)
+{
+    return hf_hook_function_(mod, "CommsWheelPick", (void*)detour, (void**)original, priority);
+}
 
 /* BehaviourFace (game.dll+0x4C1530; call only). Sets the hover controller's desired facing, turning a hovering
  * behaviour's body.

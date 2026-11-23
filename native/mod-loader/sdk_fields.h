@@ -1501,6 +1501,14 @@ static const SdkField kSdkFieldsVehicle[] = {
     {"wheel7_rotation_joint", 480, 4, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_NONE},
     {"wheel7_joint_d", 484, 4, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_NONE},
 };
+static const SdkField kSdkFieldsFaction[] = {
+    {"factions", 0, 12, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_NONE},
+    {"targeting_node", 12, 4, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_NONE},
+    {"half_width", 64, 4, HF_TYPE_F32, HF_APPLIES_RESPAWN, REF_NONE},
+    {"half_forward_size", 68, 4, HF_TYPE_F32, HF_APPLIES_RESPAWN, REF_NONE},
+    {"priority", 72, 4, HF_TYPE_F32, HF_APPLIES_RESPAWN, REF_NONE},
+    {"complex_targeting_nodes", 84, 64, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_NONE},
+};
 static const SdkComponent kSdkComponents[] = {
     {"ProjectileWeapon", "ProjectileWeaponComponentData", 25480438u, 616u, kSdkFieldsProjectileWeapon, 45, 0, 321},
     {"WeaponData", "WeaponDataComponentData", 25480438u, 1232u, kSdkFieldsWeaponData, 21, 0, 236},
@@ -1579,4 +1587,5 @@ static const SdkComponent kSdkComponents[] = {
     {"StatusEffectReceiver", "StatusEffectReceiverComponentData", 25480438u, 46600u, kSdkFieldsStatusEffectReceiver, 148, 0, 307},
     {"Interactable", "InteractableComponentData", 25480438u, 1104u, kSdkFieldsInteractable, 48, 0, 244},
     {"Vehicle", "VehicleComponentData", 25480438u, 3704u, kSdkFieldsVehicle, 32, 0, 91},
+    {"Faction", "FactionComponentData", 25480438u, 152u, kSdkFieldsFaction, 6, 0, 90},
 };

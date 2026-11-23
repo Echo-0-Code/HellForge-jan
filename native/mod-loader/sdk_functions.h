@@ -37,6 +37,8 @@ static const SdkFunction kSdkFunctions[] = {
     {"BehaviourOwnPosition", "game.dll", 0x4BC5D0u, "40 53 56 48 83 EC 38 48 8B 32 48 8B D9 8B 4E 0C 85 C9 74 2E 48 8B 05 1D 9D E6 02 48 8B 50 18 48 8B 82 88 00 00 00 33 D2", 0},
     {"BehaviourOrbitStep", "game.dll", 0x4D5E60u, "48 89 5C 24 10 48 89 6C 24 18 57 41 54 41 55 41 56 41 57 48 81 EC 80 00 00 00 4C 8B 29 45 33 F6 48 8B 2D D1 07 E5 02 4C", 0},
     {"BehaviourMoveTo", "game.dll", 0x4D1150u, "48 89 5C 24 08 48 89 6C 24 18 48 89 74 24 20 48 89 54 24 10 57 41 54 41 55 41 56 41 57 48 83 EC 30 4C 8B 29 45 33 F6 8B", 0},
+    {"BehaviourStop", "game.dll", 0x4D1640u, "48 83 EC 28 48 8B 01 4C 8B 1D ?? ?? ?? ?? 8B 40 08 3B 05", 0},
+    {"CommsWheelPick", "game.dll", 0x182BFB0u, "4C 8B DC 55 57 41 54 41 55 49 8D 6B A1 48 81 EC B8 00 00 00", 1},
     {"BehaviourFace", "game.dll", 0x4C1530u, "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 57 41 54 41 55 41 56 41 57 48 83 EC 30 4C 8B 21 45 33 D2 44 8B 05 C7 26 FC", 0},
     {"BehaviourTargetPosition", "game.dll", 0x4B0C40u, "48 89 5C 24 08 48 89 6C 24 10 48 89 74 24 18 48 89 7C 24 20 41 55 41 56 41 57 48 83 EC 40 48 8B 5A 08 4D 8B E8 48 8B F9", 0},
     {"PelicanTurretIdle", "game.dll", 0x44F310u, "40 55 41 55 48 8D AC 24 38 FE FF FF 48 81 EC C8 02 00 00 48 8B 05 E6 CC 1E 02 48 33 C4 48 89 85 00 01 00 00 48 8B 41 08", 0},

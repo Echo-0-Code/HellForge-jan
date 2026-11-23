@@ -12,6 +12,10 @@ On `dev`, since 0.4.0-beta.
 
 ### Added
 
+- **Orders for AI units (SDK 31).** `ai_obey` makes a mod's AI units obey the comms wheel's Follow me and Hold
+  position. `ai_order` sends one to follow, hold or go to a point through the game's own pathing, with detours when a
+  point can't be reached. `hf_on_order` hears the wheel on every machine. `HfFaction` puts an entity copy on the
+  players' side from its spawn ([AI orders](docs/modding/ai.md)).
 - **Mod settings in OPTIONS > MODS (SDK 30).** `add_option` gives a code mod toggles, choices and sliders in the
   escape menu's MODS tab, through the bundled HellForge Mod Options and the Vanilla Plus Megapack's menu. HellForge
   saves the values; `get_option` and `set_option` read and change them ([ui](docs/modding/ui.md#settings-in-the-mods-menu)).

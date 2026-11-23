@@ -1,0 +1,654 @@
+/* Orders for AI units (SDK 31, docs/modding/ai.md): the comms wheel's Follow me and Hold position, HF_ON_ORDER, ai_obey,
+ * ai_order and ai_state. Included at the end of world_calls.c (WcEntity, EvpUnitPosition, the channel's send line).
+ * A unit keeps its brain; HellForge hands its path agent a point through the game's own BehaviourMoveTo, as the S.E.A.F.
+ * brains do (Automaton brains never call it). A point goes again only when it moved: a path takes several AI steps, and
+ * one asked every half second never finished for a far point. A unit without headway gets nearer points, then rests.
+ * Orders come three ways, kept once by speaker and order: this machine's wheel (CommsWheelPick), the game's own
+ * rpc_trigger_avatar_comms_notify (sent in some missions only) and HellForge's "@hellforge.ai" line. Each machine walks
+ * only the units it simulates. Build 25480438. */
+
+#define AI_UNITS 64
+#define AI_RULES 32
+#define AI_PENDING 64
+#define AI_HEARD 16
+#define AI_CHANNEL "@hellforge.ai" /* no mod can have it: mod ids start with a letter or digit */
+#define AI_WIRE_VERSION 1u
+#define AI_BEHAVIOURS 0x3326740u   /* behaviour records: map +0x40, infos +0x58, records +0x60 stride 0x1F8 */
+#define AI_AGENTS 0x3326418u       /* path agents: map +0x30, records +0x50 stride 0xA8 (+0x60 next point, +0x90 moving) */
+#define AI_COMMS 0x3317C30u        /* the comms items, 0x20 bytes each, +0 the id */
+#define AI_COMMS_FOLLOW 0xD6208139u
+#define AI_COMMS_HOLD 0x0DAE042Eu
+#define AI_EVENT_FOLLOW 0xE5764925u /* what the game sends for them */
+#define AI_EVENT_HOLD 0x71382183u
+#define AI_RPC_COMMS 0xD48CEDB2u    /* rpc_trigger_avatar_comms_notify */
+#define AI_STEP_S 0.25
+#define AI_STUCK_S 4.0              /* no headway for this long: the path failed */
+#define AI_RETRY_S 10.0             /* an unreachable point is tried again after this */
+#define AI_LOG_S 5.0
+
+typedef struct AiRule { HfMod* mod; HfAiObey def; } AiRule;
+typedef struct AiUnit
+{
+    HfMod* mod;
+    uint32_t entity, rider, rule; /* rule: its ai_obey row + 1, 0 none */
+    uint32_t order, target, status, issued, tries, detour;
+    float point[3], goal[3], sent[3], detourAt[3], lastPos[3], headwayFrom[3];
+    float follow, hold;
+    double sinceSent, sinceHeadway, retryIn, sinceLog;
+} AiUnit;
+typedef struct AiHeard { uint32_t speaker, order; ULONGLONG at; } AiHeard;
+typedef struct AiWire { uint8_t version, order; uint16_t reserved; uint32_t network; } AiWire;
+typedef struct AiCtx { uint8_t* info; uint8_t* p; } AiCtx;
+typedef void (*AiMoveFn)(AiCtx* ctx, const float* point);
+typedef void (*AiStopFn)(AiCtx* ctx);
+typedef float* (*AiOwnPosFn)(float out[3], AiCtx* ctx);
+typedef uint64_t (*AiWheelFn)(void* state, uint32_t item, uint64_t r8, uint64_t r9);
+
+static AiRule g_aiRules[AI_RULES];
+static volatile LONG g_aiRuleCount;
+static AiUnit g_aiUnits[AI_UNITS];
+static struct { uint32_t entity; uint64_t resource; double at; } g_aiPending[AI_PENDING];
+static AiHeard g_aiHeard[AI_HEARD];
+static AiWire g_aiInbox[32];
+static uint32_t g_aiInboxCount;
+static SRWLOCK g_aiLock = SRWLOCK_INIT;      /* the units, held by the game thread's whole update */
+static SRWLOCK g_aiInboxLock = SRWLOCK_INIT;
+static HfMod g_aiMod;
+static volatile LONG g_aiTicking;
+static int g_aiState;                        /* 0 waiting for the game, 1 ready, -1 off (logged) */
+static int g_aiHooked, g_aiListening;
+static double g_aiClock, g_aiStep;
+static uintptr_t g_aiGame;
+static AiMoveFn g_aiMove;
+static AiStopFn g_aiStop;
+static AiOwnPosFn g_aiOwnPos;
+static AiWheelFn g_aiWheelNext;
+
+static float AiDist(const float* a, const float* b) { float x = a[0] - b[0], y = a[1] - b[1], z = a[2] - b[2]; return sqrtf(x * x + y * y + z * z); }
+static float AiFlat(const float* a, const float* b) { float x = a[0] - b[0], y = a[1] - b[1]; return sqrtf(x * x + y * y); }
+static int AiIn(float v, float low, float high) { return v >= low && v <= high; }
+
+/* ---- the game's records ---- */
+
+/* The game's u32 maps {table, capacity, empty key, multiplier}: an entity's index, -1 none. */
+static int64_t AiMapFind(uintptr_t header, uint32_t key)
+{
+    uint8_t h[20];
+    uint64_t table;
+    uint32_t cap, empty, mult;
+    if (SafeRead(header, h, sizeof h)) return -1;
+    memcpy(&table, h, 8); memcpy(&cap, h + 8, 4); memcpy(&empty, h + 12, 4); memcpy(&mult, h + 16, 4);
+    if (table < 0x10000 || cap == 0 || cap > (1u << 20) || (cap & (cap - 1))) return -1;
+    for (uint32_t i = 0; i < cap && i < 4096; i++)
+    {
+        uint32_t kv[2], slot = (i + mult * key) & (cap - 1);
+        if (SafeRead((uintptr_t)table + (uintptr_t)slot * 8, kv, 8)) return -1;
+        if (kv[0] == key) return kv[1] == 0xFFFFFFFFu ? -1 : (int64_t)kv[1];
+        if (kv[0] == empty) return -1;
+    }
+    return -1;
+}
+
+static uintptr_t AiPtr(uintptr_t at) { uintptr_t v = 0; return SafeRead(at, &v, 8) ? 0 : v; }
+
+/* An entity's behaviour ctx; 0 when it has no behaviour record here. */
+static int AiCtxOf(uint32_t entity, AiCtx* ctx)
+{
+    uintptr_t m = AiPtr(g_aiGame + AI_BEHAVIOURS), info, records, infos;
+    int64_t i = m ? AiMapFind(m + 0x40, entity) : -1;
+    uint32_t named = 0;
+    if (i < 0 || !(infos = AiPtr(m + 0x58)) || !(records = AiPtr(m + 0x60)) || !(info = AiPtr(infos + (uintptr_t)i * 8)) ||
+        SafeRead(info + 8, &named, 4) || named != entity) return 0;
+    ctx->info = (uint8_t*)info;
+    ctx->p = (uint8_t*)(records + (uintptr_t)i * 0x1F8 + 8);
+    return 1;
+}
+static int AiAuthority(const AiCtx* c) { uint32_t f = 0; return !SafeRead((uintptr_t)c->info + 0x14, &f, 4) && (f & 1); }
+static uint32_t AiBehaviour(const AiCtx* c) { uint32_t id = 0; SafeRead((uintptr_t)c->p - 8, &id, 4); return id; }
+
+/* Its navmesh path agent's record, 0 none. */
+static uintptr_t AiAgentOf(uint32_t entity)
+{
+    uintptr_t m = AiPtr(g_aiGame + AI_AGENTS), records = m ? AiPtr(m + 0x50) : 0;
+    int64_t i = m ? AiMapFind(m + 0x30, entity) : -1;
+    return i >= 0 && records ? records + (uintptr_t)i * 0xA8 : 0;
+}
+static int AiMoving(uint32_t entity) { uintptr_t a = AiAgentOf(entity); uint8_t m = 0; return a && !SafeRead(a + 0x90, &m, 1) && m; }
+
+static int AiOwnPos(AiCtx* c, float out[3])
+{
+    AiCtx copy = *c;
+    g_aiOwnPos(out, &copy);
+    for (int k = 0; k < 3; k++) if (!isfinite(out[k]) || fabsf(out[k]) > 100000.0f) return 0;
+    return 1;
+}
+
+/* Any entity's position (its unit's root). */
+static int AiWhere(uint32_t entity, float out[3])
+{
+    uint32_t unit = 0, network = 0;
+    return entity && EvpAlive(entity) && WcEntity(entity, &unit, &network) && EvpUnitPosition(unit, out);
+}
+
+/* The S.E.A.F. brains answer the wheel themselves (their event functions take the AI events). */
+static int AiNativeObeys(uint32_t behaviour)
+{
+    static const uint32_t ids[] = {615, 616, 617, 618, 623, 630, 631};
+    for (size_t i = 0; i < sizeof ids / sizeof ids[0]; i++) if (ids[i] == behaviour) return 1;
+    return 0;
+}
+
+/* ---- moving a unit ---- */
+
+static void AiSend(AiUnit* u, AiCtx* c, const float point[3])
+{
+    g_aiMove(c, point);
+    AiCtx rc;
+    if (u->rider && AiCtxOf(u->rider, &rc)) g_aiMove(&rc, point);
+    memcpy(u->sent, point, 12);
+    u->issued = 1;
+    u->sinceSent = 0;
+}
+
+static void AiHalt(AiUnit* u, AiCtx* c)
+{
+    if (!u->issued) return;
+    g_aiStop(c);
+    AiCtx rc;
+    if (u->rider && AiCtxOf(u->rider, &rc)) g_aiStop(&rc);
+    u->issued = 0;
+}
+
+/* A nearer point after a failed path: halfway, then off to each side of the straight line. */
+static void AiDetourPoint(const float from[3], const float to[3], uint32_t attempt, float out[3])
+{
+    float dx = to[0] - from[0], dy = to[1] - from[1], len = sqrtf(dx * dx + dy * dy);
+    float side = attempt == 2 ? 6.0f : attempt == 3 ? -6.0f : 0.0f, along = attempt == 1 ? 0.5f : 0.4f;
+    float px = len > 0.1f ? -dy / len : 0.0f, py = len > 0.1f ? dx / len : 0.0f;
+    out[0] = from[0] + dx * along + px * side;
+    out[1] = from[1] + dy * along + py * side;
+    out[2] = from[2] + (to[2] - from[2]) * along;
+}
+
+static void AiLog(AiUnit* u, const char* format, ...)
+{
+    char text[400];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(text, sizeof text, format, args);
+    va_end(args);
+    ApiLog(u->mod ? u->mod : &g_aiMod, "ai: unit %u: %s", u->entity, text);
+}
+
+static const char* AiStatusName(uint32_t s)
+{
+    static const char* names[] = {"idle", "moving", "there", "detour", "unreachable", "no path agent"};
+    return s < sizeof names / sizeof names[0] ? names[s] : "?";
+}
+
+/* An unreachable unit's wait: 1 while it rests, 0 when it tries again (the wait ran out, or the point moved 5 m). */
+static int AiResting(AiUnit* u, const float want[3])
+{
+    if (u->status != HF_AI_UNREACHABLE) return 0;
+    if ((u->retryIn -= AI_STEP_S) > 0 && AiDist(want, u->goal) < 5.0f) return 1;
+    u->status = HF_AI_MOVING;
+    u->tries = 0;
+    u->issued = 0;
+    return 0;
+}
+
+/* No headway for AI_STUCK_S: the agent's path failed (its next point stays its own position). A nearer point, or rest. */
+static void AiNoHeadway(AiUnit* u, AiCtx* c, const float pos[3], const float want[3])
+{
+    uintptr_t agent = AiAgentOf(u->entity);
+    float next[3] = {0, 0, 0};
+    if (agent) SafeRead(agent + 0x60, next, 12);
+    u->sinceHeadway = 0;
+    if (++u->tries <= 3)
+    {
+        AiDetourPoint(pos, want, u->tries, u->detourAt);
+        u->detour = 1;
+        u->issued = 0;
+        AiLog(u, "no headway for %.0f s toward %.1f %.1f %.1f (path agent's next point %.1f %.1f %.1f): detour %u to %.1f %.1f %.1f",
+            AI_STUCK_S, (double)want[0], (double)want[1], (double)want[2], (double)next[0], (double)next[1], (double)next[2], u->tries,
+            (double)u->detourAt[0], (double)u->detourAt[1], (double)u->detourAt[2]);
+        return;
+    }
+    u->detour = 0;
+    u->tries = 0;
+    u->status = HF_AI_UNREACHABLE;
+    u->retryIn = AI_RETRY_S;
+    AiHalt(u, c);
+    AiLog(u, "can't reach %.1f %.1f %.1f: standing at %.1f %.1f %.1f, trying again in %.0f s", (double)want[0], (double)want[1],
+        (double)want[2], (double)pos[0], (double)pos[1], (double)pos[2], AI_RETRY_S);
+}
+
+/* Toward `want` (the order's point now), around failed paths. */
+static void AiSteer(AiUnit* u, AiCtx* c, const float pos[3], const float want[3])
+{
+    if (AiResting(u, want)) return;
+    memcpy(u->goal, want, 12);
+    if (u->detour && AiFlat(pos, u->detourAt) < 2.5f) { u->detour = 0; u->issued = 0; } /* there: the real point again */
+    const float* aim = u->detour ? u->detourAt : want;
+    float away = AiFlat(pos, aim), slack = away * 0.15f > 2.0f ? away * 0.15f : 2.0f;
+    if (!u->issued) { memcpy(u->headwayFrom, pos, 12); u->sinceHeadway = 0; } /* a following point moving on is no headway */
+    if (!u->issued || AiDist(aim, u->sent) > slack || (!AiMoving(u->entity) && u->sinceSent > 2.0)) AiSend(u, c, aim);
+    u->status = u->detour ? HF_AI_DETOUR : HF_AI_MOVING;
+    if (AiFlat(pos, u->headwayFrom) > 1.0f) { memcpy(u->headwayFrom, pos, 12); u->sinceHeadway = 0; return; }
+    if ((u->sinceHeadway += AI_STEP_S) >= AI_STUCK_S) AiNoHeadway(u, c, pos, want);
+}
+
+static void AiArrived(AiUnit* u, AiCtx* c)
+{
+    if (u->status != HF_AI_THERE) { u->tries = 0; u->detour = 0; }
+    u->status = HF_AI_THERE;
+    AiHalt(u, c);
+}
+
+/* One unit, every AI_STEP_S; 0 when it is gone. */
+static int AiUnitStep(AiUnit* u)
+{
+    if (!EvpAlive(u->entity)) return 0;
+    AiCtx c;
+    float pos[3], at[3];
+    if (!AiCtxOf(u->entity, &c) || !AiAuthority(&c) || !AiAgentOf(u->entity) || !AiOwnPos(&c, pos))
+    { u->status = u->order ? HF_AI_NO_AGENT : HF_AI_IDLE; return 1; }
+    memcpy(u->lastPos, pos, 12);
+    u->sinceSent += AI_STEP_S;
+    if (u->order == HF_ORDER_FOLLOW && !AiWhere(u->target, at))
+    {
+        AiLog(u, "the entity it followed (%u) is gone: holding here", u->target);
+        u->order = HF_ORDER_HOLD; u->target = 0; memcpy(u->point, pos, 12);
+    }
+    if (u->order == HF_ORDER_NONE) { u->status = HF_AI_IDLE; return 1; }
+    if (u->order == HF_ORDER_FOLLOW)
+    {
+        memcpy(u->point, at, 12);
+        float d = AiFlat(pos, at);
+        if (d <= u->follow + 2.0f) AiArrived(u, &c);
+        else
+        {
+            float want[3] = {at[0] + (pos[0] - at[0]) / d * u->follow, at[1] + (pos[1] - at[1]) / d * u->follow, at[2]};
+            AiSteer(u, &c, pos, want);
+        }
+    }
+    else if (AiFlat(pos, u->point) <= u->hold) AiArrived(u, &c);
+    else AiSteer(u, &c, pos, u->point);
+    if ((u->sinceLog += AI_STEP_S) >= AI_LOG_S)
+    {
+        u->sinceLog = 0;
+        static const char* orders[] = {"none", "FOLLOW", "HOLD", "GOTO"};
+        AiLog(u, "%s %s, at %.1f %.1f %.1f, %.1f m from the order's point, sent to %.1f %.1f %.1f, moving %d", orders[u->order & 3],
+            AiStatusName(u->status), (double)pos[0], (double)pos[1], (double)pos[2], (double)AiFlat(pos, u->point), (double)u->sent[0],
+            (double)u->sent[1], (double)u->sent[2], AiMoving(u->entity));
+    }
+    return 1;
+}
+
+static AiUnit* AiUnitOf(uint32_t entity, int create)
+{
+    AiUnit* empty = NULL;
+    for (int i = 0; i < AI_UNITS; i++)
+    {
+        if (g_aiUnits[i].entity == entity) return &g_aiUnits[i];
+        if (!g_aiUnits[i].entity && !empty) empty = &g_aiUnits[i];
+    }
+    if (!create || !empty) return NULL;
+    memset(empty, 0, sizeof *empty);
+    empty->entity = entity;
+    empty->follow = 6.0f;
+    empty->hold = 3.0f;
+    return empty;
+}
+
+/* An order for one unit (under g_aiLock, game thread). */
+static void AiSetOrder(AiUnit* u, uint32_t order, uint32_t target, const float point[3], const char* from)
+{
+    AiCtx c;
+    float pos[3] = {0, 0, 0};
+    int here = AiCtxOf(u->entity, &c) && AiOwnPos(&c, pos);
+    if (here) AiHalt(u, &c); /* the last order's point is no longer wanted */
+    u->order = order;
+    u->target = order == HF_ORDER_FOLLOW ? target : 0;
+    if (order == HF_ORDER_HOLD && point == NULL) memcpy(u->point, pos, 12);
+    else if (point != NULL) memcpy(u->point, point, 12);
+    u->status = order ? HF_AI_MOVING : HF_AI_IDLE;
+    u->tries = 0; u->detour = 0; u->issued = 0; u->sinceHeadway = 0; u->sinceLog = AI_LOG_S;
+    static const char* orders[] = {"none", "FOLLOW", "HOLD", "GOTO"};
+    AiLog(u, "order %s from %s (behaviour %u)%s", orders[order & 3], from, here ? AiBehaviour(&c) : 0, here ? "" : ": not simulated here yet");
+}
+
+/* ---- orders heard ---- */
+
+/* 1 when the same speaker gave the same order in the last 1.5 s (another route brought it already). */
+static int AiHeardBefore(uint32_t speaker, uint32_t order)
+{
+    ULONGLONG now = GetTickCount64();
+    AiHeard* oldest = &g_aiHeard[0];
+    for (int i = 0; i < AI_HEARD; i++)
+    {
+        if (g_aiHeard[i].speaker == speaker && g_aiHeard[i].order == order && now - g_aiHeard[i].at < 1500) return 1;
+        if (g_aiHeard[i].at < oldest->at) oldest = &g_aiHeard[i];
+    }
+    *oldest = (AiHeard){speaker, order, now};
+    return 0;
+}
+
+static uint32_t AiOrderOf(uint32_t id)
+{
+    if (id == AI_COMMS_FOLLOW || id == AI_EVENT_FOLLOW) return HF_ORDER_FOLLOW;
+    if (id == AI_COMMS_HOLD || id == AI_EVENT_HOLD) return HF_ORDER_HOLD;
+    return HF_ORDER_NONE;
+}
+
+/* The game thread: an order from a speaker (a Helldiver), raised once and handed to the units that obey. */
+static void AiHeardOrder(uint32_t order, uint32_t speaker, uint64_t peer, int local, const char* route)
+{
+    if (!order || !speaker || AiHeardBefore(speaker, order)) return;
+    HfOrderEvent e = {{sizeof e, HF_ON_ORDER, 0}, order, speaker, peer, {0, 0, 0}, (uint32_t)local};
+    int placed = AiWhere(speaker, e.position);
+    Note("ai: %s from Helldiver %u (%s)", order == HF_ORDER_FOLLOW ? "Follow me" : "Hold position", speaker, route);
+    if (AnyListener(HF_ON_ORDER)) Raise(&e.info);
+    if (!placed) return;
+    AcquireSRWLockExclusive(&g_aiLock);
+    for (int i = 0; i < AI_UNITS; i++)
+    {
+        AiUnit* u = &g_aiUnits[i];
+        if (!u->entity || !u->rule) continue;
+        const AiRule* r = &g_aiRules[u->rule - 1];
+        float pos[3];
+        AiCtx c;
+        if (!AiCtxOf(u->entity, &c) || !AiAuthority(&c) || AiNativeObeys(AiBehaviour(&c)) || !AiOwnPos(&c, pos) || AiDist(pos, e.position) > r->def.range) continue;
+        AiSetOrder(u, order, speaker, NULL, route);
+    }
+    ReleaseSRWLockExclusive(&g_aiLock);
+}
+
+/* This machine's player, 0 when it has no Helldiver. */
+static uint32_t AiLocalAvatar(uint64_t* peer, uint32_t* network)
+{
+    EvpPlayer players[EVT_MAX_PLAYERS];
+    int n = EvpPlayers(g_aiGame, players);
+    for (int i = 0; i < n; i++)
+        if (players[i].local && players[i].avatar)
+        {
+            uint32_t unit = 0;
+            *peer = players[i].peer;
+            if (!WcEntity(players[i].avatar, &unit, network)) *network = WC_NO_NETWORK;
+            return players[i].avatar;
+        }
+    return 0;
+}
+
+static uint64_t AiWheelDetour(void* state, uint32_t item, uint64_t r8, uint64_t r9)
+{
+    uint32_t id = 0;
+    if (item < 4096) SafeRead(g_aiGame + AI_COMMS + (uintptr_t)item * 0x20, &id, 4);
+    uint32_t order = AiOrderOf(id);
+    if (order)
+    {
+        uint64_t peer = 0;
+        uint32_t network = WC_NO_NETWORK, avatar = AiLocalAvatar(&peer, &network);
+        if (avatar) AiHeardOrder(order, avatar, peer, 1, "this machine's comms wheel");
+        uint32_t role;
+        AcquireSRWLockShared(&g_sessionLock);
+        role = g_session.role;
+        ReleaseSRWLockShared(&g_sessionLock);
+        if (avatar && network != WC_NO_NETWORK && role != HF_SESSION_SOLO)
+        {
+            AiWire wire = {AI_WIRE_VERSION, (uint8_t)order, 0, network};
+            char hex[sizeof wire * 2 + 1], line[64 + sizeof hex];
+            ChannelHex((const uint8_t*)&wire, sizeof wire, hex);
+            snprintf(line, sizeof line, "send\t%s\tall\t%s", AI_CHANNEL, hex);
+            LiveQueue(line);
+        }
+    }
+    return g_aiWheelNext(state, item, r8, r9);
+}
+
+static int AiRpc(HfMod* mod, const HfRpcEvent* e, void* user)
+{
+    (void)mod; (void)user;
+    int32_t network = 0;
+    uint32_t id = 0;
+    if (e->count != 2 || e->args[0].value == NULL || e->args[1].value == NULL) return HF_RPC_KEEP;
+    memcpy(&network, e->args[0].value, 4);
+    memcpy(&id, e->args[1].value, 4);
+    uint32_t order = AiOrderOf(id), speaker = order ? ApiEntityOfNetwork(NULL, (uint32_t)network) : 0xFFFFFFFFu;
+    if (order && speaker != 0xFFFFFFFFu) AiHeardOrder(order, speaker, e->sender, 0, "the game's comms message");
+    return HF_RPC_KEEP;
+}
+
+/* The other machines' wheel orders, as the live pipe delivers them (its thread): queued for the game thread. */
+static void AiReceive(uint64_t from, const uint8_t* data, uint32_t bytes)
+{
+    (void)from;
+    AiWire wire;
+    if (bytes != sizeof wire) return;
+    memcpy(&wire, data, sizeof wire);
+    if (wire.version != AI_WIRE_VERSION || (wire.order != HF_ORDER_FOLLOW && wire.order != HF_ORDER_HOLD)) return;
+    AcquireSRWLockExclusive(&g_aiInboxLock);
+    if (g_aiInboxCount < 32) g_aiInbox[g_aiInboxCount++] = wire;
+    ReleaseSRWLockExclusive(&g_aiInboxLock);
+}
+
+static void AiTakeInbox(void)
+{
+    AiWire inbox[32];
+    AcquireSRWLockExclusive(&g_aiInboxLock);
+    uint32_t n = g_aiInboxCount;
+    memcpy(inbox, g_aiInbox, sizeof inbox[0] * n);
+    g_aiInboxCount = 0;
+    ReleaseSRWLockExclusive(&g_aiInboxLock);
+    for (uint32_t i = 0; i < n; i++)
+    {
+        uint32_t speaker = ApiEntityOfNetwork(NULL, inbox[i].network);
+        if (speaker != 0xFFFFFFFFu) AiHeardOrder(inbox[i].order, speaker, 0, 0, "HellForge's order line");
+    }
+}
+
+/* ---- units of the rules ---- */
+
+static void AiSpawned(HfMod* mod, const HfSpawnEvent* e, void* user)
+{
+    (void)mod; (void)user;
+    if (!e->authority) return;
+    for (LONG r = 0; r < g_aiRuleCount; r++)
+        if (g_aiRules[r].def.entity == e->resource)
+            for (int i = 0; i < AI_PENDING; i++)
+                if (!g_aiPending[i].entity) { g_aiPending[i].entity = e->entity; g_aiPending[i].resource = e->resource; g_aiPending[i].at = g_aiClock + 1.0; return; }
+}
+
+/* The nearest living Helldiver to a point, 0 none. */
+static uint32_t AiNearestPlayer(const float at[3])
+{
+    EvpPlayer players[EVT_MAX_PLAYERS];
+    int n = EvpPlayers(g_aiGame, players);
+    uint32_t best = 0;
+    float bestD = 1e30f, p[3];
+    for (int i = 0; i < n; i++)
+        if (players[i].avatar && players[i].life == 0 && AiWhere(players[i].avatar, p) && AiDist(p, at) < bestD) { bestD = AiDist(p, at); best = players[i].avatar; }
+    return best;
+}
+
+/* The nearest entity of a rider resource within 8 m, 0 none. */
+static uint32_t AiRiderOf(uint32_t entity, uint64_t rider, const float pos[3])
+{
+    HfFind q = {sizeof q, HF_FIND_HOSTILE | HF_FIND_FRIENDLY | HF_FIND_NEUTRAL, 0, 0, {pos[0], pos[1], pos[2]}, 8.0f};
+    HfFoundEnemy f[32];
+    uint32_t n = rider ? ApiFindEntities(&g_aiMod, &q, f, 32) : 0, best = 0;
+    float nearest = 1e30f;
+    for (uint32_t i = 0; i < n; i++)
+        if (f[i].resource == rider && f[i].entity != entity && f[i].distance < nearest) { nearest = f[i].distance; best = f[i].entity; }
+    return best;
+}
+
+/* A unit of a rule, its parts set up a second after its spawn (under g_aiLock). */
+static void AiSettled(uint32_t entity, uint64_t resource)
+{
+    LONG r = 0;
+    while (r < g_aiRuleCount && g_aiRules[r].def.entity != resource) r++;
+    AiCtx c;
+    float pos[3];
+    if (r == g_aiRuleCount || !AiCtxOf(entity, &c) || !AiOwnPos(&c, pos)) return;
+    const AiRule* rule = &g_aiRules[r];
+    if (AiNativeObeys(AiBehaviour(&c))) { ApiLog(rule->mod, "ai: unit %u runs a S.E.A.F. brain, which obeys the wheel itself", entity); return; }
+    AiUnit* u = AiUnitOf(entity, 1);
+    if (u == NULL) { ApiLog(rule->mod, "ai: unit %u not taken: %d units already obey", entity, AI_UNITS); return; }
+    u->mod = rule->mod; u->rule = (uint32_t)r + 1; u->follow = rule->def.follow_distance; u->hold = rule->def.hold_radius;
+    u->rider = AiRiderOf(entity, rule->def.rider, pos);
+    AiLog(u, "obeys the comms wheel (behaviour %u, path agent %s, rider %u)", AiBehaviour(&c), AiAgentOf(entity) ? "yes" : "NONE", u->rider);
+    uint32_t player = rule->def.start_order == HF_ORDER_FOLLOW ? AiNearestPlayer(pos) : 0;
+    if (player) AiSetOrder(u, HF_ORDER_FOLLOW, player, NULL, "its start order");
+}
+
+/* ---- the game thread ---- */
+
+static int AiReady(void)
+{
+    if (g_aiState != 0) return g_aiState > 0;
+    if (!g_fired[HF_EVENT_GAME_LOADED]) return 0;
+    g_aiGame = ApiModuleBase("game.dll", NULL);
+    g_aiMove = (AiMoveFn)ApiFunction(&g_aiMod, "BehaviourMoveTo");
+    g_aiStop = (AiStopFn)ApiFunction(&g_aiMod, "BehaviourStop");
+    g_aiOwnPos = (AiOwnPosFn)ApiFunction(&g_aiMod, "BehaviourOwnPosition");
+    if (!g_aiGame || !g_aiMove || !g_aiStop || !g_aiOwnPos) { g_aiState = -1; Note("ai: orders off; a movement call is not the reviewed one"); return 0; }
+    g_aiState = 1;
+    return 1;
+}
+
+/* The wheel, the game's message and the spawns, once something wants orders. */
+static void AiListen(void)
+{
+    int wanted = g_aiRuleCount > 0 || AnyListener(HF_ON_ORDER);
+    if (!wanted || g_aiListening) return;
+    g_aiListening = 1;
+    if (ApiHookFunction(&g_aiMod, "CommsWheelPick", (void*)AiWheelDetour, (void**)&g_aiWheelNext, 0))
+        Note("ai: the comms wheel could not be hooked; orders come from the other machines only");
+    else g_aiHooked = 1;
+    ApiRpcListen(&g_aiMod, AI_RPC_COMMS, AiRpc, NULL, 0);
+    if (g_aiRuleCount > 0) ApiSubscribe(&g_aiMod, HF_ON_SPAWN, (HfListener)(void (*)(void))AiSpawned, NULL, 0);
+}
+
+static void AiTick(HfMod* mod, float dt, void* user)
+{
+    (void)mod; (void)user;
+    if (!AiReady()) return;
+    AiListen();
+    AiTakeInbox();
+    g_aiClock += dt;
+    if ((g_aiStep += dt) < AI_STEP_S) return;
+    g_aiStep = 0;
+    AcquireSRWLockExclusive(&g_aiLock);
+    for (int i = 0; i < AI_PENDING; i++)
+        if (g_aiPending[i].entity && g_aiClock >= g_aiPending[i].at) { AiSettled(g_aiPending[i].entity, g_aiPending[i].resource); g_aiPending[i].entity = 0; }
+    for (int i = 0; i < AI_UNITS; i++)
+        if (g_aiUnits[i].entity && !AiUnitStep(&g_aiUnits[i])) memset(&g_aiUnits[i], 0, sizeof g_aiUnits[i]);
+    ReleaseSRWLockExclusive(&g_aiLock);
+}
+
+static void AiStartTick(void);
+static void AiStartWanted(void) { if (!g_aiTicking && AnyListener(HF_ON_ORDER)) AiStartTick(); }
+
+static void AiStartTick(void)
+{
+    if (InterlockedExchange(&g_aiTicking, 1) != 0) return;
+    g_aiMod.api = &g_api;
+    snprintf(g_aiMod.id, sizeof g_aiMod.id, "hellforge.ai");
+    g_aiMod.log = g_log;
+    g_aiMod.loaded = 1;
+    ApiOnGameThread(&g_aiMod, AiTick, NULL);
+}
+
+/* ---- the API ---- */
+
+/* The rule with its defaults filled in, or why it is refused. */
+static const char* AiObeyRefusal(const HfAiObey* obey, HfAiObey* d)
+{
+    if (obey == NULL || obey->size < sizeof *obey || obey->entity == 0) return "no HfAiObey, its size or its entity";
+    *d = *obey;
+    if (d->range == 0) d->range = 60.0f;
+    if (d->follow_distance == 0) d->follow_distance = 6.0f;
+    if (d->hold_radius == 0) d->hold_radius = 3.0f;
+    if (!AiIn(d->range, 1, 500) || !AiIn(d->follow_distance, 1, 50) || !AiIn(d->hold_radius, 0.5f, 50) || d->start_order > HF_ORDER_FOLLOW)
+        return "range 1 .. 500, follow_distance 1 .. 50, hold_radius 0.5 .. 50, start_order NONE or FOLLOW";
+    return NULL;
+}
+
+static const char* AiAddRule(HfMod* mod, const HfAiObey* d)
+{
+    const char* why = NULL;
+    AcquireSRWLockExclusive(&g_aiLock);
+    for (LONG i = 0; i < g_aiRuleCount && !why; i++) if (g_aiRules[i].def.entity == d->entity && !ModGone(g_aiRules[i].mod)) why = "that entity obeys already";
+    if (!why && g_aiRuleCount >= AI_RULES) why = "32 entities obey already";
+    if (!why) { g_aiRules[g_aiRuleCount].mod = mod; g_aiRules[g_aiRuleCount].def = *d; InterlockedIncrement(&g_aiRuleCount); }
+    ReleaseSRWLockExclusive(&g_aiLock);
+    return why;
+}
+
+/* SDK 31, ai_obey: units of an entity obey the comms wheel. 0 done, 1 refused (the mod's log says why). */
+static int ApiAiObey(HfMod* mod, const HfAiObey* obey)
+{
+    HfAiObey d;
+    const char* why = AiObeyRefusal(obey, &d);
+    if (!why) why = AiAddRule(mod, &d);
+    if (why) { ApiLog(mod, "ai_obey: refused: %s", why); return 1; }
+    AiStartTick();
+    ApiLog(mod, "ai_obey: units of %016llx obey Follow me and Hold position within %.0f m (follow at %.1f m, hold within %.1f m)",
+        (unsigned long long)d.entity, (double)d.range, (double)d.follow_distance, (double)d.hold_radius);
+    return 0;
+}
+
+/* Why ai_order refuses, or NULL (game thread). */
+static const char* AiOrderRefusal(uint32_t entity, uint32_t order, uint32_t target, const float point[3])
+{
+    AiCtx c;
+    if (!AiReady()) return g_aiState < 0 ? "the movement calls are not the reviewed ones" : "the game is not loaded yet";
+    if (order > HF_ORDER_GOTO || (order == HF_ORDER_FOLLOW && !EvpAlive(target)) || (order == HF_ORDER_GOTO && point == NULL))
+        return "an order HF_ORDER_..., FOLLOW with a living target, GOTO with a point";
+    if (!EvpAlive(entity) || !AiCtxOf(entity, &c) || !AiAgentOf(entity)) return "no unit with a brain and a path agent";
+    if (!AiAuthority(&c)) return "another machine simulates it (order it there)";
+    return NULL;
+}
+
+/* SDK 31, ai_order: on the game thread of the machine that simulates the unit. 0 done, 1 refused. */
+static int ApiAiOrder(HfMod* mod, uint32_t entity, uint32_t order, uint32_t target, const float point[3])
+{
+    if (!WcGameThread(mod, "ai_order")) return 1;
+    AiStartTick();
+    const char* why = AiOrderRefusal(entity, order, target, point);
+    if (why) { ApiLog(mod, "ai_order(%u): refused: %s", entity, why); return 1; }
+    AcquireSRWLockExclusive(&g_aiLock);
+    AiUnit* u = AiUnitOf(entity, order != HF_ORDER_NONE);
+    if (u != NULL && !u->rule) u->mod = mod;
+    if (u != NULL) AiSetOrder(u, order, target, order == HF_ORDER_FOLLOW ? NULL : point, "the mod");
+    if (u != NULL && order == HF_ORDER_NONE && !u->rule) memset(u, 0, sizeof *u);
+    ReleaseSRWLockExclusive(&g_aiLock);
+    if (u == NULL && order != HF_ORDER_NONE) { ApiLog(mod, "ai_order(%u): refused: %d units have orders already", entity, AI_UNITS); return 1; }
+    return 0;
+}
+
+/* SDK 31, ai_state: a unit's order and status (HF_AI_IDLE for a unit with none). Any thread. */
+static uint32_t ApiAiState(HfMod* mod, uint32_t entity, HfAiState* state)
+{
+    (void)mod;
+    HfAiState s = {sizeof s, 0, HF_AI_IDLE, 0, {0, 0, 0}, {0, 0, 0}, 0, 0, 0};
+    AcquireSRWLockShared(&g_aiLock); /* no mod code runs while the update holds it */
+    AiUnit* u = AiUnitOf(entity, 0);
+    if (u != NULL)
+    {
+        s.order = u->order; s.status = u->status; s.target = u->target;
+        memcpy(s.point, u->detour ? u->detourAt : u->goal, 12);
+        memcpy(s.position, u->lastPos, 12);
+        s.distance = AiFlat(u->lastPos, u->point);
+    }
+    ReleaseSRWLockShared(&g_aiLock);
+    if (g_aiState > 0)
+    {
+        AiCtx c;
+        s.moving = (uint32_t)AiMoving(entity);
+        if (AiCtxOf(entity, &c)) s.behaviour = AiBehaviour(&c);
+    }
+    if (state != NULL && state->size >= sizeof *state) *state = s;
+    return s.status;
+}

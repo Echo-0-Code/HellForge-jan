@@ -23,6 +23,7 @@
 #define WC_CHANNEL "@hellforge.effects" /* no mod can have it: mod ids start with a letter or digit */
 static void WcReceive(uint64_t from, const uint8_t* data, uint32_t bytes);
 static void SeReceive(uint64_t from, const uint8_t* data, uint32_t bytes); /* status_effects.c, under "@hellforge.status" */
+static void AiReceive(uint64_t from, const uint8_t* data, uint32_t bytes); /* ai_orders.c, under "@hellforge.ai" */
 
 #define CHANNEL_RATE 64u          /* messages a second a mod may send */
 #define CHANNEL_REFILL_MS 16u     /* a message's share of a second, in whole milliseconds */
@@ -434,6 +435,7 @@ static void ChannelMessageRequest(char* line, char* reply, size_t size)
     { snprintf(reply, size, "%s\trefused\tmalformed message", f[1]); return; }
     if (!strcmp(f[2], WC_CHANNEL)) { WcReceive(from, data, bytes); snprintf(reply, size, "%s\tok\tnow", f[1]); return; }
     if (!strcmp(f[2], "@hellforge.status")) { SeReceive(from, data, bytes); snprintf(reply, size, "%s\tok\tnow", f[1]); return; }
+    if (!strcmp(f[2], "@hellforge.ai")) { AiReceive(from, data, bytes); snprintf(reply, size, "%s\tok\tnow", f[1]); return; }
     HfMod* mod = ChannelModId(f[2]);
     if (mod == NULL) { ChannelMissing(f[2]); snprintf(reply, size, "%s\tok\tnow", f[1]); return; }
     if (AnyListener(HF_ON_MESSAGE))

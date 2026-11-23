@@ -71,6 +71,8 @@ Reference and related pages:
   shared across the lobby, enemies near a point and the weapon on the armory's customize screen.
 - [Status effects of your own](modding/status-effects.md): for code mod authors; SDK 29 build-up meters with levels,
   looks and damage per level, fed by vanilla statuses or by the mod.
+- [Orders for AI units](modding/ai.md): for code mod authors; SDK 31 friendly units, the comms wheel's Follow me and
+  Hold position, and moving a unit through the game's own pathing.
 - [Building a lobby browser](lobby-browser.md): for front-end developers drawing their own lobby browser on the ship's
   terminal; the SDK 16 calls, the terminal's visit, what each lobby says and the rules a browser keeps.
 
