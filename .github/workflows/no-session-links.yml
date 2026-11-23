@@ -1,0 +1,46 @@
+# Fork-only check (Jan, 23 Nov 2026): no Claude Code session links in this fork's history. Fails a pull request when a
+# commit message, its title or its description holds a "Claude-Session:" line or a claude.ai/code/session_ link. The
+# project thread link (claude.ai/code/project/...) that PR bodies start with is allowed. Keep this file out of upstream
+# pull requests.
+name: No session links
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  session-links:
+    name: No Claude session links
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Commit messages, title and description
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          pattern='^[[:space:]]*Claude-Session:|claude\.ai/code/session_'
+          bad=0
+          for c in $(git rev-list "$BASE..$HEAD"); do
+            if git log -1 --format=%B "$c" | grep -Eqi "$pattern"; then
+              echo "::error::commit $(git log -1 --format='%h %s' "$c") has a Claude session link"
+              bad=1
+            fi
+          done
+          if printf '%s\n%s\n' "$TITLE" "$BODY" | grep -Eqi "$pattern"; then
+            echo "::error::the pull request's title or description has a Claude session link"
+            bad=1
+          fi
+          if [ "$bad" = 1 ]; then
+            echo "Remove the lines (amend or reword the commits, then force-push this branch; edit the description)."
+            exit 1
+          fi
+          echo "No Claude session links."
