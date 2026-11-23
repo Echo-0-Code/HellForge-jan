@@ -1124,7 +1124,8 @@ static void ApiInit(void)
         ApiEntityOfNetwork, ApiSend, ApiShareSet, ApiShareGet, ApiShareRow, ApiLoadPhase, ApiUnhook, ApiAddExplosion, ApiExplosionRow, ApiAddBeam, ApiBeamRow, ApiAddArc, ApiArcRow, ApiAddAttachment,
         ApiAddEnemy, ApiAddEnemySwap, ApiAddEnemySquad, ApiRpcListen, ApiRpcSend, ApiAddScreen, ApiScreenShow, ApiGenerationCapacity, ApiAddPattern, ApiUiOpen, ApiUiSet, ApiUiOn, ApiUiClose,
         ApiPlayEffect, ApiStopEffect, ApiFindEnemies, ApiArmoryWeapon, ApiAddText, ApiPlaceStratagem, ApiSetStratagemIcon, ApiPlaceModStratagem, ApiWeaponPick, ApiSetWeaponPick, ApiAddArmoryTab, ApiAddMenuTab,
-        ApiLineOfSight, ApiFindProjectiles, ApiSetProjectile, ApiFactionOf, ApiSideOf, ApiFindEntities, ApiOnRender, ApiPoseJoint, ApiJointPose};
+        ApiLineOfSight, ApiFindProjectiles, ApiSetProjectile, ApiFactionOf, ApiSideOf, ApiFindEntities, ApiOnRender, ApiPoseJoint, ApiJointPose,
+        ApiAddStatusEffect, ApiAddEffectLooks, ApiAddEffectBuildup, ApiEffectState};
 }
 
 /* One mod of the plan set up: its log opened, then a code mod's DLL loaded and its hellforge_mod_init called. */
