@@ -16,13 +16,13 @@ jobs:
       - name: Download the artifact and publish it
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: '45184015699'
-          TAG: test-fabed49
+          RUN_ID: '45191581325'
+          TAG: test-464ca7e
         run: |
           gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n test-package -D pkg
           find pkg -type f -exec ls -la {} \;
           cp "$(find pkg -name HellForge-Setup.exe | head -1)" HellForge-Setup.exe
           sha256sum HellForge-Setup.exe | tee SHA256SUMS
-          gh release create "$TAG" -R "$GITHUB_REPOSITORY" --prerelease --target fabed49762a9a92edaef1ead3e4e235047326ee0 \
-            --title "Test build fabed49, SDK 31 AI orders, PR #51 (run $RUN_ID)" --notes "test-package artifact of run $RUN_ID, republished for download." \
+          gh release create "$TAG" -R "$GITHUB_REPOSITORY" --prerelease --target 464ca7e321b5bfba2315eeaea3d1a6486e5490cd \
+            --title "Test build 464ca7e, SDK 31 AI orders with the path agent fix, PR #51 (run $RUN_ID)" --notes "test-package artifact of run $RUN_ID, republished for download." \
             HellForge-Setup.exe SHA256SUMS
