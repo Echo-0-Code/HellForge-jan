@@ -12,6 +12,8 @@ On `dev`, since 0.4.0-beta.
 
 ### Added
 
+- **HellForge's own MODS tab.** The escape menu gets a MODS tab after OPTIONS with every mod's `add_option` rows, without
+  the Vanilla Plus Megapack. With the Megapack's menu on, HellForge leaves the tab to it ([ui](docs/modding/ui.md#settings-in-the-mods-menu)).
 - **Mod settings in OPTIONS > MODS (SDK 30).** `add_option` gives a code mod toggles, choices and sliders in the
   escape menu's MODS tab, through the bundled HellForge Mod Options and the Vanilla Plus Megapack's menu. HellForge
   saves the values; `get_option` and `set_option` read and change them ([ui](docs/modding/ui.md#settings-in-the-mods-menu)).
