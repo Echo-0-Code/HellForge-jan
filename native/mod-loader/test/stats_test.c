@@ -2416,7 +2416,7 @@ static uint8_t g_refExplosions[4][152];
 static uint32_t g_refExplosionTypes[4];
 static uint64_t g_refResident[8];
 static int g_refResidentCount;
-static uint64_t g_refRequested[8];
+static uint64_t g_refRequested[32];
 static int g_refRequestedCount;
 
 /* A catalogued donor round with one package or with two (a round an ammo item loads); both have the donor's row. */
@@ -2559,6 +2559,21 @@ static void RefsFixture(void)
     memcpy(&read, weapon, 4); assert(read == 40 && g_edits[edits].failed && !g_edits[edits].waiting);
     v = (HfValue)HF_U32(40);
     assert(ApiSetLive(mod, 0x77, &projectile, &v, 0) == HF_APPLIES_RESPAWN);
+
+    /* a resident package the game unloads later is asked for again, not failed by its old request's 90 s */
+    {
+        const char *evictName, *evictWhy;
+        uint64_t evicted = g_held[0].id;
+        g_held[0].requested = 1; g_held[0].failed = 0; g_held[0].resident = 0; g_held[0].since = GetTickCount64();
+        g_refResident[g_refResidentCount++] = evicted;
+        assert(PackageWant(evicted, &evictName, &evictWhy) == PKG_RESIDENT && g_held[0].resident);
+        g_refResidentCount = 0;
+        g_held[0].since -= PKG_TIMEOUT_MS + 1;
+        assert(PackageWant(evicted, &evictName, &evictWhy) == PKG_WAITING && !g_held[0].requested && !g_held[0].failed);
+        int asked = g_refRequestedCount;
+        PackagesRequest();
+        assert(g_held[0].requested && g_refRequestedCount > asked && g_refRequested[asked] == evicted);
+    }
 
     /* the stats pass: a reference waits for its package and StatsRefsTick writes it */
     uint32_t zero = 0; memcpy(g_refRows[0] + REF_IMPACT, &zero, 4);

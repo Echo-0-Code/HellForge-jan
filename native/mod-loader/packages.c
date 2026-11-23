@@ -53,6 +53,7 @@ typedef struct HeldPackage
     int requested;
     int failed;
     int own;            /* for this machine's edits, mods or actions (sent to friends); else only for a friend's */
+    int resident;       /* seen with every part loaded since its last request */
     char why[160];
 } HeldPackage;
 static HeldPackage g_held[PKG_MAX_HELD];
@@ -237,7 +238,18 @@ static HeldPackage* PackageHold(uint64_t id, const RefPackage* known, int own, i
 static int PackageHeldState(HeldPackage* held, uint64_t id, int* changed)
 {
     if (held->failed) return PKG_FAILED;
-    if (held->requested && PackageResident(id) == PKG_RESIDENT) return PKG_RESIDENT;
+    if (held->requested && PackageResident(id) == PKG_RESIDENT) { held->resident = 1; return PKG_RESIDENT; }
+    if (held->requested && held->resident)
+    {
+        /* The game let it go: a package the mission also loads is unloaded when the mission ends, our reference or
+         * not, and a unit spawned from it then crashes. Asked for again with a new 90 s, only when someone wants it, so
+         * nothing is asked for on the ship unless a mod asks there. */
+        held->requested = 0;
+        held->resident = 0;
+        held->since = GetTickCount64();
+        Note("package %016llx (%s) was unloaded by the game: asked for again", (unsigned long long)id, held->name);
+        return PKG_WAITING;
+    }
     if (GetTickCount64() - held->since > PKG_TIMEOUT_MS)
     {
         held->failed = 1;
