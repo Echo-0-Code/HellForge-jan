@@ -97,6 +97,19 @@ api->add_effect_looks(mod, g_cryo, kLooks, sizeof kLooks / sizeof kLooks[0], api
 - When two effects have a look on one material, the higher level shows.
 - Until the package is resident, levels change but no texture is set.
 
+On enemies, use material looks (SDK 33). The game draws units of one kind in one instanced batch with one unit's
+material, so a texture set on one bug shows on others of its kind and flickers as the batch order changes.
+
+A row with `texture_slot` 0 names a material resource per level instead (0: the unit's own) and leaves `own` 0. HellForge moves the
+slot to that resource (`UnitSetMaterial`) and back (`UnitResetMaterial`), so the enemy is drawn in a batch of its own.
+Make the materials as copies of the unit's own with `textures` in the same session package
+([data](data.md#copy)):
+
+```json
+{ "type": "material", "copy": "0x10ca31f4d1ba6289", "name": "my/mod/frost/10ca31f4d1ba6289_1",
+  "textures": { "0xFF2C91CC": "my/mod/frost/0452abf2bc680514_1" } }
+```
+
 ## Read an entity's level
 
 `effect_state(mod, effect, entity, &state)` returns the level (0 none) and fills `HfEffectState`: the meter and the
@@ -124,8 +137,9 @@ with `remote` 1; gameplay stays on the owner. The other players need the same mo
 
 ## What HellForge guarantees
 
-- A texture is set once, when the shown level changes, and never again while it stays.
+- A texture or material is set once, when the shown level changes, and never again while it stays.
 - Materials are found again from the live unit each time; no material pointer is kept.
-- An entity that dies or loses its unit gets its own textures back while the unit still exists, then is forgotten.
+- An entity that dies or loses its unit gets its own textures and materials back while the unit still exists, then is
+  forgotten.
 - A mod that is switched off loses its effects, and its looks are put back first.
 - One `ApplyStatus` hook serves every mod; it only notes the call and passes it on.

@@ -7104,6 +7104,33 @@
       "meaning": "A unit's mesh object by index: the Unit table's (EngineApi +0x18, 0x27C8F10) +0x1b8",
       "source": "the Unit table's slot 55 (+0x1b8) and its Lua twin Unit.mesh; the arguments from the code, the return from the game's callers or the twin, and both checked in the game on a mission (build 25480438)"
     },
+    "UnitSetMaterial": {
+      "module": "helldivers2.exe",
+      "rva": "0x1FF240",
+      "code": "48 89 5C 24 08 57 48 83 EC 20 49 8B D8 8B FA E8 6C E6 E9 FF 4C 8B CB 48 8D 54 24 40 44 8B C7 48 8B C8",
+      "returns": "void*",
+      "params": [
+        {"name": "unit", "type": "uint32_t", "meaning": "the unit's handle"},
+        {"name": "slot", "type": "uint32_t", "meaning": "the material slot's IdString32, as the meshes' +0x60 ids give it"},
+        {"name": "material", "type": "uint64_t", "meaning": "the material resource's name hash; it must be loaded"}
+      ],
+      "hook": true,
+      "meaning": "Gives the unit's material slot a new material instance of another material resource, on every mesh that uses the slot; returns the new material: the Unit table's (EngineApi +0x18, 0x27C8F10) +0x180. Instanced batches (bugs) draw every member with one member's material, so a look of one unit needs a material resource of its own, not a texture set on its instance",
+      "source": "the Unit table's slot 48 (+0x180) and its Lua twin Unit.set_material (callback 0x414490, the same unit object call +0x200); the arguments from the code (build 25480438)"
+    },
+    "UnitResetMaterial": {
+      "module": "helldivers2.exe",
+      "rva": "0x1FF300",
+      "code": "40 53 48 83 EC 20 8B DA E8 B3 E5 E9 FF 45 33 C9 48 8D 54 24 40 44 8B C3 48 8B C8 4C 8B 10 41 FF 92",
+      "returns": "void*",
+      "params": [
+        {"name": "unit", "type": "uint32_t", "meaning": "the unit's handle"},
+        {"name": "slot", "type": "uint32_t", "meaning": "the material slot's IdString32"}
+      ],
+      "hook": true,
+      "meaning": "Puts a unit's material slot back on the material resource the unit's data gives it, as a new instance; returns the new material: the Unit table's (EngineApi +0x18, 0x27C8F10) +0x190 (UnitSetMaterial with no resource)",
+      "source": "the Unit table's slot 50 (+0x190) and Unit.set_material without a material (callback 0x414490); the arguments from the code (build 25480438)"
+    },
     "UnitAlive": {
       "module": "helldivers2.exe",
       "rva": "0x1FEEB0",
