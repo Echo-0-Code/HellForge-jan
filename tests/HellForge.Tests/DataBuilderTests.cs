@@ -100,6 +100,13 @@ static class DataBuilderTests
             check(BinaryPrimitives.ReadSingleLittleEndian(material.AsSpan(0xBC + 16)) == 0.1f && BinaryPrimitives.ReadSingleLittleEndian(material.AsSpan(0xBC + 24)) == 1f,
                 "The colour is not where the parameter's values are (right after the records).");
             reject(() => ResourceEdits.SetMaterialColours(Material(0x2222), new Dictionary<uint, double[]> { [0x12345678] = [1, 1, 1] }));
+            var vec2 = LaidOut(0x1111, [], [(1u, 0x0BADF00Du, 0), (0u, 0x0C0FFEE0u, 8)], [0f, 0f, 0f]);
+            ResourceEdits.SetMaterialValues(vec2, new Dictionary<uint, double[]> { [0x0BADF00D] = [0.5, 1], [0x0C0FFEE0] = [2] });
+            var values = 0x88 + 40;
+            check(BinaryPrimitives.ReadSingleLittleEndian(vec2.AsSpan(values)) == 0.5f && BinaryPrimitives.ReadSingleLittleEndian(vec2.AsSpan(values + 4)) == 1f &&
+                BinaryPrimitives.ReadSingleLittleEndian(vec2.AsSpan(values + 8)) == 2f, "A vec2 or scalar value is not where its parameter's values are.");
+            reject(() => ResourceEdits.SetMaterialValues(LaidOut(0x1111, [], [(1u, 0x0BADF00Du, 0)], [0f, 0f]), new Dictionary<uint, double[]> { [0x0BADF00D] = [1, 1, 1] }));
+            reject(() => ResourceEdits.SetMaterialColours(LaidOut(0x1111, [], [(1u, 0x0BADF00Du, 0)], [0f, 0f]), new Dictionary<uint, double[]> { [0x0BADF00D] = [1, 1, 1] }));
             check(ResourceEdits.Replace(material, 0x2222, 0xABCD) == 1 && BinaryPrimitives.ReadUInt64LittleEndian(material.AsSpan(0x8C)) == 0xABCD, "The reference was not replaced.");
             reject(() => ResourceEdits.Replace(material, 0x2222, 1));
             reject(() => ResourceEdits.Replace(Material(0x2222), 0x2222, 1, [0x90]));

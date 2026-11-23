@@ -12,6 +12,8 @@ On `dev`, since 0.4.0-beta.
 
 ### Added
 
+- **Material values in data specs.** A material copy's `values` sets scalar and vector parameters by name, 1 to 4
+  numbers each (`"burn_scorch": [0.5, 1]`); `colours` stays for RGB.
 - **Mod settings in OPTIONS > MODS (SDK 30).** `add_option` gives a code mod toggles, choices and sliders in the
   escape menu's MODS tab, through the bundled HellForge Mod Options and the Vanilla Plus Megapack's menu. HellForge
   saves the values; `get_option` and `set_option` read and change them ([ui](docs/modding/ui.md#settings-in-the-mods-menu)).

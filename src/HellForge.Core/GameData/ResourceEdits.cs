@@ -91,7 +91,14 @@ public static class ResourceEdits
     // offset, stride} follow the texture list (0x88 + 12 x textures, the count at 0x40; parameter count at 0x68); the
     // values they point into follow them directly (every one of the game's materials fits so; 16-byte alignment, which an
     // earlier HellForge assumed, overruns a third of them). Every named parameter must be there and be RGB (type 2).
-    public static void SetMaterialColours(byte[] material, IReadOnlyDictionary<uint, double[]> colours)
+    public static void SetMaterialColours(byte[] material, IReadOnlyDictionary<uint, double[]> colours) => SetMaterialParameters(material, colours, rgbOnly: true);
+
+    // Sets a material's scalar and vector parameters by name (IdString32): a parameter of type t (0 scalar, 1 vec2,
+    // 2 RGB/vec3, 3 vec4) takes exactly t + 1 numbers. The same records as SetMaterialColours; every named parameter
+    // must be there with as many components as given.
+    public static void SetMaterialValues(byte[] material, IReadOnlyDictionary<uint, double[]> values) => SetMaterialParameters(material, values, rgbOnly: false);
+
+    static void SetMaterialParameters(byte[] material, IReadOnlyDictionary<uint, double[]> values, bool rgbOnly)
     {
         if (material.Length < 0x88) throw new InvalidDataException("not a material (too short).");
         var textures = BinaryPrimitives.ReadInt32LittleEndian(material.AsSpan(0x40));
@@ -104,14 +111,11 @@ public static class ResourceEdits
         {
             var record = material.AsSpan((int)(records + 20 * i), 20);
             var name = BinaryPrimitives.ReadUInt32LittleEndian(record[8..]);
-            if (!colours.TryGetValue(name, out var rgb)) continue;
-            if (BinaryPrimitives.ReadUInt32LittleEndian(record) != 2) throw new InvalidDataException($"parameter 0x{name:X8} is not an RGB value.");
-            var at = buffer + BinaryPrimitives.ReadUInt32LittleEndian(record[12..]);
-            if (at + 12 > material.Length) throw new InvalidDataException($"parameter 0x{name:X8} is outside the material.");
-            for (var c = 0; c < 3; c++) BinaryPrimitives.WriteSingleLittleEndian(material.AsSpan((int)at + 4 * c), (float)rgb[c]);
+            if (!values.TryGetValue(name, out var value)) continue;
+            WriteParameter(material, record, buffer, value, rgbOnly);
             written.Add(name);
         }
-        var missing = colours.Keys.Where(k => !written.Contains(k)).Select(k => $"0x{k:X8}").ToList();
+        var missing = values.Keys.Where(k => !written.Contains(k)).Select(k => $"0x{k:X8}").ToList();
         if (missing.Count > 0) throw new InvalidDataException("the material has no parameter " + string.Join(", ", missing) + ".");
     }
 
@@ -126,6 +130,20 @@ public static class ResourceEdits
         if (missing.Count > 0) throw new InvalidDataException("the material has no texture slot " + string.Join(", ", missing) + ".");
         for (var i = 0; i < count; i++)
             if (textures.TryGetValue(slots[i], out var id)) BinaryPrimitives.WriteUInt64LittleEndian(material.AsSpan(0x88 + 4 * count + 8 * i), id);
+    }
+
+
+    // One parameter's numbers where its record points, if its kind takes that many.
+    static void WriteParameter(byte[] material, ReadOnlySpan<byte> record, long buffer, double[] value, bool rgbOnly)
+    {
+        var name = BinaryPrimitives.ReadUInt32LittleEndian(record[8..]);
+        var type = BinaryPrimitives.ReadUInt32LittleEndian(record);
+        if (rgbOnly && type != 2) throw new InvalidDataException($"parameter 0x{name:X8} is not an RGB value.");
+        if (type > 3) throw new InvalidDataException($"parameter 0x{name:X8} is of a kind HellForge cannot set.");
+        if (type + 1 != value.Length) throw new InvalidDataException($"parameter 0x{name:X8} has {type + 1} component(s), not {value.Length}.");
+        var at = buffer + BinaryPrimitives.ReadUInt32LittleEndian(record[12..]);
+        if (at + 4 * value.Length > material.Length) throw new InvalidDataException($"parameter 0x{name:X8} is outside the material.");
+        for (var c = 0; c < value.Length; c++) BinaryPrimitives.WriteSingleLittleEndian(material.AsSpan((int)at + 4 * c), (float)value[c]);
     }
 
     // A material of another game build in the layout of `parent`, the game copy's material it derives from (+0x18): the

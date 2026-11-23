@@ -48,6 +48,8 @@ public sealed record CopyResource(string Where, ulong Type, ulong From, string N
     // A unit copy's own physics instead of its base's (UnitJoints.cs PhysicsSpec), and joints moved to new rest
     // positions in the unit's space, by name ("#" and the hash for a joint the game names only by hash).
     public PhysicsSpec? Physics { get; init; }
+    // A material's scalar and vector parameters by name: 1 to 4 numbers each, as many as the parameter has ("values").
+    public IReadOnlyDictionary<uint, double[]>? Values { get; init; }
     public IReadOnlyDictionary<string, double[]>? Joints { get; init; }
     // Joints given a new parent ("joints": {"name": {"at": [x, y, z], "parent": "boss"}}): a joint the game animates
     // keeps its old parent's pose, so a part that must follow the body hangs from a joint the clips leave alone.
@@ -145,6 +147,7 @@ public static partial class DataSpecs
                 case EditResource edit:
                     return $"{edit.Where} edits the game's {ResourceTypes.Describe(edit.Type)} 0x{edit.Id:X16} in place";
                 case CopyResource copy when copy.Curves != null && copy.Type != ResourceTypes.Particles || copy.Colours != null && copy.Type != ResourceTypes.Material ||
+                    copy.Values != null && copy.Type != ResourceTypes.Material ||
                     copy.Lut != null && copy.Type != ResourceTypes.Texture || copy.Textures != null && copy.Type != ResourceTypes.Material:
                     return $"{copy.Where} edits a {ResourceTypes.Describe(copy.Type)} resource as another type";
             }
@@ -394,7 +397,7 @@ public static partial class DataSpecs
     // A copy, its edits read in the spec's order.
     static CopyResource ReadCopy(JsonElement e, string at, string? folder, ISet<string> inputs)
     {
-        Fields(e, at, "type", "copy", "name", "expect", "replace", "curves", "colours", "textures", "lut", "mesh", "shader", "source", "physics", "joints");
+        Fields(e, at, "type", "copy", "name", "expect", "replace", "curves", "colours", "values", "textures", "lut", "mesh", "shader", "source", "physics", "joints");
         var type = Type(e, at);
         var expect = ReadExpect(e, at);
         var replace = ReadReplace(e, at);
@@ -408,7 +411,7 @@ public static partial class DataSpecs
         var physics = ReadPhysics(e, at, type, folder, inputs);
         var joints = ReadJoints(e, at, type);
         return new CopyResource(at, type, Id(Property(e, "copy", at), at), Name(e, at), expect, replace, curves, colours, lut, mesh, textures, shaders)
-            { Steam = steam, Build = build, Physics = physics, Joints = joints?.Item1, JointParents = joints is { Item2.Count: > 0 } j ? j.Item2 : null };
+            { Steam = steam, Build = build, Physics = physics, Values = ReadValues(e, at), Joints = joints?.Item1, JointParents = joints is { Item2.Count: > 0 } j ? j.Item2 : null };
     }
 
     // A shader in a host, which says what else the resource needs.
@@ -510,6 +513,24 @@ public static partial class DataSpecs
                 = Colour(item.Value, $"{at}.colours");
         if (colours.Count == 0) throw new InvalidDataException($"{at}: colours is empty.");
         return colours;
+    }
+
+    // "values": {"<parameter>": [n, ...]}: 1 to 4 numbers per parameter, a name or 0x<IdString32>.
+    static Dictionary<uint, double[]>? ReadValues(JsonElement e, string at)
+    {
+        if (!e.TryGetProperty("values", out var spec)) return null;
+        Dictionary<uint, double[]> values = [];
+        foreach (var item in Object(spec, $"{at}.values"))
+        {
+            var key = Hash32().IsMatch(item.Name) ? uint.Parse(item.Name[2..], NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture)
+                : item.Name.Length > 0 ? EngineHash.Id32(item.Name) : throw new InvalidDataException($"{at}.values: a parameter is 0x<8 hex digits> or a name.");
+            var v = item.Value;
+            if (v.ValueKind != JsonValueKind.Array || v.GetArrayLength() is < 1 or > 4 || v.EnumerateArray().Any(n => n.ValueKind != JsonValueKind.Number || !double.IsFinite(n.GetDouble())))
+                throw new InvalidDataException($"{at}.values.{item.Name}: 1 to 4 numbers.");
+            values[key] = v.EnumerateArray().Select(n => n.GetDouble()).ToArray();
+        }
+        if (values.Count == 0) throw new InvalidDataException($"{at}: values is empty.");
+        return values;
     }
 
     static ResourceEdits.LutRecolour? ReadLut(JsonElement e, string at)
