@@ -812,11 +812,13 @@ static void InferStratagemPackages(void)
         uint64_t package = PayloadPackage(st, c, f, &from);
         if (package == 0)
         {
-            ApiLog(st->mod, "%s: no package found for its payload; it keeps its base's", st->name);
+            ApiLog(st->mod, "%s: no package found for its payload; it keeps its base's. Set its package to the one holding the payload's unit", st->name);
             continue;
         }
         memcpy(st->row + 0xA8, &package, 8);
         ApiLog(st->mod, "%s loads package %016llx (its payload's, from %016llx)", st->name, (unsigned long long)package, (unsigned long long)from);
+        if (st->payload[0] != 0 && st->payload[0] != from) /* a Pelican's cargo after its Pelican: enemies have no package */
+            ApiLog(st->mod, "%s: payload %016llx has no package: set the stratagem's package", st->name, (unsigned long long)st->payload[0]);
     }
 }
 
