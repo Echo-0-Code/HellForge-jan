@@ -1,4 +1,4 @@
-/* HellForge mod SDK 21, 27, 28 and 29: effects on entities (play_effect, stop_effect), enemies near a point
+/* HellForge mod SDK 21, 27, 28 and 30: effects on entities (play_effect, stop_effect), enemies near a point
  * (find_enemies), the weapon the armory shows (armory_weapon), menu tabs, line of sight, projectiles near a point,
  * sides, joint poses and mod options; docs/modding/world.md. It also holds the spawn director's enemy constants (SDK 17,
  * add_enemy). Included by hellforge_mod.h. */
@@ -207,9 +207,9 @@ typedef struct HfAbility
     uint32_t flags;         /* HF_ABILITY_... flags (HellForge 2026-10-18; older mods leave it out) */
 } HfAbility;
 
-/* ---- SDK 29 --------------------------------------------------------------------------------------------------------- */
+/* ---- SDK 30 --------------------------------------------------------------------------------------------------------- */
 
-/* SDK 29: a mod's settings in the game's OPTIONS > MODS menu (add_option; docs/modding/ui.md). HellForge keeps each
+/* SDK 30: a mod's settings in the game's OPTIONS > MODS menu (add_option; docs/modding/ui.md). HellForge keeps each
  * value (saved per mod in the logs folder's parent, mod-options\<mod id>.txt) and is its source of truth: the mod reads
  * it with get_option and hears of the player's changes through on_change. The menu itself is the Vanilla Plus Megapack's
  * Mod Options Menu, reached through HellForge's bundled "HellForge Mod Options" Lua mod (it needs Bingus Shared Loader);

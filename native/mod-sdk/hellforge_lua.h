@@ -119,7 +119,7 @@ HF_LUA_API int hellforge_lua_get_passives(HfMod* mod, HfPassives* out);         
 HF_LUA_API void hellforge_lua_log(HfMod* mod, const char* text);                 /* a line in mod-lua.<name>.log */
 HF_LUA_API const char* hellforge_lua_last(HfMod* mod);                           /* the mod's last log line: why a call was refused */
 
-/* SDK 29: code mods' options (add_option) for the OPTIONS > MODS menu. Only the bundled HellForge Mod Options Lua mod
+/* SDK 30: code mods' options (add_option) for the OPTIONS > MODS menu. Only the bundled HellForge Mod Options Lua mod
  * uses these, finding them by name (the bridge version stays: HD2Runtime needs none of them). Texts stay valid. */
 typedef struct HfLuaOption
 {

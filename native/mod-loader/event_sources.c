@@ -64,9 +64,13 @@ static void DamageEventOf(const uint8_t* event, HfDamageEvent* e)
     memcpy(&e->amount, event + 0x2C, 4); memcpy(e->position, event + 0x50, 12);
 }
 
+static int SeWantsDamage(void);       /* status_effects.c: effects that scale the damage an entity takes */
+static void SeDamage(uint8_t* event);
+
 static uint64_t ConsumeDamageDetour(void* system, uint8_t* event, uint64_t r8, uint64_t r9, uint64_t s5, uint64_t s6)
 {
     /* before it applies: listeners may change the amount (on the game thread, in priority order) */
+    if (event != NULL) SeDamage(event); /* before the mods' listeners, so they see the amount the hit deals */
     if (AnyListener(HF_ON_DAMAGE_PRE) && event != NULL)
     {
         HfDamagePreEvent e = {{{sizeof e, HF_ON_DAMAGE_PRE, 0}}, 0};
@@ -150,7 +154,7 @@ static ULONGLONG g_eventHooksFirstTry;
  * behaviour (the co-op diagnostics, behaviours.c); the damage consumer also for damage before it applies. */
 static int EventHookWanted(const EventHook* h)
 {
-    return AnyListener(h->kind) || (h->kind == HF_ON_SPAWN && BehaviourSpawnsWatched()) || (h->kind == HF_ON_DAMAGE && AnyListener(HF_ON_DAMAGE_PRE));
+    return AnyListener(h->kind) || (h->kind == HF_ON_SPAWN && BehaviourSpawnsWatched()) || (h->kind == HF_ON_DAMAGE && (AnyListener(HF_ON_DAMAGE_PRE) || SeWantsDamage()));
 }
 
 /* A source's hook, when it is wanted and its bytes read as reviewed (60 s for them to decode). */

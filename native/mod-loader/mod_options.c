@@ -1,4 +1,4 @@
-/* SDK 29 add_option, get_option and set_option, and the Lua bridge exports for the bundled Lua mod that shows them in the
+/* SDK 30 add_option, get_option and set_option, and the Lua bridge exports for the bundled Lua mod that shows them in the
  * Megapack's OPTIONS > MODS menu (docs/modding/options.md). HellForge's saved value is the truth: the Megapack's menu only
  * serves the game's Lua, and the Lua mod sets each row to HellForge's value after registering it, so a menu without
  * HellForge (or HellForge without the menu) never loses a value. Included at the end of lua_bridge.c. */
@@ -245,7 +245,7 @@ static int OptionInsert(ModOption* o, double fallback)
     return 1;
 }
 
-/* SDK 29, add_option: 1 added, 2 already there, 0 refused (logged). */
+/* SDK 30, add_option: 1 added, 2 already there, 0 refused (logged). */
 static int ApiAddOption(HfMod* mod, const HfOption* def)
 {
     if (mod == NULL) return 0;
@@ -276,7 +276,7 @@ static int ApiAddOption(HfMod* mod, const HfOption* def)
     return result;
 }
 
-/* SDK 29, get_option: 1 with *value, 0 when the mod has no such option. */
+/* SDK 30, get_option: 1 with *value, 0 when the mod has no such option. */
 static int ApiGetOption(HfMod* mod, const char* id, double* value)
 {
     if (mod == NULL || id == NULL || value == NULL) return 0;
@@ -287,7 +287,7 @@ static int ApiGetOption(HfMod* mod, const char* id, double* value)
     return o != NULL;
 }
 
-/* SDK 29, set_option: 1 done (saved, the menu follows), 0 refused (logged). */
+/* SDK 30, set_option: 1 done (saved, the menu follows), 0 refused (logged). */
 static int ApiSetOption(HfMod* mod, const char* id, double value)
 {
     if (mod == NULL || id == NULL) return 0;

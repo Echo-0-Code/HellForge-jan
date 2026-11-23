@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 29
+#define HF_MOD_SDK_VERSION 30
 #define HF_MOD_EXPORT __declspec(dllexport)
 
 typedef struct HfMod HfMod; /* Identifies the calling mod in logs and status. Opaque, but for SDK 6's HF_API(mod). */
@@ -278,7 +278,8 @@ typedef struct HfArc
 
 #include "hellforge_customization.h" /* HfAttachment (SDK 17) and HfPattern (SDK 18): weapon attachments and patterns */
 #include "hellforge_ui.h"            /* SDK 19: screens in the game's own UI */
-#include "hellforge_world.h"         /* SDK 21, 27, 29: effects, enemies, sight, projectiles, poses; shot rules, HfAbility, HfOption */
+#include "hellforge_world.h"         /* SDK 21, 27, 30: effects, enemies, sight, projectiles, poses; shot rules, HfAbility, HfOption */
+#include "hellforge_status.h"        /* SDK 29: status effects of a mod's own */
 
 /* A new enemy in the spawn director's rosters (SDK 17, add_enemy): a row of its own, tied to no vanilla enemy. The
  * director spawns by group: a squad asks for some of a group's enemies, and the group's rows share the draw by their
@@ -1750,7 +1751,18 @@ typedef struct HfApi
     /* A joint's pose now (node as pose_joint takes it): HF_POSE_WORLD as a 4x4 matrix, or HF_POSE_LOCAL as an
      * HfJointPose, in out (16 floats). Game thread or an on_render callback. 1 read, 0 not (no such unit or node). */
     int (*joint_pose)(HfMod* mod, uint32_t unit, uint32_t node, uint32_t space, float out[16]);
-    /* ---- SDK 29: the mod's settings in OPTIONS > MODS (hellforge_world.h, docs/modding/ui.md; check hf->size) ------- */
+    /* ---- SDK 29: status effects of a mod's own (hellforge_status.h, docs/modding/status-effects.md; check hf->size) */
+    /* A status effect: its handle (1 and up), or 0 refused (the mod's log says why). Call it from hellforge_mod_init. */
+    uint32_t (*add_status_effect)(HfMod* mod, const HfStatusEffect* effect);
+    /* What its levels look like on these materials; the textures are used only while package (0: none) is resident.
+     * Rows are copied. Call it from hellforge_mod_init. 0 done, 1 refused (the mod's log says why). */
+    int (*add_effect_looks)(HfMod* mod, uint32_t effect, const HfEffectLook* rows, uint32_t count, uint64_t package);
+    /* Adds to an entity's meter (below 0 drains it), on the machine that owns it. Any thread; counted at the next
+     * update. 0 queued, 1 refused. */
+    int (*add_effect_buildup)(HfMod* mod, uint32_t effect, uint32_t entity, float amount);
+    /* An entity's level now (0 none), and its meter in state (may be NULL). Any thread. */
+    uint32_t (*effect_state)(HfMod* mod, uint32_t effect, uint32_t entity, HfEffectState* state);
+    /* ---- SDK 30: the mod's settings in OPTIONS > MODS (hellforge_world.h, docs/modding/ui.md; check hf->size) ------- */
     /* Adds a settings row under the mod's name, its value the saved one (or def->value the first time). The texts are
      * copied. Any thread, best from hellforge_mod_init. 1 added, 2 already there (its callback replaced; texts and
      * value kept), 0 refused (the mod's log says why). */

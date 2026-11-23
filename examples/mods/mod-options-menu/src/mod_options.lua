@@ -1,6 +1,6 @@
 -- HD2-Addon: mods/hellforge/mod_options
--- HellForge Mod Options: code mods' settings (SDK 29 add_option) as rows of the Vanilla Plus Megapack's OPTIONS > MODS
--- menu (_G.ModOptionsMenu, api 1). HellForge keeps the values: this reads them through the Lua bridge (SDK 29 exports,
+-- HellForge Mod Options: code mods' settings (SDK 30 add_option) as rows of the Vanilla Plus Megapack's OPTIONS > MODS
+-- menu (_G.ModOptionsMenu, api 1). HellForge keeps the values: this reads them through the Lua bridge (SDK 30 exports,
 -- native/mod-sdk/hellforge_lua.h), registers each one, reports the player's applied changes back and sets a row again
 -- when a mod changes its value from code. The menu's own saved value never wins over HellForge's.
 -- Started by Bingus Shared Loader (v15+). Does nothing without HellForge's loader or the menu.
@@ -50,7 +50,7 @@ local function find_loader()
     if kernel32.hfopt1_GetModuleHandleA(DLL) == nil then return nil end -- no code mods: HellForge's loader is not here
     local ok, found = pcall(ffi.load, DLL)
     if ok and pcall(function() return found.hfopt1_options end) then lib = found
-    else lib = false; print('[hellforge mod options] this HellForge has no mod options (SDK 29)') end
+    else lib = false; print('[hellforge mod options] this HellForge has no mod options (SDK 30)') end
     return lib
 end
 

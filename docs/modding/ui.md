@@ -166,7 +166,7 @@ uint32_t tab = HAS(hf, add_menu_tab) ? hf->add_menu_tab(mod, HF_MENU_TABS_ARMORY
 
 ## Settings in the MODS menu
 
-`add_option` (SDK 29) adds a row to the escape menu's OPTIONS > MODS, under the mod's name. HellForge keeps the value
+`add_option` (SDK 30) adds a row to the escape menu's OPTIONS > MODS, under the mod's name. HellForge keeps the value
 and saves it, so the mod only reads it and hears of changes:
 
 ```c

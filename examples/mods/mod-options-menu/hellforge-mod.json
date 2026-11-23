@@ -3,7 +3,7 @@
   "id": "hellforge.mod-options",
   "name": "HellForge Mod Options",
   "version": "0.1.0",
-  "description": "Shows code mods' settings (SDK 29 add_option) in ESC > OPTIONS > MODS. Needs Bingus Shared Loader and the Vanilla Plus Megapack's Mod Options Menu; without them, mods keep their saved settings.",
+  "description": "Shows code mods' settings (SDK 30 add_option) in ESC > OPTIONS > MODS. Needs Bingus Shared Loader and the Vanilla Plus Megapack's Mod Options Menu; without them, mods keep their saved settings.",
   "icon": "icon.png",
   "gameplay": false
 }
