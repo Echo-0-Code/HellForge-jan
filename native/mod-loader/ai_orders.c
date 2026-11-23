@@ -470,7 +470,14 @@ static uint32_t AiNearestPlayer(const float at[3])
     uint32_t best = 0;
     float bestD = 1e30f, p[3];
     for (int i = 0; i < n; i++)
-        if (players[i].avatar && players[i].life == 0 && AiWhere(players[i].avatar, p) && AiDist(p, at) < bestD) { bestD = AiDist(p, at); best = players[i].avatar; }
+    {
+        /* Standing only: the Helldiver's own life (0), not the player slot's lifecycle, whose values are not mapped. */
+        uintptr_t record;
+        int32_t health, max;
+        uint32_t life = 2;
+        if (!players[i].avatar || !EvpHealthOf(g_aiGame, players[i].avatar, &record, &health, &life, &max) || life != 0) continue;
+        if (AiWhere(players[i].avatar, p) && AiDist(p, at) < bestD) { bestD = AiDist(p, at); best = players[i].avatar; }
+    }
     return best;
 }
 
@@ -503,6 +510,7 @@ static void AiSettled(uint32_t entity, uint64_t resource)
     AiLog(u, "obeys the comms wheel (behaviour %u, path agent %s, rider %u)", AiBehaviour(&c), AiAgentOf(entity) ? "yes" : "NONE", u->rider);
     uint32_t player = rule->def.start_order == HF_ORDER_FOLLOW ? AiNearestPlayer(pos) : 0;
     if (player) AiSetOrder(u, HF_ORDER_FOLLOW, player, NULL, "its start order");
+    else if (rule->def.start_order == HF_ORDER_FOLLOW) AiLog(u, "no standing Helldiver to follow: it waits for an order");
 }
 
 /* ---- the game thread ---- */
