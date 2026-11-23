@@ -203,11 +203,17 @@ The game's Steam Cloud files (loadout, title, player card, controls) stay in eac
 
 ### Bundled mods
 
-Three mods ship with HellForge, built: the in-game editor (F8), the Hell Forge difficulty (level 11) and Vanilla Plus
-(small fixes: beacons stick, hellpods steer over any ground, reinforcements drop at their beacon). They are copied into
-`mods\hellforge-editor`, `mods\hell-forge` and `mods\vanilla-plus` when the launcher starts, when setup has copied the
-game, and before each session. The editor's icons and fonts and the difficulty's icon are made from your game copy.
-Switch any of them off on the Mods page and it stays off.
+Four mods ship with HellForge, built:
+
+- the in-game editor (F8), in `mods\hellforge-editor`;
+- the Hell Forge difficulty (level 11), in `mods\hell-forge`;
+- Vanilla Plus (beacons stick, hellpods steer over any ground, reinforcements drop at their beacon), in
+  `mods\vanilla-plus`;
+- HellForge Mod Options (code mods' settings in OPTIONS > MODS), in `mods\mod-options-menu`. It needs Bingus Shared
+  Loader and the Vanilla Plus Megapack.
+
+They are copied into `mods` when the launcher starts, when setup has copied the game, and before each session.
+The editor's icons and fonts and the difficulty's icon are made from your game copy. Switch any of them off on the Mods page and it stays off.
 
 An update brings their new versions. An older copy you downloaded separately (in another folder, or as a zip) is moved to
 `mods-retired`, and the editor's settings and presets come along to the bundled copy.

@@ -12,5 +12,7 @@ examples/mods/*/*.dll
 
 # Mod data built from the local game copy (game bytes): never committed
 examples/mods/*/data/
+# but HellForge Mod Options' Lua patch, built from its own source (src/build_patch.py), not from game files
+!examples/mods/mod-options-menu/data/
 examples/mods/*/build/
 CMakeUserPresets.json

@@ -12,6 +12,9 @@ On `dev`, since 0.4.0-beta.
 
 ### Added
 
+- **Mod settings in OPTIONS > MODS (SDK 29).** `add_option` gives a code mod toggles, choices and sliders in the
+  escape menu's MODS tab, through the bundled HellForge Mod Options and the Vanilla Plus Megapack's menu. HellForge
+  saves the values; `get_option` and `set_option` read and change them ([ui](docs/modding/ui.md#settings-in-the-mods-menu)).
 - **A new version keeps your mods on.** After an update the new version starts with a copy of the earlier version's mod
   list instead of an empty one; from then on each version's list is its own. `versions-keep` starts it empty with
   `--fresh-mods yes` ([going back](docs/README.md#going-back-to-an-earlier-version)).

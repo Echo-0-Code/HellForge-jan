@@ -73,6 +73,9 @@ public static class LuaRuntimes
         }
     }
 
+    // The bundled HellForge Mod Options: its Lua only shows code mods' settings in the MODS menu, so it needs nothing.
+    public const string ModOptionsId = "hellforge.mod-options";
+
     // What the enabled mods lack: Bingus Shared Loader for their Lua, HD2Runtime for its mods, HellForge's bridge in it.
     public static List<string> Problems(IEnumerable<ModManifest> enabled)
     {
@@ -80,7 +83,7 @@ public static class LuaRuntimes
         var problems = new List<string>();
         var bingus = mods.Any(m => m.Is.Bingus);
         var runtime = mods.FirstOrDefault(m => m.Is.Runtime);
-        var lua = mods.Where(m => !m.Is.Bingus && (m.Mod.Lua || m.Is.Runtime || m.Is.NeedsRuntime)).Select(m => m.Mod.Name).ToList();
+        var lua = mods.Where(m => !m.Is.Bingus && m.Mod.Id != ModOptionsId && (m.Mod.Lua || m.Is.Runtime || m.Is.NeedsRuntime)).Select(m => m.Mod.Name).ToList();
         if (!bingus && lua.Count > 0)
             problems.Add($"{Names(lua)} {(lua.Count == 1 ? "needs" : "need")} Bingus Shared Loader, a Lua mod you add yourself (Nexus Mods); without it their Lua does not run.");
         var forRuntime = mods.Where(m => m.Is.NeedsRuntime).Select(m => m.Mod.Name).ToList();

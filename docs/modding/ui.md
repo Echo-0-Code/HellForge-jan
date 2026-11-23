@@ -18,6 +18,7 @@ For a screen drawn with HellForge's own drawing calls (a map, a graph), see [Scr
 - [Clicks and closing](#clicks-and-closing)
 - [Texts for the game's own widgets](#texts-for-the-games-own-widgets)
 - [Tabs on the game's tab bars](#tabs-on-the-games-tab-bars)
+- [Settings in the MODS menu](#settings-in-the-mods-menu)
 - [Limits](#limits)
 
 ## A first screen
@@ -162,6 +163,37 @@ uint32_t tab = HAS(hf, add_menu_tab) ? hf->add_menu_tab(mod, HF_MENU_TABS_ARMORY
 - The callback runs on the game thread, also from inside the game's own tab change. It is called with 0 when the
   screen closes. It may call the game's code.
 - The label is the mod's own text, made as `add_text` makes one.
+
+## Settings in the MODS menu
+
+`add_option` (SDK 29) adds a row to the escape menu's OPTIONS > MODS, under the mod's name. HellForge keeps the value
+and saves it, so the mod only reads it and hears of changes:
+
+```c
+static void OnOption(HfMod* mod, const char* id, double value, void* user)
+{
+    /* the player applied a new value; game thread */
+}
+
+static const char* const kSpeeds[] = {"Slow", "Normal", "Fast"};
+HfOption speed = {sizeof speed, HF_OPTION_CHOICE, "speed", "Pod speed", "How fast the pod falls.", 1};
+speed.choice_count = 3, speed.choices = kSpeeds, speed.on_change = OnOption;
+double value = 1;
+if (HAS(hf, add_option) && hf->add_option(mod, &speed)) hf->get_option(mod, "speed", &value);
+```
+
+| Kind | Value | Also set |
+| --- | --- | --- |
+| `HF_OPTION_TOGGLE` | 0 off, 1 on | |
+| `HF_OPTION_CHOICE` | the index into `choices`, from 0 | `choice_count` (2 to 16), `choices` |
+| `HF_OPTION_SLIDER` | a number, snapped to `step` | `min`, `max`, `step` |
+
+- The menu is the Vanilla Plus Megapack's Mod Options Menu. The bundled HellForge Mod Options mod shows the rows
+  there, and needs Bingus Shared Loader. Without them, options keep their saved values.
+- The id keys the saved value: a-z, 0-9, `_ . -`, up to 48. Keep it from one version to the next.
+- Values are saved in `<logs>\sessions\mod-options\<mod id>.txt`. HellForge's value wins over the menu's own.
+- `set_option` changes a value from code, and the menu's row follows. It does not call the mod's own `on_change`.
+- A mod has up to 32 options. Labels take 64 characters, choices 48 and descriptions 400.
 
 ## Limits
 

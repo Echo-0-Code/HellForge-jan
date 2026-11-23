@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 28
+#define HF_MOD_SDK_VERSION 29
 #define HF_MOD_EXPORT __declspec(dllexport)
 
 typedef struct HfMod HfMod; /* Identifies the calling mod in logs and status. Opaque, but for SDK 6's HF_API(mod). */
@@ -278,7 +278,7 @@ typedef struct HfArc
 
 #include "hellforge_customization.h" /* HfAttachment (SDK 17) and HfPattern (SDK 18): weapon attachments and patterns */
 #include "hellforge_ui.h"            /* SDK 19: screens in the game's own UI */
-#include "hellforge_world.h"         /* SDK 21, 27: effects, enemies, sight, projectiles, poses; shot rules, HfAbility */
+#include "hellforge_world.h"         /* SDK 21, 27, 29: effects, enemies, sight, projectiles, poses; shot rules, HfAbility, HfOption */
 
 /* A new enemy in the spawn director's rosters (SDK 17, add_enemy): a row of its own, tied to no vanilla enemy. The
  * director spawns by group: a squad asks for some of a group's enemies, and the group's rows share the draw by their
@@ -1750,6 +1750,16 @@ typedef struct HfApi
     /* A joint's pose now (node as pose_joint takes it): HF_POSE_WORLD as a 4x4 matrix, or HF_POSE_LOCAL as an
      * HfJointPose, in out (16 floats). Game thread or an on_render callback. 1 read, 0 not (no such unit or node). */
     int (*joint_pose)(HfMod* mod, uint32_t unit, uint32_t node, uint32_t space, float out[16]);
+    /* ---- SDK 29: the mod's settings in OPTIONS > MODS (hellforge_world.h, docs/modding/ui.md; check hf->size) ------- */
+    /* Adds a settings row under the mod's name, its value the saved one (or def->value the first time). The texts are
+     * copied. Any thread, best from hellforge_mod_init. 1 added, 2 already there (its callback replaced; texts and
+     * value kept), 0 refused (the mod's log says why). */
+    int (*add_option)(HfMod* mod, const HfOption* def);
+    /* The value of one of the mod's options in *value: 1, or 0 when it has no such option. Any thread. */
+    int (*get_option)(HfMod* mod, const char* id, double* value);
+    /* Changes one of the mod's options from code (clamped and snapped as the menu would), saved and shown in the menu;
+     * its own on_change is not called. 1 done, 0 refused (no such option, or not a number). Any thread. */
+    int (*set_option)(HfMod* mod, const char* id, double value);
 } HfApi;
 
 /* SDK 6: an HfMod starts with the API, so these need only the mod. */
