@@ -833,7 +833,7 @@ typedef void (*HfFn_BehaviourMoveTo)(void* ctx, const float* target);
 
 ### BehaviourStop
 
-`game.dll+0x4D1640`, call only. Stops a behaviour's entity where it is: clears its path agent's points and moving flag (BehaviourMoveTo's counterpart). From custom AI research (custom-ai/FINDINGS.md: the SEAF trooper brain calls it; it held a Scout Strider on its point).
+`game.dll+0x4D1640`, call only. Stops a behaviour's entity where it is: sets its path agent's goal to its own position (BehaviourMoveTo's counterpart). From custom AI research (custom-ai/FINDINGS.md: the SEAF trooper brain calls it; it held a Scout Strider on its point).
 
 ```c
 typedef void (*HfFn_BehaviourStop)(void* ctx);

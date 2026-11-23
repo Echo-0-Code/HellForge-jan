@@ -104,7 +104,7 @@ unit that makes no headway for 4 s goes through these steps:
 2. It tries points 6 m to either side of that line.
 3. It stands still with `HF_AI_UNREACHABLE` and tries again after 10 s, or sooner when the point moves 5 m.
 
-The unit's log lines name each detour and give its path agent's next point.
+The unit's log lines name each detour and give its path agent's goal.
 
 ## Co-op
 

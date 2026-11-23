@@ -59,7 +59,7 @@ typedef struct HfAiState
     float point[3];       /* where it is sent now (a detour's point while HF_AI_DETOUR) */
     float position[3];    /* where it is */
     float distance;       /* metres from its position to the order's own point (the followed entity's, for FOLLOW) */
-    uint32_t moving;      /* 1 while its path agent says it walks */
+    uint32_t moving;      /* 1 while it walks: it moved since the last step (a quarter second) */
     uint32_t behaviour;   /* its brain (behaviour id) */
 } HfAiState;
 
