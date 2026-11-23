@@ -14,7 +14,7 @@
 #define AI_CHANNEL "@hellforge.ai" /* no mod can have it: mod ids start with a letter or digit */
 #define AI_WIRE_VERSION 1u
 #define AI_BEHAVIOURS 0x3326740u   /* behaviour records: map +0x40, infos +0x58, records +0x60 stride 0x1F8 */
-#define AI_AGENTS 0x3326418u       /* path agents: map +0x30, records +0x50 stride 0xA8 (+0x60 next point, +0x90 moving) */
+#define AI_AGENTS 0x3326418u       /* path agents: map +0x30, records +0x50 stride 0xA8 (+0x60 goal, +0x90 a request pending) */
 #define AI_COMMS 0x3317C30u        /* the comms items, 0x20 bytes each, +0 the id */
 #define AI_COMMS_FOLLOW 0xD6208139u
 #define AI_COMMS_HOLD 0x0DAE042Eu
@@ -31,7 +31,7 @@ typedef struct AiUnit
 {
     HfMod* mod;
     uint32_t entity, rider, rule; /* rule: its ai_obey row + 1, 0 none */
-    uint32_t order, target, status, issued, tries, detour;
+    uint32_t order, target, status, issued, tries, detour, moved;
     float point[3], goal[3], sent[3], detourAt[3], lastPos[3], headwayFrom[3];
     float follow, hold;
     double sinceSent, sinceHeadway, retryIn, sinceLog;
@@ -113,7 +113,8 @@ static uintptr_t AiAgentOf(uint32_t entity)
     int64_t i = m ? AiMapFind(m + 0x30, entity) : -1;
     return i >= 0 && records ? records + (uintptr_t)i * 0xA8 : 0;
 }
-static int AiMoving(uint32_t entity) { uintptr_t a = AiAgentOf(entity); uint8_t m = 0; return a && !SafeRead(a + 0x90, &m, 1) && m; }
+/* The goal its path agent walks to: MoveTo writes it, Stop writes the unit's own position. 0 when there is no agent. */
+static int AiAgentGoal(uint32_t entity, float out[3]) { uintptr_t a = AiAgentOf(entity); return a && !SafeRead(a + 0x60, out, 12); }
 
 static int AiOwnPos(AiCtx* c, float out[3])
 {
@@ -197,20 +198,19 @@ static int AiResting(AiUnit* u, const float want[3])
     return 0;
 }
 
-/* No headway for AI_STUCK_S: the agent's path failed (its next point stays its own position). A nearer point, or rest. */
+/* No headway for AI_STUCK_S: the agent found no path to its goal. A nearer point, or rest. */
 static void AiNoHeadway(AiUnit* u, AiCtx* c, const float pos[3], const float want[3])
 {
-    uintptr_t agent = AiAgentOf(u->entity);
-    float next[3] = {0, 0, 0};
-    if (agent) SafeRead(agent + 0x60, next, 12);
+    float goal[3] = {0, 0, 0};
+    AiAgentGoal(u->entity, goal);
     u->sinceHeadway = 0;
     if (++u->tries <= 3)
     {
         AiDetourPoint(pos, want, u->tries, u->detourAt);
         u->detour = 1;
         u->issued = 0;
-        AiLog(u, "no headway for %.0f s toward %.1f %.1f %.1f (path agent's next point %.1f %.1f %.1f): detour %u to %.1f %.1f %.1f",
-            AI_STUCK_S, (double)want[0], (double)want[1], (double)want[2], (double)next[0], (double)next[1], (double)next[2], u->tries,
+        AiLog(u, "no headway for %.0f s toward %.1f %.1f %.1f (path agent's goal %.1f %.1f %.1f): detour %u to %.1f %.1f %.1f",
+            AI_STUCK_S, (double)want[0], (double)want[1], (double)want[2], (double)goal[0], (double)goal[1], (double)goal[2], u->tries,
             (double)u->detourAt[0], (double)u->detourAt[1], (double)u->detourAt[2]);
         return;
     }
@@ -232,7 +232,9 @@ static void AiSteer(AiUnit* u, AiCtx* c, const float pos[3], const float want[3]
     const float* aim = u->detour ? u->detourAt : want;
     float away = AiFlat(pos, aim), slack = away * 0.15f > 2.0f ? away * 0.15f : 2.0f;
     if (!u->issued) { memcpy(u->headwayFrom, pos, 12); u->sinceHeadway = 0; } /* a following point moving on is no headway */
-    if (!u->issued || AiDist(aim, u->sent) > slack || (!AiMoving(u->entity) && u->sinceSent > 2.0)) AiSend(u, c, aim);
+    float goal[3];
+    int replaced = u->sinceSent > 2.0 && AiAgentGoal(u->entity, goal) && AiDist(goal, u->sent) > 1.0f; /* its brain or a stop */
+    if (!u->issued || AiDist(aim, u->sent) > slack || replaced) AiSend(u, c, aim);
     u->status = u->detour ? HF_AI_DETOUR : HF_AI_MOVING;
     if (AiFlat(pos, u->headwayFrom) > 1.0f) { memcpy(u->headwayFrom, pos, 12); u->sinceHeadway = 0; return; }
     if ((u->sinceHeadway += AI_STEP_S) >= AI_STUCK_S) AiNoHeadway(u, c, pos, want);
@@ -253,6 +255,7 @@ static int AiUnitStep(AiUnit* u)
     float pos[3], at[3];
     if (!AiCtxOf(u->entity, &c) || !AiAuthority(&c) || !AiAgentOf(u->entity) || !AiOwnPos(&c, pos))
     { u->status = u->order ? HF_AI_NO_AGENT : HF_AI_IDLE; return 1; }
+    u->moved = AiDist(pos, u->lastPos) > 0.05f;
     memcpy(u->lastPos, pos, 12);
     u->sinceSent += AI_STEP_S;
     if (u->order == HF_ORDER_FOLLOW && !AiWhere(u->target, at))
@@ -280,7 +283,7 @@ static int AiUnitStep(AiUnit* u)
         static const char* orders[] = {"none", "FOLLOW", "HOLD", "GOTO"};
         AiLog(u, "%s %s, at %.1f %.1f %.1f, %.1f m from the order's point, sent to %.1f %.1f %.1f, moving %d", orders[u->order & 3],
             AiStatusName(u->status), (double)pos[0], (double)pos[1], (double)pos[2], (double)AiFlat(pos, u->point), (double)u->sent[0],
-            (double)u->sent[1], (double)u->sent[2], AiMoving(u->entity));
+            (double)u->sent[1], (double)u->sent[2], u->moved);
     }
     return 1;
 }
@@ -641,12 +644,12 @@ static uint32_t ApiAiState(HfMod* mod, uint32_t entity, HfAiState* state)
         memcpy(s.point, u->detour ? u->detourAt : u->goal, 12);
         memcpy(s.position, u->lastPos, 12);
         s.distance = AiFlat(u->lastPos, u->point);
+        s.moving = (uint32_t)u->moved;
     }
     ReleaseSRWLockShared(&g_aiLock);
     if (g_aiState > 0)
     {
         AiCtx c;
-        s.moving = (uint32_t)AiMoving(entity);
         if (AiCtxOf(entity, &c)) s.behaviour = AiBehaviour(&c);
     }
     if (state != NULL && state->size >= sizeof *state) *state = s;

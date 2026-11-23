@@ -428,8 +428,8 @@ static inline HfFn_BehaviourOrbitStep hf_fn_BehaviourOrbitStep(HfMod* mod) { ret
 typedef void (*HfFn_BehaviourMoveTo)(void* ctx, const float* target);
 static inline HfFn_BehaviourMoveTo hf_fn_BehaviourMoveTo(HfMod* mod) { return (HfFn_BehaviourMoveTo)hf_function_(mod, "BehaviourMoveTo"); }
 
-/* BehaviourStop (game.dll+0x4D1640; call only). Stops a behaviour's entity where it is: clears its path agent's points
- * and moving flag (BehaviourMoveTo's counterpart).
+/* BehaviourStop (game.dll+0x4D1640; call only). Stops a behaviour's entity where it is: sets its path agent's goal to
+ * its own position (BehaviourMoveTo's counterpart).
  *   ctx  {EntityInfo*, P*}
  * From custom AI research (custom-ai/FINDINGS.md: the SEAF trooper brain calls it; it held a Scout Strider on its
  * point). */
