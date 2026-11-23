@@ -888,8 +888,15 @@ static void RegisterNetworkTypes(void)
  * room for (CopyLoadoutAndList), and a margin. */
 static size_t ArmoryBytes(void) { return (size_t)(REG_ARMORY_FIRST + REG_LOADOUT_RECORDS + RegRoom() + 8) * 32; }
 
-/* The armory object's entries and per-type starts and counts, from the loadout table's records; a record whose bit is
- * set in left (NULL: none) gets no entry. */
+/* Whether record r is left out: left (NULL: none) has a bit for each of the game's own records (REG_LOADOUT_RECORDS)
+ * only, so the records after them (mods' own loadout records) are never left out and never read past its end. */
+static int ArmoryLeft(const uint8_t* left, uint32_t r)
+{
+    return left != NULL && r < REG_LOADOUT_RECORDS && (left[r >> 3] & (1u << (r & 7))) != 0;
+}
+
+/* The armory object's entries and per-type starts and counts, from the loadout table's records; a record ArmoryLeft
+ * names gets no entry. */
 static void ArmoryFill(uint8_t* armory, uint8_t* table, uint32_t count, const uint8_t* left)
 {
     memset(armory, 0, ArmoryBytes());
@@ -899,7 +906,7 @@ static void ArmoryFill(uint8_t* armory, uint8_t* table, uint32_t count, const ui
     {
         uint32_t type;
         memcpy(&type, records + (size_t)r * REG_LOADOUT_STRIDE + 4, 4);
-        if (type < REG_ARMORY_TYPES && !(left != NULL && left[r >> 3] & (1u << (r & 7)))) counts[type]++;
+        if (type < REG_ARMORY_TYPES && !ArmoryLeft(left, r)) counts[type]++;
     }
     uint32_t next = REG_ARMORY_FIRST;
     for (int t = 0; t < REG_ARMORY_TYPES; t++) { starts[t] = next; next += counts[t]; }
@@ -908,7 +915,7 @@ static void ArmoryFill(uint8_t* armory, uint8_t* table, uint32_t count, const ui
         const uint8_t* rec = records + (size_t)r * REG_LOADOUT_STRIDE;
         uint32_t type;
         memcpy(&type, rec + 4, 4);
-        if (type >= REG_ARMORY_TYPES || (left != NULL && left[r >> 3] & (1u << (r & 7)))) continue;
+        if (type >= REG_ARMORY_TYPES || ArmoryLeft(left, r)) continue;
         uint8_t* entry = armory + (size_t)(starts[type] + placed[type]++) * 32;
         uint64_t owner = ArmoryEntity(table, r);
         memcpy(entry, rec, 4);          /* loadout id */
