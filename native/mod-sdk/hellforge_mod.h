@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 31
+#define HF_MOD_SDK_VERSION 32
 #define HF_MOD_EXPORT __declspec(dllexport)
 
 typedef struct HfMod HfMod; /* Identifies the calling mod in logs and status. Opaque, but for SDK 6's HF_API(mod). */
@@ -1785,6 +1785,14 @@ typedef struct HfApi
     int (*ai_order)(HfMod* mod, uint32_t entity, uint32_t order, uint32_t target, const float point[3]);
     /* A unit's order and how it goes, in state (may be NULL); answers its status (HF_AI_...). Any thread. */
     uint32_t (*ai_state)(HfMod* mod, uint32_t entity, HfAiState* state);
+    /* ---- SDK 32: navmesh routes (hellforge_ai.h, docs/modding/ai.md; check hf->size) ----------------------------------- */
+    uint32_t (*nav_route_open)(HfMod* mod, const HfNavProfile* profile); /* a route of the mod's own: its id, 0 refused */
+    /* Asks for a route from `from` to `to` (to is moved onto the ground there). Game thread, in a mission. 0 asked, 1 refused. */
+    int (*nav_route_ask)(HfMod* mod, uint32_t route, const float from[3], const float to[3]);
+    /* How the route stands (HF_ROUTE_...); state, corners (x, y, z each, up to max) and from (the walker now) may be NULL. */
+    uint32_t (*nav_route_read)(HfMod* mod, uint32_t route, const float from[3], HfNavRoute* state, float* corners, uint32_t max);
+    /* The route goes. Game thread. */
+    void (*nav_route_close)(HfMod* mod, uint32_t route);
 } HfApi;
 
 /* SDK 6: an HfMod starts with the API, so these need only the mod. */
@@ -1922,8 +1930,7 @@ static inline int hf_on_explosion(HfMod* mod, HfExplosionListener listener, void
 static inline int hf_on_bughole(HfMod* mod, HfBugholeListener listener, void* user, int32_t priority)
 { return hf_subscribe_(mod, HF_ON_BUGHOLE, HF_LISTENER_(listener), user, priority); }
 /* HF_ON_ORDER (SDK 31): a player gave Follow me or Hold position on the comms wheel, on every machine. */
-static inline int hf_on_order(HfMod* mod, HfOrderListener listener, void* user, int32_t priority)
-{ return hf_subscribe_(mod, HF_ON_ORDER, HF_LISTENER_(listener), user, priority); }
+static inline int hf_on_order(HfMod* mod, HfOrderListener listener, void* user, int32_t priority) { return hf_subscribe_(mod, HF_ON_ORDER, HF_LISTENER_(listener), user, priority); }
 
 /* The load events (on): the callback once the game reaches that point of its start, at once if it has. */
 static inline int hf_on_game_loaded(HfMod* mod, HfEventCallback callback, void* user)
