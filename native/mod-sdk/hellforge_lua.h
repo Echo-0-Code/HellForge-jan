@@ -119,4 +119,24 @@ HF_LUA_API int hellforge_lua_get_passives(HfMod* mod, HfPassives* out);         
 HF_LUA_API void hellforge_lua_log(HfMod* mod, const char* text);                 /* a line in mod-lua.<name>.log */
 HF_LUA_API const char* hellforge_lua_last(HfMod* mod);                           /* the mod's last log line: why a call was refused */
 
+/* SDK 30: code mods' options (add_option) for the OPTIONS > MODS menu. Only the bundled HellForge Mod Options Lua mod
+ * uses these, finding them by name (the bridge version stays: HD2Runtime needs none of them). Texts stay valid. */
+typedef struct HfLuaOption
+{
+    uint32_t size, kind;      /* sizeof(HfLuaOption) before the call; HF_OPTION_... */
+    const char* mod_id;       /* the menu's category id */
+    const char* mod_name;     /* its button */
+    const char* key;          /* the menu's option id: hellforge/<mod id>/<id> */
+    const char* label;
+    const char* description;  /* or NULL */
+    double value, min, max, step;
+    uint32_t gap, choice_count;
+    const char* choices[HF_OPTION_MAX_CHOICES];
+    uint32_t serial;          /* bumped by every change of the value */
+} HfLuaOption;
+HF_LUA_API uint32_t hellforge_lua_options(uint32_t* revision);                  /* the count; revision bumps on any change */
+HF_LUA_API int hellforge_lua_option(uint32_t index, HfLuaOption* out);
+HF_LUA_API int hellforge_lua_option_applied(uint32_t index, double value);    /* the player applied it: saved, on_change */
+HF_LUA_API void hellforge_lua_options_note(const char* text);                 /* a line in modloader.log */
+
 #endif

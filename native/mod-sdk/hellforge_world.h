@@ -1,6 +1,6 @@
-/* HellForge mod SDK 21, 27 and 28: effects on entities (play_effect, stop_effect), enemies near a point
+/* HellForge mod SDK 21, 27, 28 and 30: effects on entities (play_effect, stop_effect), enemies near a point
  * (find_enemies), the weapon the armory shows (armory_weapon), menu tabs, line of sight, projectiles near a point,
- * sides and joint poses; docs/modding/world.md. It also holds the spawn director's enemy constants (SDK 17,
+ * sides, joint poses and mod options; docs/modding/world.md. It also holds the spawn director's enemy constants (SDK 17,
  * add_enemy). Included by hellforge_mod.h. */
 #pragma once
 #include <stdint.h>
@@ -206,3 +206,33 @@ typedef struct HfAbility
     uint64_t package;       /* the package holding the sounds' bank, loaded for the session (a catalogue package), or 0 */
     uint32_t flags;         /* HF_ABILITY_... flags (HellForge 2026-10-18; older mods leave it out) */
 } HfAbility;
+
+/* ---- SDK 30 --------------------------------------------------------------------------------------------------------- */
+
+/* SDK 30: a mod's settings in the game's OPTIONS > MODS menu (add_option; docs/modding/ui.md). HellForge keeps each
+ * value (saved per mod in the logs folder's parent, mod-options\<mod id>.txt) and is its source of truth: the mod reads
+ * it with get_option and hears of the player's changes through on_change. The menu itself is the Vanilla Plus Megapack's
+ * Mod Options Menu, reached through HellForge's bundled "HellForge Mod Options" Lua mod (it needs Bingus Shared Loader);
+ * without them a mod's options keep their saved values and set_option still changes them. */
+#define HF_OPTION_TOGGLE 1u /* value 0 off, 1 on */
+#define HF_OPTION_CHOICE 2u /* value the 0-based index into choices */
+#define HF_OPTION_SLIDER 3u /* value a number from min to max, snapped to step */
+#define HF_OPTION_MAX_CHOICES 16u
+#define HF_OPTION_MAX_PER_MOD 32u
+/* The player applied a new value in the menu; on the game thread. A mod's own set_option does not call it. */
+typedef void (*HfOptionCallback)(HfMod* mod, const char* id, double value, void* user);
+typedef struct HfOption
+{
+    uint32_t size;           /* sizeof(HfOption) */
+    uint32_t kind;           /* HF_OPTION_... */
+    const char* id;          /* unique within the mod, a-z 0-9 _ . - (up to 48): it keys the saved value, keep it */
+    const char* label;       /* the row's text (up to 64 characters, shown in upper case) */
+    const char* description; /* the description box's text while the row is selected (up to 400), or NULL */
+    double value;            /* the default, used until the player changes it */
+    uint32_t choice_count;   /* a choice's 2 .. HF_OPTION_MAX_CHOICES names (up to 48 characters each) */
+    const char* const* choices;
+    double min, max, step;   /* a slider's: min < max, 0 < step <= max - min (step 0: 1) */
+    uint32_t gap;            /* 1: space above the row */
+    HfOptionCallback on_change; /* may be NULL (read get_option when it matters) */
+    void* user;
+} HfOption;

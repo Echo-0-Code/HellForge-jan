@@ -441,3 +441,5 @@ HF_LUA_API int hellforge_lua_set_passives(HfMod* mod, uint32_t armor, uint32_t s
 HF_LUA_API int hellforge_lua_get_passives(HfMod* mod, HfPassives* out) { return LuaMod(mod) ? ApiGetPassives(mod, out) : 0; }
 HF_LUA_API void hellforge_lua_log(HfMod* mod, const char* text) { if (LuaMod(mod) && text != NULL) ApiLog(mod, "%s", text); }
 HF_LUA_API const char* hellforge_lua_last(HfMod* mod) { return LuaMod(mod) ? mod->last : ""; }
+
+#include "mod_options.c" /* SDK 30: code mods' options for the OPTIONS > MODS menu */

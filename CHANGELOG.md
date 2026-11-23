@@ -12,6 +12,9 @@ On `dev`, since 0.4.0-beta.
 
 ### Added
 
+- **Mod settings in OPTIONS > MODS (SDK 30).** `add_option` gives a code mod toggles, choices and sliders in the
+  escape menu's MODS tab, through the bundled HellForge Mod Options and the Vanilla Plus Megapack's menu. HellForge
+  saves the values; `get_option` and `set_option` read and change them ([ui](docs/modding/ui.md#settings-in-the-mods-menu)).
 - **Status effects of a mod's own (SDK 29).** `add_status_effect` gives each entity a build-up meter that vanilla
   statuses or the mod fill, with a hold and a linear or half-life decay. Its levels swap textures, scale the damage
   taken and call the mod back, and can show on the other players' games too ([status effects](docs/modding/status-effects.md)).

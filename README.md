@@ -125,7 +125,8 @@ list, and a version with no mods on imports the earlier list in one click. Your 
 4. The first launch of a new installation can stop in the cryo pod, and the launcher tells you when it does. Press STOP,
    then PLAY again.
 5. In game, press F8 for the in-game editor.
-6. Three mods come installed: the in-game editor, the Hell Forge difficulty (level 11) and Vanilla Plus (small fixes).
+6. Four mods come installed: the in-game editor, the Hell Forge difficulty (level 11), Vanilla Plus (small fixes) and
+   HellForge Mod Options (mods' settings in the escape menu).
    Add more on the Mods page: [docs/mods.md](docs/mods.md). A code mod runs inside the game with your permissions, so
    only enable code mods from people you trust.
 7. To play with friends, compare the modlist code on the Mods page (friends need the same gameplay mods), then host or
