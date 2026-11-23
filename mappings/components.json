@@ -10673,6 +10673,62 @@
       "applies": "respawn",
       "appliesVerified": false,
       "appliesSource": "entities copy their type's records when they are made"
+    },
+    "Faction": {
+      "component": "FactionComponentData",
+      "index": 90,
+      "stride": 152,
+      "layout": "25480438",
+      "meaning": "the side an entity is on: its factions, and how others aim at it",
+      "fields": {
+        "factions": {
+          "offset": 0,
+          "type": "u32",
+          "count": 3,
+          "meaning": "the factions it belongs to, ending at the first 0: 1 Helldivers (Super Earth), 2 Terminids, 4 Illuminate, 8 Automatons, 16 wildlife; the faction table's mask, which perception and targeting sort by",
+          "verified": true,
+          "source": "filediver datalibrary/faction_component.go (FactionComponent); custom-ai probe 0.3.2 (record +0 read 8 on the Scout Strider, set to 1 before spawn: friendly all mission)"
+        },
+        "targeting_node": {
+          "offset": 12,
+          "type": "u32",
+          "meaning": "the node others aim at and check sight to (a thin hash)",
+          "verified": false,
+          "source": "filediver datalibrary/faction_component.go (FactionComponent)"
+        },
+        "half_width": {
+          "offset": 64,
+          "type": "f32",
+          "meaning": "the distance from which an enemy can attack it from the side",
+          "verified": false,
+          "source": "filediver datalibrary/faction_component.go (FactionComponent)"
+        },
+        "half_forward_size": {
+          "offset": 68,
+          "type": "f32",
+          "meaning": "the distance from which an enemy can attack it from the front or back",
+          "verified": false,
+          "source": "filediver datalibrary/faction_component.go (FactionComponent)"
+        },
+        "priority": {
+          "offset": 72,
+          "type": "f32",
+          "meaning": "its weight when others choose a target",
+          "verified": false,
+          "source": "filediver datalibrary/faction_component.go (FactionComponent)"
+        },
+        "complex_targeting_nodes": {
+          "offset": 84,
+          "type": "u32",
+          "count": 16,
+          "meaning": "more nodes to aim at on large targets such as vehicles, ending at the first 0 (thin hashes)",
+          "verified": false,
+          "source": "filediver datalibrary/faction_component.go (FactionComponent)"
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": true,
+      "appliesSource": "custom-ai probe 0.3.2: a record set before spawn held all mission; a live change to the faction table reverted (the record is read at creation)"
     }
   }
 }

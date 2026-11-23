@@ -146,6 +146,16 @@
    "stride": 360,
    "type": 4124023692
   },
+  "FactionComponentData": {
+   "offset": 1288648,
+   "header": "91ea53564c444c440100000091ea5356187c01000100000000000000",
+   "index": 90,
+   "indices": 1056,
+   "records": 529,
+   "recordOffset": 16896,
+   "stride": 152,
+   "type": 1448340113
+  },
   "GoreComponentData": {
    "offset": 18975672,
    "header": "7a9c418d4c444c44010000007a9c418df0e56a000100000000000000",

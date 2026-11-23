@@ -29,7 +29,7 @@ static volatile LONG g_listening;            /* bit k: a mod listens to kind k (
 static const char* EventName(uint32_t kind)
 {
     static const char* names[] = {"?", "state", "mission start", "mission end", "player spawn", "player down", "damage", "stratagem",
-        "kill", "spawn", "heal", "stat", "weapon", "explosion", "bug hole", "damage (before)", "message", "share"};
+        "kill", "spawn", "heal", "stat", "weapon", "explosion", "bug hole", "damage (before)", "message", "share", "order"};
     return kind < sizeof names / sizeof names[0] ? names[kind] : "?";
 }
 
@@ -65,6 +65,7 @@ static void RaiseTo(HfEventInfo* event, HfMod* only)
 static void Raise(HfEventInfo* event) { RaiseTo(event, NULL); }
 
 static int AnyListener(uint32_t kind) { return (g_listening >> kind) & 1; }
+static void AiStartWanted(void); /* ai_orders.c: HF_ON_ORDER's source is its update */
 
 static void EventSourcesTick(void); /* EVENT SOURCES */
 static void ActionsTick(void);      /* actions.c */
@@ -89,6 +90,7 @@ static void EventsTick(void)
         for (int i = 0; i < n; i++) DispatchTo((HfEventInfo*)pending[i].data, pending[i].only);
     }
     EventSourcesTick();
+    AiStartWanted();
     ActionsTick();
     PaidGuardTick();
 }

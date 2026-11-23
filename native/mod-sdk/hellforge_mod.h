@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 30
+#define HF_MOD_SDK_VERSION 31
 #define HF_MOD_EXPORT __declspec(dllexport)
 
 typedef struct HfMod HfMod; /* Identifies the calling mod in logs and status. Opaque, but for SDK 6's HF_API(mod). */
@@ -714,6 +714,8 @@ typedef struct HfNotice
 /* SDK 16 events (subscribe): HfMessageEvent and HfShareEvent. */
 #define HF_ON_MESSAGE 16       /* HfMessageEvent: a message from the same mod on another machine of the lobby (send) */
 #define HF_ON_SHARE 17         /* HfShareEvent: one row of this mod's shared table arrived, changed or went */
+/* SDK 31 (hellforge_ai.h) */
+#define HF_ON_ORDER 18         /* HfOrderEvent: a player gave Follow me or Hold position on the comms wheel (every machine) */
 
 /* The game's states (HfStateEvent, game_state). */
 #define HF_STATE_NONE 0u
@@ -766,6 +768,7 @@ typedef struct HfEventInfo
     uint64_t update; /* the game update it was delivered in (counted from the session's start) */
 } HfEventInfo;
 typedef void (*HfListener)(HfMod* mod, const HfEventInfo* event, void* user);
+#include "hellforge_ai.h" /* SDK 31: orders for AI units (HfOrderEvent needs HfEventInfo) */
 
 typedef struct HfStateEvent { HfEventInfo info; uint32_t from, to; } HfStateEvent;
 typedef struct HfPlayerEvent
@@ -1772,6 +1775,16 @@ typedef struct HfApi
     /* Changes one of the mod's options from code (clamped and snapped as the menu would), saved and shown in the menu;
      * its own on_change is not called. 1 done, 0 refused (no such option, or not a number). Any thread. */
     int (*set_option)(HfMod* mod, const char* id, double value);
+    /* ---- SDK 31: orders for AI units (hellforge_ai.h, docs/modding/ai.md; check hf->size) ---------------------------- */
+    /* Units of an entity obey the comms wheel's Follow me and Hold position, on the machine that simulates each. Call it
+     * from hellforge_mod_init. 0 done, 1 refused (the mod's log says why). */
+    int (*ai_obey)(HfMod* mod, const HfAiObey* obey);
+    /* Gives a unit an order (HF_ORDER_...): FOLLOW keeps it near target, HOLD keeps it at point (NULL: where it stands),
+     * GOTO walks it to point and holds there, NONE hands it back to its brain. Game thread of the machine that simulates
+     * it. 0 done, 1 refused. */
+    int (*ai_order)(HfMod* mod, uint32_t entity, uint32_t order, uint32_t target, const float point[3]);
+    /* A unit's order and how it goes, in state (may be NULL); answers its status (HF_AI_...). Any thread. */
+    uint32_t (*ai_state)(HfMod* mod, uint32_t entity, HfAiState* state);
 } HfApi;
 
 /* SDK 6: an HfMod starts with the API, so these need only the mod. */
@@ -1837,6 +1850,7 @@ typedef void (*HfStatListener)(HfMod* mod, const HfStatEvent* event, void* user)
 typedef void (*HfWeaponListener)(HfMod* mod, const HfWeaponEvent* event, void* user);
 typedef void (*HfExplosionListener)(HfMod* mod, const HfExplosionEvent* event, void* user);
 typedef void (*HfBugholeListener)(HfMod* mod, const HfBugholeEvent* event, void* user);
+typedef void (*HfOrderListener)(HfMod* mod, const HfOrderEvent* event, void* user);
 
 /* The listener goes to subscribe as an HfListener: its event argument points at the event's HfEventInfo, which is the
  * struct's first member (checked below), so both take the same pointer, and on Windows x64, HellForge's only target, the
@@ -1853,6 +1867,7 @@ HF_ASSERT_OFFSET(HfStatEvent, info, 0);
 HF_ASSERT_OFFSET(HfWeaponEvent, info, 0);
 HF_ASSERT_OFFSET(HfExplosionEvent, info, 0);
 HF_ASSERT_OFFSET(HfBugholeEvent, info, 0);
+HF_ASSERT_OFFSET(HfOrderEvent, info, 0);
 static inline int hf_subscribe_(HfMod* mod, uint32_t kind, void (*listener)(void), void* user, int32_t priority)
 {
     const HfApi* hf = HF_API(mod);
@@ -1906,6 +1921,9 @@ static inline int hf_on_explosion(HfMod* mod, HfExplosionListener listener, void
 /* HF_ON_BUGHOLE (SDK 11): a bug hole was closed, on every machine. */
 static inline int hf_on_bughole(HfMod* mod, HfBugholeListener listener, void* user, int32_t priority)
 { return hf_subscribe_(mod, HF_ON_BUGHOLE, HF_LISTENER_(listener), user, priority); }
+/* HF_ON_ORDER (SDK 31): a player gave Follow me or Hold position on the comms wheel, on every machine. */
+static inline int hf_on_order(HfMod* mod, HfOrderListener listener, void* user, int32_t priority)
+{ return hf_subscribe_(mod, HF_ON_ORDER, HF_LISTENER_(listener), user, priority); }
 
 /* The load events (on): the callback once the game reaches that point of its start, at once if it has. */
 static inline int hf_on_game_loaded(HfMod* mod, HfEventCallback callback, void* user)

@@ -5230,6 +5230,34 @@ HF_ASSERT_OFFSET(HfVehicle, wheel7_rotation_joint, 480);
 HF_ASSERT_OFFSET(HfVehicle, wheel7_joint_d, 484);
 #define HF_TYPE_Vehicle_wheel7_joint_d HF_TYPE_U32
 
+/* FactionComponentData (component 90, 152-byte records): the side an entity is on: its factions, and how others aim at it */
+#define HfFaction_INFO "FactionComponentData", 25480438u
+typedef struct HfFaction
+{
+    uint32_t factions[3];                        /* +0x00 the factions it belongs to, ending at the first 0: 1 Helldivers (Super Earth), 2 Terminids, 4 Illuminate, 8 Automatons, 16 wildlife; the faction table's mask, which perception and targeting sort by [respawn] */
+    uint32_t targeting_node;                     /* +0x0C the node others aim at and check sight to (a thin hash) (unverified) [respawn] */
+    uint8_t _unknown_10[48];
+    float half_width;                            /* +0x40 the distance from which an enemy can attack it from the side (unverified) [respawn] */
+    float half_forward_size;                     /* +0x44 the distance from which an enemy can attack it from the front or back (unverified) [respawn] */
+    float priority;                              /* +0x48 its weight when others choose a target (unverified) [respawn] */
+    uint8_t _unknown_4C[8];
+    uint32_t complex_targeting_nodes[16];        /* +0x54 more nodes to aim at on large targets such as vehicles, ending at the first 0 (thin hashes) (unverified) [respawn] */
+    uint8_t _unknown_94[4];
+} HfFaction;
+HF_ASSERT_SIZE(HfFaction, 152);
+HF_ASSERT_OFFSET(HfFaction, factions, 0);
+#define HF_TYPE_Faction_factions HF_TYPE_U32
+HF_ASSERT_OFFSET(HfFaction, targeting_node, 12);
+#define HF_TYPE_Faction_targeting_node HF_TYPE_U32
+HF_ASSERT_OFFSET(HfFaction, half_width, 64);
+#define HF_TYPE_Faction_half_width HF_TYPE_F32
+HF_ASSERT_OFFSET(HfFaction, half_forward_size, 68);
+#define HF_TYPE_Faction_half_forward_size HF_TYPE_F32
+HF_ASSERT_OFFSET(HfFaction, priority, 72);
+#define HF_TYPE_Faction_priority HF_TYPE_F32
+HF_ASSERT_OFFSET(HfFaction, complex_targeting_nodes, 84);
+#define HF_TYPE_Faction_complex_targeting_nodes HF_TYPE_U32
+
 #pragma pack(pop)
 
 #endif

@@ -100,6 +100,10 @@ EXTRA = {
                                     'indices': 112, 'records': 56, 'record_offset': 1792, 'stride': 424, 'type': 1256914054},
     'MultiTargetComponentData': {'offset': 26629592, 'header': '7f55cbb94c444c44010000007f55cbb9005600000100000000000000', 'index': 242,
                                  'indices': 64, 'records': 33, 'record_offset': 1024, 'stride': 636, 'type': 3117110655},
+    # The same way (between MaterialSwap and Vehicle): the factions an entity belongs to, so an entity copy can be on the
+    # Helldivers' side from its spawn. Its type is the DL type library's hash of the name (filediver datalib.Sum).
+    'FactionComponentData': {'offset': 1288648, 'header': '91ea53564c444c440100000091ea5356187c01000100000000000000', 'index': 90,
+                             'indices': 1056, 'records': 529, 'record_offset': 16896, 'stride': 152, 'type': 1448340113},
 }
 for name, c in EXTRA.items():
     components.setdefault(name, c)
