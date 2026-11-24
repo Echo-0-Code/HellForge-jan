@@ -99,7 +99,9 @@ public sealed partial class RegisteredItems
             if (LockedMods.Contains(next.Mod)) return null;
             at = next;
         }
-        return Game()?.Ids.Contains(at.CopyOf) == true ? at.CopyOf : null;
+        if (Game() is not { } game) return null;
+        // A support weapon's catalogue entry is keyed by its stratagem, not its own id, so a copy of one is owned with it.
+        return game.Ids.Contains(at.CopyOf) ? at.CopyOf : game.StratagemItems.TryGetValue(at.CopyOf, out var stratagem) ? stratagem : null;
     }
 
     const int MaxCopies = 8;
