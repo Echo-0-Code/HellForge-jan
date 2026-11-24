@@ -29,7 +29,7 @@ player. The types are in `hellforge_move.h`, which `hellforge_mod.h` includes.
 
 - Check `hf->size >= offsetof(HfApi, ai_drive) + sizeof(void*)` and set `"sdk": 39` in `hellforge-mod.json`. Fliers, vessels and rails need `"sdk": 43`, and `add_rail` its own `hf->size` check.
 - Call `add_mover` and `ai_drive` from `hellforge_mod_init`.
-- Walkers and drivers run on the host. Their moves reach the other players as their root's moves do.
+- Walkers and drivers run on the host. HellForge sends their pose to the other players about 10 times a second, and their copies glide to it.
 - The game's own physics no longer move a walker or driver. Leave out any movement code of your own for it.
 - SDK 39 reordered `HfMoverDef`. Build movers against SDK 39's header or later; an older one is refused.
 
@@ -331,6 +331,9 @@ or within 30 m when that is 0. Once the fight is over it goes back to its order.
 ## Read how it moves
 
 `mover_state` answers on any thread. Use `speed` and `turning` to animate legs or wheels.
+
+On the other players' machines, a walker's or driver's `status` is `HF_MOVER_REMOTE`. Its other fields are the host's, so
+the same animation code works there.
 
 | Field | Meaning |
 |---|---|

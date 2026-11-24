@@ -1,6 +1,6 @@
 /* SDK 35: movers (docs/modding/movers.md, hellforge_move.h). A walker's or driver's unit is moved by HellForge on the
  * host: its root node is teleported each update, inside the frame of the unit it is parented to (a hellpod), from a
- * throttle and a steer. The ground is found with rays (line_of_sight); the root's moves replicate as a sentry's do.
+ * throttle and a steer. The ground is found with rays (line_of_sight); movers_sync.c sends its pose to the other machines.
  * SDK 36's hover vehicles stay physics bodies, pushed by movers_hover.c where they are simulated.
  * Included by world_calls.c after ai_orders.c (AiDrivePoint, ApiAiObey). */
 
@@ -24,6 +24,15 @@ static int MvFlier(uint32_t mode) { return mode == HF_MOVE_HELI || mode == HF_MO
 static int MvVessel(uint32_t mode) { return mode == HF_MOVE_BOAT || mode == HF_MOVE_SUB; }
 static int MvPhysical(uint32_t mode) { return mode == HF_MOVE_HOVER || MvFlier(mode) || MvVessel(mode); }
 
+/* A mover's pose as the machine that moves it sends it to the others (movers_sync.c). */
+typedef struct MvWire
+{
+    uint64_t resource;
+    uint32_t entity, network; /* the sender's entity (its key) and network id (WC_NO_NETWORK: none) */
+    uint8_t status, driver, driven, boosting;
+    float pos[3], start[3], yaw, pitch, roll, speed, turning, grade, pad;
+} MvWire;
+
 typedef struct MvUnit
 {
     uint32_t entity, unit, def, started, status, driver;
@@ -41,6 +50,12 @@ typedef struct MvUnit
     float railS, railDir; /* how far along it, and +1 or -1: the way along it its heading points */
     uint32_t loggedDriver;
     double seatAge, sinceLog, logUntil;
+    /* co-op (movers_sync.c): remote, another machine moves it and this is its copy; start, where it was first read */
+    uint32_t remote, synced, peerEntity;
+    uint64_t peerFrom;
+    float start[3];
+    double syncAge;
+    MvWire sync;
 } MvUnit;
 
 static MvDef g_mvDefs[MV_DEFS];
@@ -341,6 +356,8 @@ static void MvSetRoot(MvUnit* m)
     g_mvRot(m->unit, 0, q);
 }
 
+#include "movers_sync.c" /* co-op: the poses of walkers and drivers for the other machines (MvSetRoot, MvFrame) */
+
 /* ---- driving ---- */
 
 /* The AI's inputs toward its next route point, as the mover's own turning allows. */
@@ -538,9 +555,10 @@ static void MvBodyTick(MvUnit* m, const MvDef* def, float dt)
     MvTrace(m, def, dt);
 }
 
-/* A hover, or a walker or driver its body drives: 1 when it had its update here. */
+/* A hover, a walker or driver its body drives, or another machine's copy: 1 when it had its update here. */
 static int MvBodyModes(MvUnit* m, const MvDef* def, float dt)
 {
+    if (m->remote) { MvSyncTick(m, dt); return 1; }
     if (MvPhysical(def->def.mode)) { HvUnitTick(m, def, dt); return 1; }
     if (!m->physics || !m->started) return 0;
     MvBodyTick(m, def, dt);
@@ -566,6 +584,7 @@ static void MvUnitTick(MvUnit* m, float dt)
     {
         if (!MvParent(m)) { m->status = HF_MOVER_WAITING; return; }
         m->started = 1;
+        memcpy(m->start, m->pos, 12);
         ApiLog(def->mod, "mover: unit %u moved by HellForge from %.1f %.1f %.1f", m->entity, (double)m->pos[0], (double)m->pos[1], (double)m->pos[2]);
     }
     if ((m->sinceSolid += dt) >= MV_SOLID_S)
@@ -605,6 +624,7 @@ static void MvTick(HfMod* mod, float dt, void* user)
     (void)mod; (void)user;
     if (!MvCalls(dt)) return;
     AcquireSRWLockExclusive(&g_mvLock);
+    MvSyncTake();
     for (int i = 0; i < MV_UNITS; i++)
     {
         MvUnit* m = &g_mvUnits[i];
@@ -618,6 +638,7 @@ static void MvTick(HfMod* mod, float dt, void* user)
         }
         MvUnitTick(m, dt);
     }
+    MvSyncSend(dt);
     ReleaseSRWLockExclusive(&g_mvLock);
 }
 
@@ -626,8 +647,8 @@ static void MvSpawned(HfMod* mod, const HfSpawnEvent* e, void* user)
     (void)mod; (void)user;
     for (LONG d = 0; d < g_mvDefCount; d++)
     {
-        /* a hover is followed everywhere: the machine that simulates it can change (a client drives it) */
-        if (g_mvDefs[d].def.entity != e->resource || (!e->authority && !MvPhysical(g_mvDefs[d].def.mode))) continue;
+        /* every machine follows it: a hover where it is simulated (a client may drive it), the others as copies */
+        if (g_mvDefs[d].def.entity != e->resource) continue;
         AcquireSRWLockExclusive(&g_mvLock);
         for (int i = 0; i < MV_UNITS; i++)
             if (!g_mvUnits[i].entity)
@@ -637,6 +658,7 @@ static void MvSpawned(HfMod* mod, const HfSpawnEvent* e, void* user)
                 m->entity = e->entity; m->def = (uint32_t)d + 1;
                 m->boostLeft = g_mvDefs[d].def.boost_time; m->targetHeight = g_mvDefs[d].def.hover.height;
                 m->seatAge = 1e9; /* no seat has driven it: the lift keys wait for one */
+                m->remote = !e->authority && !MvPhysical(g_mvDefs[d].def.mode);
                 break;
             }
         ReleaseSRWLockExclusive(&g_mvLock);
@@ -660,7 +682,7 @@ static int MvWhere(uint32_t entity, float out[3])
 {
     if (!g_mvDefCount || !TryAcquireSRWLockShared(&g_mvLock)) return 0;
     const MvUnit* m = MvUnitOf(entity);
-    int ok = m != NULL && m->started;
+    int ok = m != NULL && m->started && !m->remote;
     if (ok) memcpy(out, m->pos, 12);
     ReleaseSRWLockShared(&g_mvLock);
     return ok;
@@ -671,7 +693,7 @@ static int MvPending(uint32_t entity)
 {
     if (!g_mvDefCount || !TryAcquireSRWLockShared(&g_mvLock)) return 0;
     const MvUnit* m = MvUnitOf(entity);
-    int pending = m != NULL && !m->started;
+    int pending = m != NULL && !m->started && !m->remote;
     ReleaseSRWLockShared(&g_mvLock);
     return pending;
 }
@@ -681,7 +703,7 @@ static int MvSettling(uint32_t entity)
 {
     if (!g_mvDefCount || !TryAcquireSRWLockShared(&g_mvLock)) return 0;
     const MvUnit* m = MvUnitOf(entity);
-    int settling = m != NULL && (!m->started || (fabsf(m->turning) > 0.05f && fabsf(m->speed) < 0.2f));
+    int settling = m != NULL && !m->remote && (!m->started || (fabsf(m->turning) > 0.05f && fabsf(m->speed) < 0.2f));
     ReleaseSRWLockShared(&g_mvLock);
     return settling;
 }
@@ -835,6 +857,7 @@ static int ApiMoverInput(HfMod* mod, uint32_t entity, const HfMoverInput* in)
     in = &all;
     AcquireSRWLockExclusive(&g_mvLock);
     MvUnit* m = MvUnitOf(entity);
+    if (m != NULL && m->remote) m = NULL; /* the machine that moves it takes its inputs */
     if (m != NULL)
     {
         m->throttle = MvClamp(in->throttle, -1, 1); m->steer = MvClamp(in->steer, -1, 1); m->inputAge = 0;
