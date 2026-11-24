@@ -63,6 +63,7 @@ void FollowCapture()
         ResetInput();
         ReleaseCursorClip();
     }
+    else RestoreCursorClip();
     FollowCursor(captured != 0);
 }
 

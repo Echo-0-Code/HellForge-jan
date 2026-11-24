@@ -580,6 +580,8 @@ On `dev`, since 0.4.0-beta.
 
 ### Fixed
 
+- **Mouse free after a modal screen.** Closing a modal overlay screen gives back the cursor clip the game asked for, so
+  the cursor stays in the game window again.
 - **Walkers and drivers in co-op.** The other players now see a walker or driver where the host moves it, and its
   `mover_state` there has the host's speed and turning ([movers.md](docs/modding/movers.md#read-how-it-moves)).
 - **Driven vehicles no longer crash on a removed unit.** A mover's ground ray that hits a unit the game has just removed

@@ -7,7 +7,7 @@
 #include <stdint.h>
 
 #define HF_LOADOUT_BOXES 1   /* add_loadout_box exists (another branch may also call itself SDK 42) */
-#define HF_LOADOUT_EXTRA 3u  /* boxes all mods together can add: the overview's preview has 3 free cells */
+#define HF_LOADOUT_EXTRA 3u  /* boxes all mods together can add: one preview slot holds 3 weapon rows */
 
 typedef struct HfMod HfMod;
 

@@ -2,7 +2,8 @@
  * game.dll build 25480438 (docs/internals-world.md "The WEAPONRY overview's boxes"). The overview (screen + 0x44698)
  * holds exactly 3 boxes of 0x3010 and its code counts to 3, so the extra boxes live here and are built, set up, updated
  * and highlighted by the game's own per-box calls. Each hangs off the box before it, as the game chains its own.
- * The preview render gives the 3 game boxes column 0 of a 2 x 3 cell grid; ours take column 1.
+ * The game's boxes fill its preview slot (each takes a whole row of the 2 x 3 cell grid), so ours take a slot of
+ * their own while the overview shows.
  * Included by world_calls.c after menu_tabs.c (its bar pick and follow). */
 
 #define LB_BOXES HF_LOADOUT_EXTRA
@@ -26,6 +27,9 @@
 #define LB_MOUSE 0x347CF18u       /* +0xE1AD4: 1 while the menus follow the mouse */
 #define LB_MENU 0x347CE38u        /* +0x60 the Armory screen, +0x5F0 the cursor */
 #define LB_SOUND_MOVE 0xA03A5EDFu
+#define LB_RENDERER 0x347CD80u    /* the preview renderer: 6 slots of 0x718 (state +0x728), cell marks +0x2AB0 */
+#define LB_SLOTS 6u
+#define LB_NONE 0xFFFFFFFFu
 
 #define LB_CONSTRUCT 0x18E18F0u   /* (O, position, anchor, pivot) */
 #define LB_SETUP 0x18E1FF0u       /* (O): labels, items and preview cells, on each show */
@@ -51,6 +55,7 @@ static const ActPin kLbPins[] = {
     {0, 0x178E020u, "40534883ec20488bd948b90000000004"}, {0, 0x585B80u, "83f90c771d4c8d0574a4a7ff8bc1418b"},
     {0, 0x18E1600u, "48895c241048896c2418565741574883"}, {0, 0x1327F50u, "48895c24084889742410574883ec2048"},
     {0, 0x1448AD0u, "40574883ec20f30f104144488bf90f2e"}, {0, 0x1943710u, "4c8b056996b30133c04c8bd1458b8880"},
+    {0, 0x13918E0u, "488bc455574881ecb800000041b8ffff"},
     /* the screen update's box loop and the constructor's chain step, as traced */
     {0, 0x1456D40u, "0f28ce488bcfe885584800"}, {0, 0x18E1D15u, "48c78424a000000000006041"}};
 
@@ -76,6 +81,7 @@ typedef uint32_t (*LbDirFn)(uintptr_t input);
 typedef uint32_t (*LbActionFn)(uint64_t action);
 typedef void (*LbSoundFn)(uint64_t unused, uint32_t event);
 typedef void (*LbAlphaFn)(uintptr_t widget, float alpha);
+typedef void (*LbFreeFn)(uintptr_t renderer, uint32_t slot);
 
 typedef struct LbBox { HfMod* mod; HfLoadoutBoxItem itemFn; void* user; uint32_t tab, text, handle; } LbBox;
 
@@ -90,6 +96,7 @@ static int g_lbState;           /* 0 not installed, 1 hooked, -1 off (modloader.
 static uintptr_t g_lbO;         /* the overview our boxes were built into, 0 none yet */
 static int g_lbSel = -1;        /* our selected box, -1 none */
 static int g_lbShown;           /* our boxes are set up on a WEAPONRY overview now */
+static uint32_t g_lbSlot = LB_NONE; /* our preview renderer slot while they show */
 static LbConstructFn g_lbConstruct;
 static LbOFn g_lbSetup;
 static LbUpdateFn g_lbUpdate;
@@ -158,6 +165,52 @@ static void LbLayoutSizes(uintptr_t o, int ours)
     }
 }
 
+static uintptr_t LbRenderer(void)
+{
+    uintptr_t r = 0;
+    return EvpPtr(g_game + LB_RENDERER, &r) ? r : 0;
+}
+
+/* Our preview slot given back and our cells emptied, as the game does with its own when the overview hides. */
+static void LbFreeSlot(void)
+{
+    uintptr_t r = LbRenderer();
+    if (g_lbSlot != LB_NONE && r) LB_CALL(LbFreeFn, 0x13918E0u)(r, g_lbSlot);
+    g_lbSlot = LB_NONE;
+    for (uint32_t k = 0; k < LB_BOXES; k++)
+    {
+        memset(g_lbCells[k], 0, LB_CELL);
+        memset(g_lbCells[k] + 0x3C, 0xFF, 8);
+        g_lbCells[k][0x48] = 2;
+    }
+}
+
+/* A free preview slot taken as the game's set-up takes one: marked in use, its cell marks cleared. */
+static uint32_t LbTakeSlot(void)
+{
+    LbFreeSlot();
+    uintptr_t r = LbRenderer();
+    for (uint32_t i = 0; r && i < LB_SLOTS; i++)
+    {
+        uint32_t* state = (uint32_t*)(r + 0x728u + i * 0x718u);
+        if (*state != 0) continue;
+        *state = 1;
+        memset((void*)(r + 0x2AB0u + i * 0xFu), 0, 0xF);
+        return g_lbSlot = i;
+    }
+    return LB_NONE;
+}
+
+/* The slot our boxes' weapons render in while they show; none on APPAREL. */
+static uint32_t LbSlotFor(int shown)
+{
+    if (!shown) { LbFreeSlot(); return LB_NONE; }
+    uint32_t slot = LbTakeSlot();
+    if (slot == LB_NONE) Note("loadout boxes: no free preview slot; the boxes show no weapon");
+    else Note("loadout boxes: preview slot %u", slot);
+    return slot;
+}
+
 /* One of our boxes set up as the game's set-up does a weapon box: id, label, the item and its preview cell. */
 static void LbSetUpBox(uintptr_t o, uint32_t k, uint32_t slot)
 {
@@ -176,9 +229,10 @@ static void LbSetUpBox(uintptr_t o, uint32_t k, uint32_t slot)
     LB_CALL(LbArtFn, 0x18DF2F0u)(box + 0x9C0u, &shown);
     art[1] = shown ? (uint32_t)shown : item;
     _Alignas(16) uint8_t desc[0x50] = {0};
-    uint32_t place[4] = {1, k, 2, 1}; /* column 1, row k; the two values the game's set-up passes */
+    uint32_t place[4] = {0, k, 2, 1}; /* row k, the whole width: column 0, 2 columns, 1 row, as the game places */
     memcpy(desc + 0x3C, place, sizeof place);
     memset(g_lbCells[k], 0, LB_CELL);
+    if (slot == LB_NONE) return;
     LB_CALL(LbCellFn, 0x178E170u)(item, slot, desc, (uintptr_t)g_lbCells[k], 0);
     LB_CALL(LbBindFn, 0x18E10B0u)(box, (uintptr_t)g_lbCells[k]);
 }
@@ -186,7 +240,8 @@ static void LbSetUpBox(uintptr_t o, uint32_t k, uint32_t slot)
 static void LbSetUp(uintptr_t o)
 {
     uint32_t slot = *(uint32_t*)(o + LB_O_SLOT), mode = *(uint32_t*)(o + LB_O_MODE);
-    g_lbShown = o == g_lbO && mode == 0 && slot != 0xFFFFFFFFu;
+    g_lbShown = o == g_lbO && mode == 0 && slot != LB_NONE;
+    if (o == g_lbO) slot = LbSlotFor(g_lbShown);
     for (uint32_t k = 0; k < g_lbCount && o == g_lbO; k++)
     {
         LB_CALL(LbAlphaFn, 0x1448AD0u)(LbBoxAt(k), g_lbShown ? 1.0f : 0.0f);
@@ -313,7 +368,7 @@ static void LbSelectDetour(uintptr_t o, uint32_t index, uint8_t sound)
     if (index != 0xFFFFFFFFu && o == g_lbO && g_lbSel >= 0) LbPick(o, -1, 0);
 }
 
-/* Hidden, the overview gives its preview slot back: our cells are emptied the same way. */
+/* Hidden, the overview gives its preview slot back, and ours goes back too. */
 static void LbHideDetour(uintptr_t o, uint8_t hide)
 {
     uint8_t was = *(const uint8_t*)(o + LB_O_HIDDEN);
@@ -324,10 +379,8 @@ static void LbHideDetour(uintptr_t o, uint8_t hide)
         uintptr_t box = LbBoxAt(k);
         LB_CALL(LbOFn, 0x1943710u)(box + LB_BOX_TRANSFORM);
         *(uintptr_t*)(box + LB_BOX_CELL) = box + LB_BOX_CELL + 0x18u;
-        memset(g_lbCells[k], 0, LB_CELL);
-        memset(g_lbCells[k] + 0x3C, 0xFF, 8);
-        g_lbCells[k][0x48] = 2;
     }
+    LbFreeSlot();
     g_lbShown = 0;
 }
 

@@ -68,7 +68,7 @@ per-box calls.
 | Boxes | overview +0x330, 3 of 0x3010 | type +0x3000 (1, 3, 4), UI id +0x3004 (+ 0x58EFE12E), highlighted +0x3008 |
 | Build | 0x18E18F0 (overview), 0x18E0900 (box) | box 0 is a child of +0x220; box i of box i - 1, anchor (1, 0), x = 14 |
 | Set-up | 0x18E1FF0, on each show | label 0x18DE230, item art +0x19D0, preview cell 0x178E170 and 0x18E10B0 |
-| Preview | overview +0x9450 slot, +0x9360 cells | a 2 x 3 cell grid: the game uses column 0, the extra boxes column 1 |
+| Preview | overview +0x9450 slot, +0x9360 cells | a 2 x 3 cell grid; each box takes a whole row, so the extra boxes take a second free slot (+0x728 state) while the overview shows |
 | Per frame | 0x1456BB0 | 0x18DC5D0 on box +0x1158; the hover test 0x178F970 covers +0x110 only |
 | Selection | +0x9458, 0x18E2F90, 0x18E2DE0 | the game's index stays -1 while an extra box is selected |
 | Highlight | 0x18E1150 | animates the box from 326 to 500 wide; `wide_width` and `box_width` replace those |

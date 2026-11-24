@@ -707,6 +707,11 @@ int main(int argc, char** argv)
         if (frame == 51)
         {
             Check(g_gameButtons == buttonsBefore + 1, "closing: the game has the mouse again at once");
+            RECT clip = {};
+            GetClipCursor(&clip);
+            if (GetForegroundWindow() == window) /* a clip is given back only to the window in front */
+                Check(clip.left == 10 && clip.top == 10 && clip.right == 20 && clip.bottom == 20, "closed: the clip the game asked for meanwhile is back");
+            ClipCursor(NULL);
             int before = g_gameSetCursor;
             SetCursorMessage(window);
             Check(g_gameSetCursor == before + 1 && CursorCount() == hidden, "closed: WM_SETCURSOR is the game's again, its cursor count back to %d (%d)", hidden,
