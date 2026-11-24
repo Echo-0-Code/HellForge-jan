@@ -578,6 +578,8 @@ On `dev`, since 0.4.0-beta.
 
 ### Fixed
 
+- **Driven vehicles no longer crash on a removed unit.** A mover's ground ray that hits a unit the game has just removed
+  now passes it instead of reading its missing record ([movers.md](docs/modding/movers.md)).
 - **Copies of support weapons are held.** An `add_weapon` copy of a support weapon now has its paints and CUSTOMIZE. It was left out of the inventory, since its base's catalogue item is its stratagem's.
 - **Follow me after a death.** A unit that followed a Helldiver who died no longer holds for good. It follows that player's next Helldiver, or the nearest one standing ([AI orders](docs/modding/ai.md)).
 - **No nameless items in the armory.** The game ships a few unfinished items with no name: a secondary with the

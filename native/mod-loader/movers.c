@@ -50,7 +50,7 @@ static SRWLOCK g_mvLock = SRWLOCK_INIT;
 static HfMod g_mvMod;
 static volatile LONG g_mvTicking;
 static MvPosFn g_mvPos, g_mvRot;
-static MvLevelFn g_mvLevel;
+static MvLevelFn g_mvLevel, g_mvFromHandle;
 static MvWaterFn g_mvWater;
 static DWORD g_mvPushThread; /* the game thread while a mod's drive function runs: mover_* refuse rather than deadlock */
 
@@ -66,10 +66,12 @@ static MvUnit* MvUnitOf(uint32_t entity)
 
 /* ---- the ground ---- */
 
-/* A hit unit that is solid: the level's own (rocks, props), or anything that is not a moving unit listed around it. */
+/* A hit unit that is solid: the level's own (rocks, props), or anything that is not a moving unit listed around it.
+ * A ray can still hit a unit the game has just removed; UnitLevel reads its record unchecked, so that one is passed. */
 static int MvSolid(const MvUnit* m, uint32_t unit)
 {
-    if (g_mvLevel && g_mvLevel(unit) != NULL) return 1;
+    if (g_mvFromHandle && g_mvFromHandle(unit) == NULL) return 0;
+    if (g_mvFromHandle && g_mvLevel && g_mvLevel(unit) != NULL) return 1;
     for (uint32_t i = 0; i < m->mobileCount; i++) if (m->mobile[i] == unit) return 0;
     return 1;
 }
@@ -591,6 +593,7 @@ static int MvCalls(float dt)
     g_mvPos = (MvPosFn)ApiFunction(&g_mvMod, "UnitTeleportLocalPosition");
     g_mvRot = (MvPosFn)ApiFunction(&g_mvMod, "UnitTeleportLocalRotation");
     if (!g_mvLevel) g_mvLevel = (MvLevelFn)ApiFunction(&g_mvMod, "UnitLevel");
+    if (!g_mvFromHandle) g_mvFromHandle = (MvLevelFn)ApiFunction(&g_mvMod, "UnitFromHandle");
     if (!g_mvWater) g_mvWater = (MvWaterFn)ApiFunction(&g_mvMod, "WaterHeight");
     if (g_mvPos && g_mvRot) { Note(g_mvWater ? "movers: on" : "movers: on, without water (WaterHeight is not the reviewed code)"); return 1; }
     if ((waited += dt) > 60 && !said) { said = 1; Note("movers: off; the teleport calls are not the reviewed ones"); }
