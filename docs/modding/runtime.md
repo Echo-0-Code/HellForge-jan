@@ -325,11 +325,16 @@ which is another mod's (named in `out.mod`), else the game's.
 A package is a set of game resources the engine loads together (a weapon's model and sounds, an explosion's effects).
 What your mod uses must be loaded, so a stratagem or effect that needs another one's resources needs that package held.
 
-`hf->load_package(mod, package)` (SDK 6) loads a package from HellForge's catalogue (`mappings/references.json`) through
-the game's own package system and holds it for the session. Since SDK 17 it also loads a data spec's own `package` of
-any mod in the session ([packages of your own](data.md#packages-of-your-own)); pass the hash of the package's name. It answers `HF_PACKAGE_LOADING` until the engine has all of
-it (call again to see), then `HF_PACKAGE_RESIDENT`, or 0 when refused. At most 256 packages are held, counting the ones
-HellForge loads for references and abilities; a package not resident within 90 seconds fails.
+`hf->load_package(mod, package)` (SDK 6) loads a package through the game's own package system and holds it for the
+session. Pass the hash of the package's name. It takes:
+
+- a package in HellForge's catalogue (`mappings/references.json`);
+- since SDK 17, a data spec's own `package` of any mod in the session ([packages of your own](data.md#packages-of-your-own));
+- a package a vanilla entity's `LoadoutPackage` record names, such as a melee secondary's model.
+
+It answers `HF_PACKAGE_LOADING` until the engine has all of it (call again to see), then `HF_PACKAGE_RESIDENT`, or 0 when
+refused. At most 256 packages are held, counting the ones HellForge loads for references and abilities; a package not
+resident within 90 seconds fails.
 
 Loading is per machine:
 what your mod loads is not told to other players. In co-op HellForge does share the packages it holds for each player's

@@ -151,11 +151,55 @@ static int PackageResident(uint64_t id)
     return PKG_WAITING;
 }
 
+/* Whether a vanilla entity's LoadoutPackage record (the package the game loads for that weapon or item, at +8) names
+ * `package`: such a package is real game data, so load_package takes it as it takes the catalogue's (a melee secondary's
+ * model, say, which the catalogue's stratagem packages leave out). The loaded table, read in one go. */
+static int LoadoutPackageNamed(uint64_t package)
+{
+    uintptr_t region = g_region;
+    const Component* c = LastComponentNamed("LoadoutPackageComponentData");
+    if (package == 0 || region == 0 || c == NULL || c->stride < 16 || c->records == 0 || c->records > 65536 ||
+        c->recordOffset != c->indices * 16) return 0;
+    uint8_t head[32];
+    uint32_t index, extent;
+    if (SafeRead(region + c->offset - 4, head, 32)) return 0;
+    memcpy(&index, head, 4);
+    memcpy(&extent, head + 20, 4);
+    if (index != c->index || memcmp(head + 4, c->header, 28) != 0 || (uint64_t)c->recordOffset + (uint64_t)c->records * c->stride > extent) return 0;
+    const size_t size = (size_t)c->records * c->stride;
+    uint8_t* records = (uint8_t*)malloc(size);
+    int named = 0;
+    if (records != NULL && !SafeRead(region + c->offset + 28 + c->recordOffset, records, size))
+        for (uint32_t i = 0; i < c->records && !named; i++)
+        {
+            uint64_t id;
+            memcpy(&id, records + (size_t)i * c->stride + 8, 8);
+            named = id == package;
+        }
+    free(records);
+    return named;
+}
+
+/* A package load_package takes: the catalogue's, a mod's own or patched one, or one a vanilla entity's LoadoutPackage
+ * record names (real game data: a melee secondary's model package, which the catalogue leaves out). */
 static const RefPackage* CataloguePackage(uint64_t id)
 {
     for (size_t i = 0; i < sizeof kRefPackages / sizeof kRefPackages[0]; i++) if (kRefPackages[i].id == id) return &kRefPackages[i];
     for (int i = 0; i < g_modPackageCount; i++) if (g_modPackages[i].ref.id == id) return &g_modPackages[i].ref;
-    return NULL;
+    static RefPackage loadout[PKG_MAX_HELD];
+    static volatile LONG loadoutCount;
+    static SRWLOCK loadoutLock = SRWLOCK_INIT;
+    const RefPackage* found = NULL;
+    AcquireSRWLockExclusive(&loadoutLock);
+    for (LONG i = 0; i < loadoutCount && found == NULL; i++) if (loadout[i].id == id) found = &loadout[i];
+    if (found == NULL && loadoutCount < PKG_MAX_HELD && LoadoutPackageNamed(id))
+    {
+        loadout[loadoutCount].id = id;
+        loadout[loadoutCount].name = "a game entity's loadout package";
+        found = &loadout[loadoutCount++];
+    }
+    ReleaseSRWLockExclusive(&loadoutLock);
+    return found;
 }
 
 /* archive <mod id> <id hex>: a game package the mod's data spec patches. It is real (the patch was built from it) and
@@ -267,7 +311,7 @@ static int PackageHeldState(HeldPackage* held, uint64_t id, int* changed)
  * *added (may be NULL): 1 when this call asked for it first. */
 static int PackageWantAs(uint64_t id, int own, const char** name, const char** why, int* added)
 {
-    static const char* const notInCatalogue = "it is not a package HellForge's catalogue names, one of the mods' own or one their data specs patch";
+    static const char* const notInCatalogue = "it is not a package HellForge's catalogue names, one of the mods' own, one their data specs patch or one a game entity's LoadoutPackage record names";
     const RefPackage* known = CataloguePackage(id);
     *name = known != NULL ? known->name : "?";
     if (added != NULL) *added = 0;

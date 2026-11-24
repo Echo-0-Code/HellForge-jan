@@ -1379,7 +1379,8 @@ typedef struct HfApi
      * the game thread's update could not be hooked (modloader.log says why). Check hf->size before calling. */
     int (*on_game_thread)(HfMod* mod, HfTickCallback callback, void* user);
     /* Loads a package (by its resource name hash, as mappings/references.json lists them, since SDK 17 a data spec's
-     * own "package" of any mod of the session, or a game package a session mod's data spec patches in "archives") and
+     * own "package" of any mod of the session, a game package a session mod's data spec patches in "archives", or one a
+     * vanilla entity's LoadoutPackage record names) and
      * holds it for the session, through the game's own package system on
      * the game thread: HF_PACKAGE_RESIDENT once the engine has all of it, HF_PACKAGE_LOADING until then (call it again
      * to see), 0 refused or failed (none of these, HellForge's 256 held already, or not loaded within 90 seconds; the
