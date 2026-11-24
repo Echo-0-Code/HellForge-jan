@@ -103,4 +103,4 @@ api->ai_drive(mod, MY_SENTRY, &ai);
 3. It casts rays for the ground ahead. Helldivers, enemies and other units nearby are passed; rocks and walls are solid.
 4. A step within `step_up` and `step_down` is taken. A walker tries 35, 70 and 105 degrees to either side first.
 5. When no step works, `status` is `HF_MOVER_BLOCKED` and the speed drops to 0.
-6. It writes the root's new position and heading.
+6. It writes the root's new position and heading, only when it moved or turned. Standing still, its parent (a hellpod) holds it.

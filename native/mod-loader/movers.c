@@ -15,8 +15,9 @@ typedef struct MvDef { HfMod* mod; HfMoverDef def; int ai; float arrive; } MvDef
 typedef struct MvUnit
 {
     uint32_t entity, unit, def, started, status, driver;
-    float pos[3], yaw, speed, turning, throttle, steer, par[4][3], parYaw;
-    double age, inputAge, sinceSolid;
+    float pos[3], yaw, speed, turning, throttle, steer, par[4][3], parYaw, put[4];
+    uint32_t written, reframed;
+    double age, inputAge, sinceSolid, sinceTrace;
     uint32_t mobile[32], mobileCount, blockedLogged;
 } MvUnit;
 
@@ -124,9 +125,9 @@ static void MvListMobile(MvUnit* m)
 /* ---- the root ---- */
 
 /* The root's parent frame from its world and local poses (rows right, forward, up), so moves are written in it. */
-static int MvParent(MvUnit* m)
+static int MvFrame(MvUnit* m, float w[16])
 {
-    float w[16], l[16], wn[9], ln[9];
+    float l[16], wn[9], ln[9];
     if (!ApiJointPose(&g_mvMod, m->unit, 0, HF_POSE_WORLD, w) || !ApiJointPose(&g_mvMod, m->unit, 0, HF_POSE_LOCAL, l)) return 0;
     const HfJointPose* L = (const HfJointPose*)(const void*)l;
     for (int i = 0; i < 3; i++)
@@ -141,13 +142,38 @@ static int MvParent(MvUnit* m)
     for (int j = 0; j < 3; j++)
         m->par[3][j] = w[12 + j] - (L->position[0] * m->par[0][j] + L->position[1] * m->par[1][j] + L->position[2] * m->par[2][j]);
     m->parYaw = atan2f(-m->par[1][0], m->par[1][1]);
-    memcpy(m->pos, w + 12, 12);
-    m->yaw = atan2f(-w[4], w[5]);
     return 1;
 }
 
-static void MvSetRoot(const MvUnit* m)
+static int MvParent(MvUnit* m)
 {
+    float w[16];
+    if (!MvFrame(m, w)) return 0;
+    memcpy(m->pos, w + 12, 12);
+    m->yaw = atan2f(-w[4], w[5]);
+    m->written = 0;
+    return 1;
+}
+
+/* Its parent (a hellpod) may move or let go after the frame was read: when the game shows the root away from where it
+ * was put, the frame is read again before the next write. 0 when the root no longer reads. */
+static int MvKeepFrame(MvUnit* m, const MvDef* def)
+{
+    float w[16];
+    if (!ApiJointPose(&g_mvMod, m->unit, 0, HF_POSE_WORLD, w)) return 0;
+    const float dx = w[12] - m->put[0], dy = w[13] - m->put[1], dz = w[14] - m->put[2];
+    if (!m->written || dx * dx + dy * dy + dz * dz < 0.25f) return 1;
+    if (m->reframed++ < 3)
+        ApiLog(def->mod, "mover: unit %u shown %.2f m from where it was put: its parent moved, its frame is read again", m->entity,
+            (double)sqrtf(dx * dx + dy * dy + dz * dz));
+    return MvFrame(m, w);
+}
+
+/* Written only when it moved or turned: a root held still is left to its parent, as the game holds it. */
+static void MvSetRoot(MvUnit* m)
+{
+    if (m->written && m->put[0] == m->pos[0] && m->put[1] == m->pos[1] && m->put[2] == m->pos[2] && m->put[3] == m->yaw) return;
+    memcpy(m->put, m->pos, 12); m->put[3] = m->yaw; m->written = 1;
     const float d[3] = {m->pos[0] - m->par[3][0], m->pos[1] - m->par[3][1], m->pos[2] - m->par[3][2]};
     float local[3];
     for (int i = 0; i < 3; i++) local[i] = d[0] * m->par[i][0] + d[1] * m->par[i][1] + d[2] * m->par[i][2];
@@ -199,13 +225,31 @@ static void MvDrive(MvUnit* m, const HfMoverDef* d, float dt)
             (double)m->pos[0], (double)m->pos[1], (double)m->pos[2]);
 }
 
+/* Its first half minute every 2 s: where HellForge puts its root against where the game shows it, to see a move go wrong. */
+static void MvTrace(MvUnit* m, const MvDef* def, float dt)
+{
+    if (m->age > def->def.start_delay + 30 || (m->sinceTrace += dt) < 2.0) return;
+    m->sinceTrace = 0;
+    float w[16];
+    const int seen = ApiJointPose(&g_mvMod, m->unit, 0, HF_POSE_WORLD, w);
+    ApiLog(def->mod, "mover: unit %u (game unit %u) put at %.2f %.2f %.2f yaw %.0f, shown %s %.2f %.2f %.2f; speed %.2f, throttle %.2f, steer %.2f, status %u",
+        m->entity, m->unit, (double)m->pos[0], (double)m->pos[1], (double)m->pos[2], (double)(m->yaw * 57.29578f), seen ? "at" : "nowhere",
+        (double)(seen ? w[12] : 0), (double)(seen ? w[13] : 0), (double)(seen ? w[14] : 0), (double)m->speed, (double)m->throttle,
+        (double)m->steer, m->status);
+}
+
 static void MvUnitTick(MvUnit* m, float dt)
 {
     const MvDef* def = &g_mvDefs[m->def - 1];
     m->age += dt;
     m->inputAge += dt;
-    uint32_t network = 0;
-    if (!m->unit && !WcEntity(m->entity, &m->unit, &network)) return;
+    uint32_t unit = 0, network = 0;
+    if (!WcEntity(m->entity, &unit, &network) || !unit) return;
+    if (unit != m->unit) /* a hellpod's payload can change units as it deploys: its root is read again */
+    {
+        if (m->unit) ApiLog(def->mod, "mover: unit %u is now game unit %u (was %u): its root is read again", m->entity, unit, m->unit);
+        m->unit = unit; m->started = 0;
+    }
     if (m->age < def->def.start_delay) { m->status = HF_MOVER_WAITING; return; }
     if (!m->started)
     {
@@ -213,12 +257,18 @@ static void MvUnitTick(MvUnit* m, float dt)
         m->started = 1;
         ApiLog(def->mod, "mover: unit %u moved by HellForge from %.1f %.1f %.1f", m->entity, (double)m->pos[0], (double)m->pos[1], (double)m->pos[2]);
     }
-    if ((m->sinceSolid += dt) >= MV_SOLID_S) { m->sinceSolid = 0; MvListMobile(m); }
+    if ((m->sinceSolid += dt) >= MV_SOLID_S)
+    {
+        m->sinceSolid = 0;
+        MvListMobile(m);
+        if (!MvKeepFrame(m, def)) { ApiLog(def->mod, "mover: unit %u: its root no longer reads; it waits", m->entity); m->started = 0; return; }
+    }
     if (m->inputAge < MV_INPUT_S) m->driver = HF_DRIVER_MOD;
     else if (def->ai) { m->driver = HF_DRIVER_AI; MvAiInputs(m, def); }
     else { m->driver = HF_DRIVER_NONE; m->throttle = 0; m->steer = 0; }
     MvDrive(m, &def->def, dt);
     MvSetRoot(m);
+    MvTrace(m, def, dt);
 }
 
 /* The game's calls resolve only once the game has loaded (their code may decode later still), and mods add movers before
@@ -246,7 +296,13 @@ static void MvTick(HfMod* mod, float dt, void* user)
     {
         MvUnit* m = &g_mvUnits[i];
         if (!m->entity) continue;
-        if (!EvpAlive(m->entity)) { memset(m, 0, sizeof *m); continue; }
+        if (!EvpAlive(m->entity))
+        {
+            ApiLog(g_mvDefs[m->def - 1].mod, "mover: unit %u is gone after %.0f s, last put at %.1f %.1f %.1f", m->entity, m->age,
+                (double)m->pos[0], (double)m->pos[1], (double)m->pos[2]);
+            memset(m, 0, sizeof *m);
+            continue;
+        }
         MvUnitTick(m, dt);
     }
     ReleaseSRWLockExclusive(&g_mvLock);
@@ -297,6 +353,16 @@ static int MvPending(uint32_t entity)
     int pending = m != NULL && !m->started;
     ReleaseSRWLockShared(&g_mvLock);
     return pending;
+}
+
+/* 1 while a mover's unit has not started, or turns on the spot: no headway is expected of it yet (ai_orders.c). */
+static int MvSettling(uint32_t entity)
+{
+    if (!g_mvDefCount || !TryAcquireSRWLockShared(&g_mvLock)) return 0;
+    const MvUnit* m = MvUnitOf(entity);
+    int settling = m != NULL && (!m->started || (fabsf(m->turning) > 0.05f && fabsf(m->speed) < 0.2f));
+    ReleaseSRWLockShared(&g_mvLock);
+    return settling;
 }
 
 /* ---- the API ---- */
