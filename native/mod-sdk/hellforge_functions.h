@@ -6661,9 +6661,9 @@ static inline int hf_hook_UnitSetMaterial(HfMod* mod, HfFn_UnitSetMaterial detou
     return hf_hook_function_(mod, "UnitSetMaterial", (void*)detour, (void**)original, priority);
 }
 
-/* UnitResetMaterial (helldivers2.exe+0x1FF300; hook or call). Puts a unit's material slot back on the material resource
- * the unit's data gives it, as a new instance; returns the new material: the Unit table's (EngineApi +0x18, 0x27C8F10)
- * +0x190 (UnitSetMaterial with no resource).
+/* UnitResetMaterial (helldivers2.exe+0x1FF300; hook or call). Gives a unit's material slot an empty material with no
+ * resource (it draws purple and see-through; set the slot's own resource with UnitSetMaterial to undo a swap): the Unit
+ * table's (EngineApi +0x18, 0x27C8F10) +0x190 (UnitSetMaterial with no resource; 0x50EEE0 makes the empty material).
  *   unit  the unit's handle
  *   slot  the material slot's IdString32
  * From the Unit table's slot 50 (+0x190) and Unit.set_material without a material (callback 0x414490); the arguments
