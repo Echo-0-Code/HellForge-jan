@@ -16,13 +16,13 @@ jobs:
       - name: Download the artifact and publish it
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: '45471191559'
-          TAG: test-ac10e5c
+          RUN_ID: '45482030093'
+          TAG: test-d03d3b3
         run: |
           gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n test-package -D pkg
           find pkg -type f -exec ls -la {} \;
           cp "$(find pkg -name HellForge-Setup.exe | head -1)" HellForge-Setup.exe
           sha256sum HellForge-Setup.exe | tee SHA256SUMS
-          gh release create "$TAG" -R "$GITHUB_REPOSITORY" --prerelease --target ac10e5c681d209c8ae9af26012ec17289b610559 \
-            --title "Test build ac10e5c, combined head 5f56545 + mover slope fix (run $RUN_ID)" --notes "test-package artifact of run $RUN_ID, republished for download." \
+          gh release create "$TAG" -R "$GITHUB_REPOSITORY" --prerelease --target d03d3b3ef99301940c7e945d6563098e35d5fea7 \
+            --title "Test build d03d3b3, helicopters, planes, boats, subs, rails, tracks and seat lift keys (SDK 43) (run $RUN_ID)" --notes "test-package artifact of run $RUN_ID, republished for download." \
             HellForge-Setup.exe SHA256SUMS
