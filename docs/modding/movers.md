@@ -253,3 +253,4 @@ or within 30 m when that is 0. Once the fight is over it goes back to its order.
 5. When no step works, `status` is `HF_MOVER_BLOCKED` and the speed drops to 0.
 6. It writes the root's new position and heading, only when it moved or turned. Standing still, its parent (a hellpod) holds it.
 7. When the game moves it between its own moves, such as a Pelican drop or a push, it goes on from where the game shows it.
+8. A unit with a vehicle's physics body puts its root back where the body is, so written moves don't stick. Once that happens twice while it drives, HellForge pushes the body instead, with `hover.mass` as its mass. Ground, walls and height stay the body's own.
