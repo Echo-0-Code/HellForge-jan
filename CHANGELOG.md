@@ -24,6 +24,8 @@ On `dev`, since 0.4.0-beta.
 - **Fighting movers (SDK 37).** `ai_drive` takes an engage range, a distance to keep, a leash and a reaction time. It
   retreats below a health share, running or backing off while firing, and takes whose orders and a spacing from other
   units ([Movers](docs/modding/movers.md#let-it-fight)).
+- **Mover slopes read over distance.** A walker or driver standing a little off the ground no longer reads a steep
+  slope from its first millimetre of movement and stays stuck ([Movers](docs/modding/movers.md)).
 - **Simpler mover options (SDK 39).** `HfMoverDef` is reordered. Hover fields move into a `hover` block and the drive
   modes carry the drivetrain (`HF_MOVE_DRIVE_FWD`, `_RWD`, `_4WD`). Water is `WADE`, `DRY`, `FLOAT` or `SINK`.
   `turn_radius` 0 turns on the spot and `reverse_speed` 0 can't reverse ([Movers](docs/modding/movers.md)).

@@ -144,7 +144,7 @@ and the seat over `ai_drive` while its driver gave input in the last 2 s. `mover
 ## Slopes, tilt, boost and sounds
 
 - `max_slope` is the steepest incline a walker or driver climbs. A step is a sudden rise and a slope a long one, so the
-  slope is measured over several steps. The default rises `step_up` in 1 m: 27° for 0.5 m steps.
+  incline is read over at least 0.5 m and averaged over 2 m of travel. The default rises `step_up` in 1 m: 27° for 0.5 m steps.
 - `tilt_limit` above 0 pitches and rolls a walker or driver with the ground under it, up to that angle. A hover then
   rights itself to the ground's slope instead of level, and harder once it tilts past it. 0 keeps it upright.
 - `boost_speed` is its top speed while the `boost` input holds. A full boost lasts `boost_time` and refills in twice
