@@ -15,6 +15,9 @@ On `dev`, since 0.4.0-beta.
 - **Turrets (SDK 37).** `add_turret` sets a turret's turn speeds, traverse limits, sight ranges, aim, fire rate and
   magazine, and can put it on a mover's or object's mount slot. The game's turret AI aims it, or the AI is off for a
   seat or the mod ([Turrets](docs/modding/turrets.md)).
+- **Fighting movers (SDK 37).** `ai_drive` takes an engage range, a distance to keep, a leash and a reaction time. It
+  retreats below a health share, running or backing off while firing, and takes whose orders and a spacing from other
+  units ([Movers](docs/modding/movers.md#let-it-fight)).
 - **Hover movers, brakes, water and drivetrains (SDK 36).** `add_mover` takes `HF_MOVE_HOVER` for a physics vehicle
   that holds a height over ground and water, driven from its seat. Every mover gets `brake`, water wading or crossing,
   and drivetrains FWD, RWD, 4WD or a mod's own push ([Movers](docs/modding/movers.md)).

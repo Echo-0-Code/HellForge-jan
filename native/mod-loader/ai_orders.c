@@ -68,6 +68,11 @@ static HfMod g_aiMod;
 static int MvWhere(uint32_t entity, float out[3]); /* movers.c: a mover's unit this machine moves */
 static int MvPending(uint32_t entity);
 static int MvSettling(uint32_t entity);
+static int AcStep(AiUnit* u, AiCtx* c, const float pos[3]); /* ai_combat.c: SDK 37 fighting */
+static int AcObeys(const AiUnit* u, uint64_t peer);
+static void AcForget(uint32_t entity);
+static int AcReversing(uint32_t entity);
+static const char* AcSet(uint64_t entity, const HfAiDrive* in);
 static volatile LONG g_aiTicking;
 static int g_aiState;                        /* 0 waiting for the game, 1 ready, -1 off (logged) */
 static int g_aiHooked, g_aiListening;
@@ -389,8 +394,9 @@ static int AiUnitStep(AiUnit* u)
     u->moved = AiDist(pos, u->lastPos) > 0.05f;
     memcpy(u->lastPos, pos, 12);
     u->sinceSent += AI_STEP_S;
-    if (u->order == HF_ORDER_NONE) { u->status = HF_AI_IDLE; return 1; }
-    if (u->order == HF_ORDER_FOLLOW && !AiFollowWho(u, pos, at)) AiArrived(u, &c); /* nobody standing: it waits */
+    if (AcStep(u, &c, pos)) { /* it fights: ai_combat.c chose its point */ }
+    else if (u->order == HF_ORDER_NONE) { u->status = HF_AI_IDLE; return 1; }
+    else if (u->order == HF_ORDER_FOLLOW && !AiFollowWho(u, pos, at)) AiArrived(u, &c); /* nobody standing: it waits */
     else if (u->order == HF_ORDER_FOLLOW) AiFollowStep(u, &c, pos, at);
     else if (AiFlat(pos, u->point) <= u->hold) AiArrived(u, &c);
     else AiSteer(u, &c, pos, u->point);
@@ -401,6 +407,7 @@ static int AiUnitStep(AiUnit* u)
 
 static void AiForget(AiUnit* u)
 {
+    AcForget(u->entity);
     if (u->route) ApiNavRouteClose(&g_aiMod, u->route);
     memset(u, 0, sizeof *u);
 }
@@ -481,7 +488,8 @@ static void AiHeardOrder(uint32_t order, uint32_t speaker, uint64_t peer, int lo
         const AiRule* r = &g_aiRules[u->rule - 1];
         float pos[3];
         AiCtx c;
-        if (!AiCtxOf(u->entity, &c) || !AiAuthority(&c) || AiNativeObeys(AiBehaviour(&c)) || !AiOwnPos(&c, pos) || AiDist(pos, e.position) > r->def.range) continue;
+        if (!AiCtxOf(u->entity, &c) || !AiAuthority(&c) || AiNativeObeys(AiBehaviour(&c)) || !AiOwnPos(&c, pos) || AiDist(pos, e.position) > r->def.range ||
+            !AcObeys(u, peer)) continue;
         AiSetOrder(u, order, speaker, NULL, route);
     }
     ReleaseSRWLockExclusive(&g_aiLock);

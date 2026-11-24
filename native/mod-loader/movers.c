@@ -249,16 +249,18 @@ static void MvAiInputs(MvUnit* m, const MvDef* def)
     if (!AiDrivePoint(m->entity, point, &status) || (status != HF_AI_MOVING && status != HF_AI_DETOUR)) return;
     const float dx = point[0] - m->pos[0], dy = point[1] - m->pos[1], dist = sqrtf(dx * dx + dy * dy);
     if (dist < 0.3f) return;
-    const float err = MvWrap(atan2f(-dx, dy) - m->yaw), spot = 0.6f;
-    const float close = MvClamp(dist / def->arrive, 0.25f, 1.0f);
+    /* backing off: it faces away from the point (toward the enemy) and drives in reverse */
+    const float back = AcReversing(m->entity) ? -1.0f : 1.0f;
+    const float err = MvWrap(atan2f(-dx * back, dy * back) - m->yaw), spot = 0.6f;
+    const float close = MvClamp(dist / def->arrive, 0.25f, 1.0f) * back;
     if (def->def.turn == HF_TURN_SPOT)
     {
         m->steer = MvClamp(err / spot, -1.0f, 1.0f);
         m->throttle = fabsf(err) > spot ? 0.0f : close * (1.0f - fabsf(err) / (spot * 2.0f));
         return;
     }
-    m->steer = MvClamp(err / 0.5f, -1.0f, 1.0f);
-    m->throttle = fabsf(err) > 1.7f ? 0.35f : close; /* behind it: a slow wide turn */
+    m->steer = MvClamp(err / 0.5f * back, -1.0f, 1.0f); /* in reverse a wheeled steer turns the nose the other way */
+    m->throttle = fabsf(err) > 1.7f ? 0.35f * back : close; /* behind it: a slow wide turn */
 }
 
 static void MvSnapshot(const MvUnit* m, HfMoverState* s);
@@ -609,7 +611,9 @@ static uint32_t ApiMoverState(HfMod* mod, uint32_t entity, HfMoverState* state)
 /* SDK 35, ai_drive: the custom AI drives the mover of `entity` (add_mover first). Any time. 0 done, 1 refused. */
 static int ApiAiDrive(HfMod* mod, uint64_t entity, const HfAiDrive* in)
 {
-    if (in == NULL || in->size < sizeof *in) { ApiLog(mod, "ai_drive: refused: no HfAiDrive or its size"); return 1; }
+    if (in == NULL || in->size < offsetof(HfAiDrive, engage_range)) { ApiLog(mod, "ai_drive: refused: no HfAiDrive or its size"); return 1; }
+    const char* fight = AcSet(entity, in);
+    if (fight) { ApiLog(mod, "ai_drive(%016llx): refused: %s", (unsigned long long)entity, fight); return 1; }
     LONG d = 0;
     while (d < g_mvDefCount && g_mvDefs[d].def.entity != entity) d++;
     if (d == g_mvDefCount) { ApiLog(mod, "ai_drive(%016llx): refused: add_mover it first", (unsigned long long)entity); return 1; }

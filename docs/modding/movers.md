@@ -16,6 +16,7 @@ player. The types are in `hellforge_move.h`, which `hellforge_mod.h` includes.
 - [Hover vehicles](#hover-vehicles)
 - [Drive it from code](#drive-it-from-code)
 - [Let the custom AI drive it](#let-the-custom-ai-drive-it)
+- [Let it fight](#let-it-fight)
 - [Read how it moves](#read-how-it-moves)
 - [What HellForge does each update](#what-hellforge-does-each-update)
 
@@ -168,6 +169,32 @@ api->ai_drive(mod, MY_SENTRY, &ai);
 | `hold_radius` | 3 m | It may stray this far from its hold point |
 | `nav_preset` | `HF_NAV_TROOPER` | The size its routes are found for |
 | `arrive_distance` | 3 m | It slows down within this distance of where it goes |
+
+## Let it fight
+
+From SDK 37, `ai_drive` can also move a unit to fight. Its turret aims and fires on the game's AI ([Turrets](turrets.md));
+these fields only choose where the unit stands. A unit fights only when `engage_range` or `retreat_health` is set.
+
+```c
+ai.engage_range = 40.0f;
+ai.keep_distance = 15.0f;
+ai.retreat_health = 0.3f;
+ai.retreat_style = HF_RETREAT_FIGHT;
+```
+
+| Field | Default | What it does |
+|---|---|---|
+| `engage_range` | 0 | It drives onto enemies this close. 0: it fires only from where its orders take it |
+| `keep_distance` | 12 m | Engaging, it stands this far from its target |
+| `leash` | 25 m | Fighting, it strays at most this far from whom it follows or its hold point |
+| `react_time` | 0.5 s | An enemy stays in range this long before it moves to engage |
+| `retreat_health` | 0 | Below this share of its health it retreats from enemies near it. 0: it never retreats |
+| `retreat_style` | `HF_RETREAT_RUN` | `HF_RETREAT_RUN` turns and drives back. `HF_RETREAT_FIGHT` backs off facing the enemy |
+| `owner` | `HF_OWNER_ANY` | `HF_OWNER_CALLER`: only the Helldiver nearest it when it lands. `HF_OWNER_CODE`: only `ai_order` |
+| `spacing` | 0 | Standing, it keeps this far from other friendly units. Helldivers are left out |
+
+`range` is how near a speaker must be for any order to reach it. A unit retreats from enemies within `engage_range`,
+or within 30 m when that is 0. Once the fight is over it goes back to its order.
 
 ## Read how it moves
 

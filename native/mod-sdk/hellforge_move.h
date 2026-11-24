@@ -130,6 +130,24 @@ typedef struct HfAiDrive
     float hold_radius;        /* it may stray this far from its hold point (default 3) */
     uint32_t nav_preset;      /* the size its routes are found for: HF_NAV_TROOPER (default), HF_NAV_VEHICLE, HF_NAV_VEHICLE_WIDE */
     float arrive_distance;    /* it slows down within this many metres of where it goes (default 3) */
+    /* SDK 37, fighting. An SDK 35 HfAiDrive ends before these and keeps SDK 35's behaviour: it never moves to fight. */
+    float engage_range;       /* it moves onto enemies within this many metres (0: it fires only from where it goes) */
+    float keep_distance;      /* engaging: it stands this far from its target (default 12) */
+    float leash;              /* fighting: it strays at most this far from whom it follows or its hold point (default 25) */
+    float react_time;         /* seconds an enemy stays in range before it moves to engage (default 0.5) */
+    float retreat_health;     /* below this share of its health, 0 .. 1, it retreats from enemies near it (0: never) */
+    uint32_t retreat_style;   /* HF_RETREAT_RUN (default) or HF_RETREAT_FIGHT */
+    uint32_t owner;           /* whose wheel orders it takes: HF_OWNER_ANY (default), HF_OWNER_CALLER or HF_OWNER_CODE */
+    float spacing;            /* it keeps this far from other friendly units, Helldivers aside (0: none) */
 } HfAiDrive;
+
+/* HfAiDrive.retreat_style */
+#define HF_RETREAT_RUN 0u   /* turns away and drives back to whom it follows (or its hold point) */
+#define HF_RETREAT_FIGHT 1u /* backs off the same way facing the enemy, so its turret keeps firing */
+
+/* HfAiDrive.owner: `range` is how near a speaker must be */
+#define HF_OWNER_ANY 0u     /* any Helldiver's Follow me and Hold position */
+#define HF_OWNER_CALLER 1u  /* only its caller's: the Helldiver nearest it when it lands */
+#define HF_OWNER_CODE 2u    /* no wheel orders: only ai_order from the mod */
 
 #endif
