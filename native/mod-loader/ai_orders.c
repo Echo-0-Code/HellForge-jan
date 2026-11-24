@@ -22,6 +22,7 @@
 #define AI_EVENT_HOLD 0x71382183u
 #define AI_RPC_COMMS 0xD48CEDB2u    /* rpc_trigger_avatar_comms_notify */
 #define AI_STEP_S 0.25
+#define AI_AIRBORNE_M 25.0f          /* a Helldiver this high above it is still in its reinforce pod: it waits for the landing */
 #define AI_STUCK_S 4.0              /* no headway for this long: the path failed */
 #define AI_RETRY_S 10.0             /* an unreachable point is tried again after this */
 #define AI_LOG_S 5.0
@@ -375,13 +376,14 @@ static uint32_t AiPlayerAvatar(uint64_t peer, uint64_t* peerOf, uint32_t avatar)
  * Only a Hold position order holds it. Any other entity is followed while it exists. 1 when it has someone to follow. */
 static int AiFollowWho(AiUnit* u, const float pos[3], float at[3])
 {
-    if (u->target && (u->peer ? AiPlayerAvatar(u->peer, NULL, 0) == u->target : 1) && AiWhere(u->target, at)) return 1; /* not a player: while it exists */
+    if (u->target && (u->peer ? AiPlayerAvatar(u->peer, NULL, 0) == u->target : 1) && AiWhere(u->target, at))
+        return at[2] - pos[2] < AI_AIRBORNE_M; /* not a player: while it exists */
     uint32_t next = u->peer ? AiPlayerAvatar(u->peer, NULL, 0) : 0;
     if (!next) next = AiNearestPlayer(pos);
     if (next != u->target && u->target) AiLog(u, "the Helldiver it followed (%u) is down: %s", u->target, next ? "following the next one" : "waiting here");
     if (next != u->target) { u->target = next; u->trailCount = 0; u->onTrail = 0; u->issued = 0; }
     if (next) AiPlayerAvatar(0, &u->peer, next);
-    return next && AiWhere(next, at);
+    return next && AiWhere(next, at) && at[2] - pos[2] < AI_AIRBORNE_M;
 }
 
 /* One unit, every AI_STEP_S; 0 when it is gone. */
