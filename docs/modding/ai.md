@@ -83,7 +83,7 @@ Units with a S.E.A.F. brain (615 to 631) answer the wheel themselves, so `ai_obe
 
 | Order | What the unit does |
 |---|---|
-| `HF_ORDER_FOLLOW` | Keeps `follow_distance` from `target`; fights while it is close |
+| `HF_ORDER_FOLLOW` | Keeps `follow_distance` from `target`; fights while it is close. When a followed Helldiver dies, it follows that player's next Helldiver, or the nearest one standing. With nobody standing, it waits |
 | `HF_ORDER_HOLD` | Stays at `point` (NULL: where it stands) and walks back when pushed off |
 | `HF_ORDER_GOTO` | Walks to `point`, then holds there |
 | `HF_ORDER_NONE` | Hands the unit back to its own brain |

@@ -41,6 +41,7 @@ typedef struct AiUnit
     float follow, hold;
     float trail[AI_TRAIL][3];
     uint32_t trailCount, onTrail;
+    uint64_t peer;               /* FOLLOW: the followed Helldiver's player, to follow again after a respawn */
     uint32_t route, corners;     /* a unit with no path agent: its route (nav_routes.c) and the corners read */
     float corner[AI_CORNERS][3];
     double sinceAsk;
@@ -360,6 +361,22 @@ static int AiStepPlace(const AiUnit* u, AiCtx* c, float pos[3])
     return u->route && MvWhere(u->entity, pos); /* a mover's unit: HellForge moves it */
 }
 
+static uint32_t AiNearestPlayer(const float at[3]);
+static uint32_t AiPlayerAvatar(uint64_t peer, uint64_t* peerOf, uint32_t avatar);
+
+/* A FOLLOW keeps its order when its Helldiver dies: it follows that player's next Helldiver, else the nearest one standing.
+ * Only a Hold position order holds it. Any other entity is followed while it exists. 1 when it has someone to follow. */
+static int AiFollowWho(AiUnit* u, const float pos[3], float at[3])
+{
+    if (u->target && (u->peer ? AiPlayerAvatar(u->peer, NULL, 0) == u->target : 1) && AiWhere(u->target, at)) return 1; /* not a player: while it exists */
+    uint32_t next = u->peer ? AiPlayerAvatar(u->peer, NULL, 0) : 0;
+    if (!next) next = AiNearestPlayer(pos);
+    if (next != u->target && u->target) AiLog(u, "the Helldiver it followed (%u) is down: %s", u->target, next ? "following the next one" : "waiting here");
+    if (next != u->target) { u->target = next; u->trailCount = 0; u->onTrail = 0; u->issued = 0; }
+    if (next) AiPlayerAvatar(0, &u->peer, next);
+    return next && AiWhere(next, at);
+}
+
 /* One unit, every AI_STEP_S; 0 when it is gone. */
 static int AiUnitStep(AiUnit* u)
 {
@@ -370,13 +387,9 @@ static int AiUnitStep(AiUnit* u)
     u->moved = AiDist(pos, u->lastPos) > 0.05f;
     memcpy(u->lastPos, pos, 12);
     u->sinceSent += AI_STEP_S;
-    if (u->order == HF_ORDER_FOLLOW && !AiWhere(u->target, at))
-    {
-        AiLog(u, "the entity it followed (%u) is gone: holding here", u->target);
-        u->order = HF_ORDER_HOLD; u->target = 0; memcpy(u->point, pos, 12);
-    }
     if (u->order == HF_ORDER_NONE) { u->status = HF_AI_IDLE; return 1; }
-    if (u->order == HF_ORDER_FOLLOW) AiFollowStep(u, &c, pos, at);
+    if (u->order == HF_ORDER_FOLLOW && !AiFollowWho(u, pos, at)) AiArrived(u, &c); /* nobody standing: it waits */
+    else if (u->order == HF_ORDER_FOLLOW) AiFollowStep(u, &c, pos, at);
     else if (AiFlat(pos, u->point) <= u->hold) AiArrived(u, &c);
     else AiSteer(u, &c, pos, u->point);
     if (u->route) AiRouteStep(u, pos);
@@ -415,6 +428,8 @@ static void AiSetOrder(AiUnit* u, uint32_t order, uint32_t target, const float p
     if (here) AiHalt(u, &c); /* the last order's point is no longer wanted */
     u->order = order;
     u->target = order == HF_ORDER_FOLLOW ? target : 0;
+    u->peer = 0;
+    if (u->target) AiPlayerAvatar(0, &u->peer, u->target);
     if (order == HF_ORDER_HOLD && point == NULL) memcpy(u->point, pos, 12);
     else if (point != NULL) memcpy(u->point, point, 12);
     u->status = order ? HF_AI_MOVING : HF_AI_IDLE;
@@ -571,6 +586,29 @@ static void AiSpawned(HfMod* mod, const HfSpawnEvent* e, void* user)
 }
 
 /* The nearest living Helldiver to a point, 0 none. */
+/* A Helldiver standing: its own life (0), not the player slot's lifecycle, whose values are not mapped. */
+static int AiStanding(uint32_t avatar)
+{
+    uintptr_t record;
+    int32_t health, max;
+    uint32_t life = 2;
+    return avatar && EvpHealthOf(g_aiGame, avatar, &record, &health, &life, &max) && life == 0;
+}
+
+/* A standing Helldiver: the player's (peer), or the avatar given; peerOf gets its player. 0 when none stands. */
+static uint32_t AiPlayerAvatar(uint64_t peer, uint64_t* peerOf, uint32_t avatar)
+{
+    EvpPlayer players[EVT_MAX_PLAYERS];
+    int n = EvpPlayers(g_aiGame, players);
+    for (int i = 0; i < n; i++)
+    {
+        if (!players[i].avatar || (peer ? players[i].peer != peer : players[i].avatar != avatar)) continue;
+        if (peerOf != NULL) *peerOf = players[i].peer;
+        return AiStanding(players[i].avatar) ? players[i].avatar : 0;
+    }
+    return 0;
+}
+
 static uint32_t AiNearestPlayer(const float at[3])
 {
     EvpPlayer players[EVT_MAX_PLAYERS];
@@ -579,11 +617,7 @@ static uint32_t AiNearestPlayer(const float at[3])
     float bestD = 1e30f, p[3];
     for (int i = 0; i < n; i++)
     {
-        /* Standing only: the Helldiver's own life (0), not the player slot's lifecycle, whose values are not mapped. */
-        uintptr_t record;
-        int32_t health, max;
-        uint32_t life = 2;
-        if (!players[i].avatar || !EvpHealthOf(g_aiGame, players[i].avatar, &record, &health, &life, &max) || life != 0) continue;
+        if (!AiStanding(players[i].avatar)) continue;
         if (AiWhere(players[i].avatar, p) && AiDist(p, at) < bestD) { bestD = AiDist(p, at); best = players[i].avatar; }
     }
     return best;
@@ -629,8 +663,7 @@ static void AiStartOrder(AiUnit* u, const AiRule* rule, const float pos[3])
 {
     if (rule->def.start_order != HF_ORDER_FOLLOW) return;
     uint32_t player = AiNearestPlayer(pos);
-    if (player) AiSetOrder(u, HF_ORDER_FOLLOW, player, NULL, "its start order");
-    else AiLog(u, "no standing Helldiver to follow: it waits for an order");
+    AiSetOrder(u, HF_ORDER_FOLLOW, player, NULL, "its start order"); /* with nobody standing it waits, then follows */
 }
 
 static void AiSettled(uint32_t entity, uint64_t resource)
