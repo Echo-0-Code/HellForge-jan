@@ -41,6 +41,9 @@ typedef struct HfListState
     float band_y;         /* its top edge, down from the screen's top */
     float band_w;         /* its width: the heading's */
     float band_h;         /* its height */
+    /* SDK 40: one more each time the game builds the list anew (it opened, or its tab or stratagem slot changed);
+     * HellForge's rebuilds for rules and filters do not count. A search box clears its text when it changes. */
+    uint32_t opened;
 } HfListState;
 
 #endif

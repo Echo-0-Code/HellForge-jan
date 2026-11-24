@@ -62,7 +62,7 @@ hf->set_list_filter(mod, HF_LIST_STRATAGEMS, "");         /* the mod's filter ta
 - Each mod has one filter per list. A row shows only when every mod's filter matches it.
 - A filter that matches no row is set aside for that build: the list shows what the rules keep. An empty grid is not a
   state the game's pages handle. `list_state` tells you that nothing matched.
-- Clear your filter when the list closes, or the next time it opens it is still narrowed.
+- Clear your filter when the list closes or `opened` changes, or the next list is still narrowed.
 
 ## Read what the list shows
 
@@ -79,6 +79,7 @@ if (hf->list_state(mod, HF_LIST_ARMORY_WEAPONS, &state) && state.open)
 | `total` | rows the rules kept |
 | `matched` | of those, rows every filter matches |
 | `shown` | rows listed: `matched`, or `total` when nothing matched |
+| `opened` | SDK 40: one more each time the game builds the list anew (opened, another tab or stratagem slot) |
 
 ## Make room above the list
 
