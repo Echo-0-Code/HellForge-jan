@@ -57,6 +57,26 @@ the same widget inside a menu screen, and each screen reacts to a tab change in 
 - The Store (+0x80) labels its bar through another setter (0x17AAFA0) with 12-byte records. The Superstore (+0x90)
   writes the index straight into its page state. Neither is supported yet.
 
+## The WEAPONRY overview's boxes
+
+`add_loadout_box` and `set_loadout_layout` (SDK 42, `loadout_boxes.c`) add boxes to the overview at Armory screen
++0x44698. Its code holds and counts exactly 3 boxes, so HellForge keeps the extra ones and drives them with the game's
+per-box calls.
+
+| Part | Where | Notes |
+| --- | --- | --- |
+| Boxes | overview +0x330, 3 of 0x3010 | type +0x3000 (1, 3, 4), UI id +0x3004 (+ 0x58EFE12E), highlighted +0x3008 |
+| Build | 0x18E18F0 (overview), 0x18E0900 (box) | box 0 is a child of +0x220; box i of box i - 1, anchor (1, 0), x = 14 |
+| Set-up | 0x18E1FF0, on each show | label 0x18DE230, item art +0x19D0, preview cell 0x178E170 and 0x18E10B0 |
+| Preview | overview +0x9450 slot, +0x9360 cells | a 2 x 3 cell grid: the game uses column 0, the extra boxes column 1 |
+| Per frame | 0x1456BB0 | 0x18DC5D0 on box +0x1158; the hover test 0x178F970 covers +0x110 only |
+| Selection | +0x9458, 0x18E2F90, 0x18E2DE0 | the game's index stays -1 while an extra box is selected |
+| Highlight | 0x18E1150 | animates the box from 326 to 500 wide; `wide_width` and `box_width` replace those |
+| Mode | +0x945C | 0 WEAPONRY, 1 APPAREL; the extra boxes show on WEAPONRY only |
+
+- A confirm on an extra box writes index 0, opens the page (0x1457350) and picks the box's mod tab on the bar.
+- The overview is built with the Armory screen. If that happened before the hooks, the first update builds the boxes.
+
 ## The escape menu's MODS tab
 
 `mods_tab.c` and `mods_tab_model.c` show the `add_option` (SDK 30) rows in a MODS tab after GAME, SOCIAL and OPTIONS.
