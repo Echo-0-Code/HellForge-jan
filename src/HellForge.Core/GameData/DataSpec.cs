@@ -64,9 +64,11 @@ public sealed record IncludeResources(string Where, ulong Type, IReadOnlyList<ul
 // A game resource edited in place: each stage is the signed DXBC container at At in the GPU part, which must carry Digest,
 // with bytes set at offsets inside the container. A texture edit can instead add layers (PNGs in the mod folder) after
 // the game's own, so an array texture such as the weapons' camouflage tiler keeps its layers and gains more. A unit edit
-// can instead rename material slots (UnitSlots), so a weapon body on a slot of its own takes the game's paints.
+// can instead rename material slots (UnitSlots), so a weapon body on a slot of its own takes the game's paints. A xaml
+// edit puts text into a game view at anchors that occur once (XamlText), such as a tab added to a tab control.
 public sealed record EditResource(string Where, ulong Type, ulong Id, IReadOnlyList<StageEdit> Stages, IReadOnlyList<BytesEdit> Bytes, GpuPin? Gpu,
-    IReadOnlyList<string>? Layers = null, IReadOnlyDictionary<uint, uint>? Slots = null) : DataResource(Where);
+    IReadOnlyList<string>? Layers = null, IReadOnlyDictionary<uint, uint>? Slots = null, IReadOnlyList<XamlInsert>? Xaml = null) : DataResource(Where);
+public sealed record XamlInsert(string After, string Text);
 public sealed record StageEdit(int At, byte[] Digest, IReadOnlyList<(int Offset, byte[] Bytes)> Set);
 public sealed record BytesEdit(int At, byte[] Expect, byte[] Set);
 public sealed record GpuPin(int? Size, byte[]? Sha256);
@@ -673,10 +675,11 @@ public static partial class DataSpecs
     // pinned by the game's own bytes there, so another game build or a wrong offset is refused before anything is written.
     static EditResource ReadEdit(JsonElement e, string at, string? folder, ISet<string> inputs)
     {
-        Fields(e, at, "type", "edit", "gpu", "stages", "bytes", "layers", "slots", "source");
+        Fields(e, at, "type", "edit", "gpu", "stages", "bytes", "layers", "slots", "insert", "source");
         var mod = EditSource(e, at);
         if (e.TryGetProperty("layers", out var layerSpec)) return ReadLayers(e, layerSpec, at, folder, inputs) with { Mod = mod };
         if (e.TryGetProperty("slots", out var slotSpec)) return ReadSlots(e, slotSpec, at) with { Mod = mod };
+        if (e.TryGetProperty("insert", out var insertSpec)) return ReadXaml(e, insertSpec, at) with { Mod = mod };
         var stages = e.TryGetProperty("stages", out _) ? ReadStages(e, at) : [];
         var bytes = e.TryGetProperty("bytes", out _) ? ReadBytes(e, at) : [];
         if (stages.Count == 0 && bytes.Count == 0) throw new InvalidDataException($"{at}: an edit needs stages or bytes.");
@@ -727,6 +730,28 @@ public static partial class DataSpecs
         if (slots.Count == 0) throw new InvalidDataException($"{at}: slots is empty.");
         if (slots.Values.Distinct().Count() != slots.Count) throw new InvalidDataException($"{at}: two slots take one id.");
         return new EditResource(at, ResourceTypes.Unit, Id(Property(e, "edit", at), at), [], [], null, Slots: slots);
+    }
+
+    // "insert": [{"after": "<text in the view>", "text": "<XAML>"}], applied in order.
+    static EditResource ReadXaml(JsonElement e, JsonElement insertSpec, string at)
+    {
+        if (e.TryGetProperty("stages", out _) || e.TryGetProperty("bytes", out _) || e.TryGetProperty("gpu", out _))
+            throw new InvalidDataException($"{at}: insert is an edit of its own, without stages, bytes or gpu.");
+        if (Type(e, at) != ResourceTypes.Xaml) throw new InvalidDataException($"{at}: insert is for a xaml edit.");
+        var inserts = new List<XamlInsert>();
+        var items = insertSpec.ValueKind == JsonValueKind.Array ? insertSpec.EnumerateArray().ToList() : [];
+        for (var i = 0; i < items.Count; i++)
+        {
+            var where = $"{at}.insert[{i}]";
+            if (items[i].ValueKind != JsonValueKind.Object) throw new InvalidDataException($"{where}: an insert is {{\"after\": ..., \"text\": ...}}.");
+            Fields(items[i], where, "after", "text");
+            var after = Text(items[i], "after", where);
+            var text = Text(items[i], "text", where);
+            if (after.Length == 0 || text.Length == 0) throw new InvalidDataException($"{where}: after and text are not empty.");
+            inserts.Add(new XamlInsert(after, text));
+        }
+        if (inserts.Count == 0) throw new InvalidDataException($"{at}: insert is a list of {{\"after\": ..., \"text\": ...}}.");
+        return new EditResource(at, ResourceTypes.Xaml, Id(Property(e, "edit", at), at), [], [], null, Xaml: inserts);
     }
 
     static uint Slot(string text, string at) =>

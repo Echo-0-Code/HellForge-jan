@@ -209,6 +209,25 @@ static class DataBuilderTests
             var slotted = DataSpecs.Load(folder)!;
             check(slotted.Patches[0].Resources[0] is EditResource { Slots: { } slots } && slots[0x7E928657] == 0x7C4A4A11 && DataSpecs.Unchecked(slotted) != null,
                 "A slots edit did not parse to m_weapon's id, or is not counted as an edit of the game's data.");
+            Refused("""{"archives":["1111111111111111"],"resources":[{"type":"unit","edit":"0x1","insert":[{"after":"a","text":"b"}]}]}""", "insert is for a xaml edit");
+            Refused("""{"archives":["1111111111111111"],"resources":[{"type":"xaml","edit":"0x1","insert":[]}]}""", "insert is a list");
+            File.WriteAllText(Path.Combine(folder, DataSpecs.FileName), """{"format":1,"patches":[{"archives":["1111111111111111"],"resources":[{"type":"xaml","edit":"0x4849ACD71BDAEECB","insert":[{"after":"</TabItem>","text":"<TabItem/>"}]}]}]}""");
+            var inserted = DataSpecs.Load(folder)!;
+            check(inserted.Patches[0].Resources[0] is EditResource { Xaml: [{ After: "</TabItem>", Text: "<TabItem/>" }] } edit && edit.Type == ResourceTypes.Xaml &&
+                DataSpecs.Unchecked(inserted) != null, "A xaml insert did not parse, or is not counted as an edit of the game's data.");
+            static byte[] View(string text)
+            {
+                var body = System.Text.Encoding.UTF8.GetBytes(text);
+                var view = new byte[16 + body.Length];
+                BitConverter.GetBytes((uint)body.Length).CopyTo(view, 0);
+                body.CopyTo(view, 16);
+                return view;
+            }
+            var grown = XamlText.Insert(View("<Tabs><TabItem x:Name=\"Frvs\"></TabItem></Tabs>"), [new XamlInsert("<TabItem x:Name=\"Frvs\"></TabItem>", "<TabItem/>")]);
+            check(System.Text.Encoding.UTF8.GetString(grown, 16, grown.Length - 16) == "<Tabs><TabItem x:Name=\"Frvs\"></TabItem><TabItem/></Tabs>" &&
+                BitConverter.ToUInt32(grown, 0) == grown.Length - 16, "A xaml insert did not land after its anchor with the length updated.");
+            reject(() => XamlText.Insert(View("<a/><a/>"), [new XamlInsert("<a/>", "<b/>")]));
+            reject(() => XamlText.Insert(View("<a/>"), [new XamlInsert("<c/>", "<b/>")]));
             File.WriteAllText(Path.Combine(folder, DataSpecs.FileName), """{"format":1,"patches":[{"archives":["1111111111111111"],"resources":[""" + copy +
                 "," + """{"icon":"icon.png","name":"test/mod/icon","prepare":"auto"}]}]}""");
             var spec = DataSpecs.Load(folder)!;

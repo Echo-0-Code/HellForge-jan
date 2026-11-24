@@ -277,6 +277,18 @@ A unit edit can instead rename material slots, so a weapon body on a slot of its
 - Code that drives a material by its old slot name, such as a heat glow, no longer finds it.
 - `slots` takes no `stages`, `bytes` or `gpu`, and it counts as an edit for mod sync, as other edits do.
 
+A xaml edit can instead put text into one of the game's views, such as a tab added to a tab control:
+
+```json
+{ "type": "xaml", "edit": "0x4849ACD71BDAEECB",
+  "insert": [{ "after": "<TabItem x:Name=\"Frvs\" ...>...</TabItem>", "text": "<TabItem x:Name=\"Mine\" .../>" }] }
+```
+
+- Each `after` is text of the view that occurs exactly once; `text` goes in right after it. Inserts apply in order.
+- An anchor that is missing or repeated, as after a game update that changes the view, refuses the mod's data.
+- `insert` takes no `stages`, `bytes` or `gpu`, and it counts as an edit for mod sync, as other edits do.
+- Elements the game's code does not know do nothing on their own: the mod's code gives them their meaning.
+
 ### Edits of another mod's resources
 
 An `edit` with `"source": {"mod": "<mod id>"}` edits a resource that another installed mod ships in its patch files,

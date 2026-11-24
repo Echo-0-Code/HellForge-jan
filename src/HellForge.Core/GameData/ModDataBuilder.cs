@@ -279,6 +279,11 @@ public static class ModDataBuilder
             try { return source with { Main = UnitSlots.Rename(source.Main, edit.Slots) }; }
             catch (InvalidDataException error) { throw new InvalidDataException($"{edit.Where} (unit 0x{edit.Id:X16}): {error.Message}"); }
         }
+        if (edit.Xaml != null)
+        {
+            try { return source with { Main = XamlText.Insert(source.Main, edit.Xaml) }; }
+            catch (InvalidDataException error) { throw new InvalidDataException($"{edit.Where} (xaml 0x{edit.Id:X16}): {error.Message}"); }
+        }
         try { return source with { Gpu = ShaderSplice.EditBytes(ShaderSplice.EditStages(ShaderSplice.Pinned(source.Gpu, edit.Gpu), edit.Stages), edit.Bytes) }; }
         catch (InvalidDataException error) when (!error.Message.StartsWith(edit.Where, StringComparison.Ordinal))
         {

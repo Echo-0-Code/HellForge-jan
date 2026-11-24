@@ -46,4 +46,6 @@ typedef struct HfListState
     uint32_t opened;
 } HfListState;
 
+#include "hellforge_hangar.h" /* SDK 41: a category of the mod's own in Vehicle Customization */
+
 #endif

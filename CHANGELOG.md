@@ -12,6 +12,10 @@ On `dev`, since 0.4.0-beta.
 
 ### Added
 
+- **Vehicle Customization categories (SDK 41).** `add_hangar_category` shows a mod's cards in a 6th category of Ship
+  Management > Vehicle Customization, with the game's EQUIP; the mod keeps the pick ([ui.md](docs/modding/ui.md)).
+- **XAML inserts.** A data spec's `xaml` edit puts text into one of the game's views after an anchor that occurs once,
+  such as a tab added to the Vehicle Customization tabs ([data.md](docs/modding/data.md#edit)).
 - **List bands (SDK 40).** `set_list_band` moves the heading and rows of the Armory's weapon grids or the stratagem
   picker down, so a mod can draw a search box above them; `list_state` gives its place ([Item lists](docs/modding/lists.md)).
 - **Paints on throwable copies (SDK 40).** `HfWeapon.paints = 1` gives a grenade copy the game's paints, the patterns
