@@ -25,6 +25,9 @@
 #define AI_STUCK_S 4.0              /* no headway for this long: the path failed */
 #define AI_RETRY_S 10.0             /* an unreachable point is tried again after this */
 #define AI_LOG_S 5.0
+#define AI_TRAIL 24                 /* points where a followed entity stood */
+#define AI_TRAIL_STEP_M 4.0f        /* a new trail point after it moved this far */
+#define AI_FAR_M 16.0f              /* this far past the follow distance, a unit walks the trail */
 
 typedef struct AiRule { HfMod* mod; HfAiObey def; } AiRule;
 typedef struct AiUnit
@@ -34,6 +37,8 @@ typedef struct AiUnit
     uint32_t order, target, status, issued, tries, detour, moved, spared;
     float point[3], goal[3], sent[3], detourAt[3], lastPos[3], headwayFrom[3];
     float follow, hold;
+    float trail[AI_TRAIL][3];
+    uint32_t trailCount, onTrail;
     double sinceSent, sinceHeadway, retryIn, sinceLog;
 } AiUnit;
 typedef struct AiHeard { uint32_t speaker, order; ULONGLONG at; } AiHeard;
@@ -233,7 +238,7 @@ static void AiSteer(AiUnit* u, AiCtx* c, const float pos[3], const float want[3]
     float away = AiFlat(pos, aim), slack = away * 0.15f > 2.0f ? away * 0.15f : 2.0f;
     if (!u->issued) { memcpy(u->headwayFrom, pos, 12); u->sinceHeadway = 0; } /* a following point moving on is no headway */
     float goal[3];
-    int replaced = u->sinceSent > 2.0 && AiAgentGoal(u->entity, goal) && AiDist(goal, u->sent) > 1.0f; /* its brain or a stop */
+    int replaced = u->sinceSent > (u->onTrail ? 0.5 : 2.0) && AiAgentGoal(u->entity, goal) && AiDist(goal, u->sent) > 1.0f; /* its brain or a stop */
     if (!u->issued || AiDist(aim, u->sent) > slack || replaced) AiSend(u, c, aim);
     u->status = u->detour ? HF_AI_DETOUR : HF_AI_MOVING;
     if (AiFlat(pos, u->headwayFrom) > 1.0f) { memcpy(u->headwayFrom, pos, 12); u->sinceHeadway = 0; return; }
@@ -245,6 +250,59 @@ static void AiArrived(AiUnit* u, AiCtx* c)
     if (u->status != HF_AI_THERE) { u->tries = 0; u->detour = 0; }
     u->status = HF_AI_THERE;
     AiHalt(u, c);
+}
+
+/* The followed entity's trail: where it stood, every AI_TRAIL_STEP_M, oldest first. It walked there, so the ground holds
+ * a path even where the straight line to it climbs a cliff. Near it, only its newest point is kept. */
+static void AiTrailAdd(AiUnit* u, const float at[3], float away)
+{
+    if (away <= u->follow + AI_FAR_M) { memcpy(u->trail[0], at, 12); u->trailCount = 1; return; }
+    if (u->trailCount && AiDist(u->trail[u->trailCount - 1], at) < AI_TRAIL_STEP_M) return;
+    if (u->trailCount == AI_TRAIL) { memmove(u->trail[0], u->trail[1], sizeof u->trail[0] * (AI_TRAIL - 1)); u->trailCount--; }
+    memcpy(u->trail[u->trailCount++], at, 12);
+}
+
+/* Far behind: the trail point to walk to. The nearest one, or the one after it once there; the older ones are dropped. 0
+ * when the unit is near enough to go straight. A unit on the trail takes its path back from its own brain sooner, since
+ * its combat moves drag it off. */
+static int AiTrailNext(AiUnit* u, const float pos[3], float away, float out[3])
+{
+    int behind = away > u->follow + AI_FAR_M && u->trailCount > 1;
+    if (behind != (int)u->onTrail) { u->onTrail = behind; u->tries = 0; u->detour = 0; u->issued = 0; }
+    if (!behind) return 0;
+    uint32_t closest = 0;
+    for (uint32_t i = 1; i < u->trailCount; i++)
+        if (AiFlat(pos, u->trail[i]) < AiFlat(pos, u->trail[closest])) closest = i;
+    if (AiFlat(pos, u->trail[closest]) < 3.0f && closest + 1 < u->trailCount) closest++;
+    if (closest > 0) { memmove(u->trail[0], u->trail[closest], sizeof u->trail[0] * (u->trailCount - closest)); u->trailCount -= closest; }
+    memcpy(out, u->trail[0], 12);
+    return 1;
+}
+
+static void AiFollowStep(AiUnit* u, AiCtx* c, const float pos[3], const float at[3])
+{
+    memcpy(u->point, at, 12);
+    float d = AiFlat(pos, at), crumb[3];
+    AiTrailAdd(u, at, d);
+    if (d <= u->follow + 2.0f) AiArrived(u, c);
+    else if (AiTrailNext(u, pos, d, crumb)) AiSteer(u, c, pos, crumb);
+    else
+    {
+        float want[3] = {at[0] + (pos[0] - at[0]) / d * u->follow, at[1] + (pos[1] - at[1]) / d * u->follow, at[2]};
+        AiSteer(u, c, pos, want);
+    }
+}
+
+static void AiStatusLog(AiUnit* u, const float pos[3])
+{
+    u->sinceLog = 0;
+    static const char* orders[] = {"none", "FOLLOW", "HOLD", "GOTO"};
+    float goal[3] = {0, 0, 0};
+    AiAgentGoal(u->entity, goal);
+    AiLog(u, "%s %s, at %.1f %.1f %.1f, %.1f m from the order's point, sent to %.1f %.1f %.1f (path agent's goal %.1f %.1f %.1f),"
+        " moving %d, trail %s (%u points)", orders[u->order & 3], AiStatusName(u->status), (double)pos[0], (double)pos[1],
+        (double)pos[2], (double)AiFlat(pos, u->point), (double)u->sent[0], (double)u->sent[1], (double)u->sent[2], (double)goal[0],
+        (double)goal[1], (double)goal[2], u->moved, u->onTrail ? "on" : "off", u->trailCount);
 }
 
 /* One unit, every AI_STEP_S; 0 when it is gone. */
@@ -264,27 +322,10 @@ static int AiUnitStep(AiUnit* u)
         u->order = HF_ORDER_HOLD; u->target = 0; memcpy(u->point, pos, 12);
     }
     if (u->order == HF_ORDER_NONE) { u->status = HF_AI_IDLE; return 1; }
-    if (u->order == HF_ORDER_FOLLOW)
-    {
-        memcpy(u->point, at, 12);
-        float d = AiFlat(pos, at);
-        if (d <= u->follow + 2.0f) AiArrived(u, &c);
-        else
-        {
-            float want[3] = {at[0] + (pos[0] - at[0]) / d * u->follow, at[1] + (pos[1] - at[1]) / d * u->follow, at[2]};
-            AiSteer(u, &c, pos, want);
-        }
-    }
+    if (u->order == HF_ORDER_FOLLOW) AiFollowStep(u, &c, pos, at);
     else if (AiFlat(pos, u->point) <= u->hold) AiArrived(u, &c);
     else AiSteer(u, &c, pos, u->point);
-    if ((u->sinceLog += AI_STEP_S) >= AI_LOG_S)
-    {
-        u->sinceLog = 0;
-        static const char* orders[] = {"none", "FOLLOW", "HOLD", "GOTO"};
-        AiLog(u, "%s %s, at %.1f %.1f %.1f, %.1f m from the order's point, sent to %.1f %.1f %.1f, moving %d", orders[u->order & 3],
-            AiStatusName(u->status), (double)pos[0], (double)pos[1], (double)pos[2], (double)AiFlat(pos, u->point), (double)u->sent[0],
-            (double)u->sent[1], (double)u->sent[2], u->moved);
-    }
+    if ((u->sinceLog += AI_STEP_S) >= AI_LOG_S) AiStatusLog(u, pos);
     return 1;
 }
 
@@ -317,6 +358,7 @@ static void AiSetOrder(AiUnit* u, uint32_t order, uint32_t target, const float p
     else if (point != NULL) memcpy(u->point, point, 12);
     u->status = order ? HF_AI_MOVING : HF_AI_IDLE;
     u->tries = 0; u->detour = 0; u->issued = 0; u->sinceHeadway = 0; u->sinceLog = AI_LOG_S;
+    u->trailCount = 0; u->onTrail = 0;
     static const char* orders[] = {"none", "FOLLOW", "HOLD", "GOTO"};
     AiLog(u, "order %s from %s (behaviour %u)%s", orders[order & 3], from, here ? AiBehaviour(&c) : 0, here ? "" : ": not simulated here yet");
 }
