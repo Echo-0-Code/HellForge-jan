@@ -244,6 +244,7 @@ static void HvControl(MvUnit* m, const MvDef* def, float dt)
 }
 
 #include "movers_fly.c" /* SDK 43: helicopters and planes (HvSurface, HvDrive, HvTargetUp, HvAttitude) */
+#include "movers_boat.c" /* SDK 43: boats and submarines (HvGroundAt, HvDrive, HvAttitude) */
 
 /* Every 2 s for a minute from its start and from each change of driver, and while it is lost or over water. */
 static void HvLog(MvUnit* m, const MvDef* def, float dt)
@@ -251,7 +252,7 @@ static void HvLog(MvUnit* m, const MvDef* def, float dt)
     if (m->logUntil <= 0 || m->driver != m->loggedDriver) { m->logUntil = (m->logUntil <= 0 ? def->def.start_delay : m->age) + 60; m->loggedDriver = m->driver; m->sinceLog = 2.0; }
     if ((m->sinceLog += dt) < 2.0 || (m->age > m->logUntil && m->lost <= 0 && m->waterDepth <= 0)) return;
     m->sinceLog = 0;
-    ApiLog(def->mod, "mover: unit %u %s %s, %.2f m over %s (target %.2f, water query %.2f), speed %.1f, throttle %.2f, steer %.2f, driver %u", m->entity, MvFlier(def->def.mode) ? "flight" : "hover",
+    ApiLog(def->mod, "mover: unit %u %s %s, %.2f m over %s (target %.2f, water query %.2f), speed %.1f, throttle %.2f, steer %.2f, driver %u", m->entity, MvFlier(def->def.mode) ? "flight" : MvVessel(def->def.mode) ? "sail" : "hover",
         m->engaged ? "on" : "off", (double)m->height, m->waterDepth > 0 ? "water" : "ground", (double)m->targetHeight, (double)MvWaterAt(m->pos[0], m->pos[1], m->pos[2]),
         (double)m->speed, (double)m->throttle, (double)m->steer, m->driver);
 }
@@ -274,6 +275,7 @@ static void HvUnitTick(MvUnit* m, const MvDef* def, float dt)
     }
     MvDriver(m, def);
     if (MvFlier(def->def.mode)) FlControl(m, def, dt);
+    else if (MvVessel(def->def.mode)) BtControl(m, def, dt);
     else HvControl(m, def, dt);
     MvSounds(m, &def->def.sounds);
     HvLog(m, def, dt);

@@ -4,7 +4,7 @@
 
 SDK 35 lets HellForge move a unit itself: a sentry that walks, a cart that drives, any object your mod spawns. SDK 36
 adds hover vehicles, brakes, water and drivetrains. SDK 37 adds slopes, tilting, flying heights, boost, strafing and
-sounds. SDK 43 adds helicopters and planes. You describe how it moves once with `add_mover`. A driver then
+sounds. SDK 43 adds helicopters, planes, boats and submarines. You describe how it moves once with `add_mover`. A driver then
 gives it a throttle and a steer: your code with `mover_input`, the custom AI with `ai_drive`, or a hover's seated
 player. The types are in `hellforge_move.h`, which `hellforge_mod.h` includes.
 
@@ -16,6 +16,7 @@ player. The types are in `hellforge_move.h`, which `hellforge_mod.h` includes.
 - [Drivetrains and your own drive code](#drivetrains-and-your-own-drive-code)
 - [Hover vehicles](#hover-vehicles)
 - [Helicopters and planes](#helicopters-and-planes)
+- [Boats and submarines](#boats-and-submarines)
 - [Slopes, tilt, boost and sounds](#slopes-tilt-boost-and-sounds)
 - [Drive it from code](#drive-it-from-code)
 - [Let the custom AI drive it](#let-the-custom-ai-drive-it)
@@ -44,7 +45,7 @@ api->add_mover(mod, &walker);
 
 | Field | Default | What it does |
 |---|---|---|
-| `mode` | `HF_MOVE_WALK` | `HF_MOVE_WALK` steps to either side of a block. `HF_MOVE_DRIVE` (and its `_FWD`, `_RWD`, `_4WD`) goes only where it faces. `HF_MOVE_HOVER`: [Hover vehicles](#hover-vehicles). `HF_MOVE_HELI`, `HF_MOVE_PLANE`: [Helicopters and planes](#helicopters-and-planes) |
+| `mode` | `HF_MOVE_WALK` | `HF_MOVE_WALK` steps to either side of a block. `HF_MOVE_DRIVE` (and its `_FWD`, `_RWD`, `_4WD`) goes only where it faces. `HF_MOVE_HOVER`: [Hover vehicles](#hover-vehicles). `HF_MOVE_HELI`, `HF_MOVE_PLANE`: [Helicopters and planes](#helicopters-and-planes). `HF_MOVE_BOAT`, `HF_MOVE_SUB`: [Boats and submarines](#boats-and-submarines) |
 | `speed` | 4 m/s, hover 22, helicopter 40, plane 60 | Top speed forward, at most 40 m/s (a flier 120) |
 | `reverse_speed` | 0: no reverse | Top speed backward in m/s. A negative value is a share of `speed`: -0.5 is half |
 | `acceleration` | 8 m/s², hover 3 | How fast it speeds up |
@@ -61,6 +62,7 @@ api->add_mover(mod, &walker);
 | `boost_speed`, `boost_time`, `strafe_speed`, `sounds` | none, 3 s, half of `speed`, none | The same section |
 | `hover` | | [Hover vehicles](#hover-vehicles) |
 | `stall_speed`, `bank_max` | 0.45 × `speed`, 40° | [Helicopters and planes](#helicopters-and-planes) |
+| `dive_depth` | 3 m | [Boats and submarines](#boats-and-submarines) |
 
 ## Water
 
@@ -182,6 +184,29 @@ A plane needs airspeed:
 
 Set its physics data as for a hover: `VRA` extraGravity at `hover.carried`, wheels at low friction, and `VRD` word 11 at 0.
 A seated driver gives throttle and steer. The `lift` input comes only from `mover_input`.
+
+## Boats and submarines
+
+`HF_MOVE_BOAT` and `HF_MOVE_SUB` are vessels. A vessel is the game's physics body with seats, pushed like a hover.
+
+- HellForge's buoyancy holds its root `wade_depth` under the water's surface: its draft. The spring is `hover.stiffness`.
+- It is pushed and braked like a hover, and steered by a rudder: it turns only while it moves, no tighter than `turn_radius`.
+- `hover.side_drag` is its keel: how fast a sideways slide dies.
+- In water shallower than its draft plus 0.2 m it sits aground, and HellForge lets go until it floats again.
+- A submarine's `lift` input dives it at `hover.climb_rate`, down to `dive_depth` and never closer than 0.2 m to the bottom.
+
+The game draws nothing under water and its maps have no open sea, so a dive stays near the surface. Spawn a vessel on
+the water: one dropped on land sits aground.
+
+| Field | Boat | Submarine |
+|---|---|---|
+| `speed`, `acceleration` | 12 m/s, 1.5 m/s² | 7 m/s, 0.8 m/s² |
+| `turn_rate`, `turn_radius` | 20 °/s, 12 m | 12 °/s, 15 m |
+| `wade_depth` (draft) | 0.5 m | 1.5 m |
+| `hover.mass`, `hover.side_drag`, `hover.stiffness` | 4000 kg, 2 /s, 0.6 Hz | 8000 kg, 2 /s, 0.6 Hz |
+| `hover.climb_rate` | | 0.5 m/s (its dive rate) |
+
+`mover_state` gives `height` as its root over the surface, negative under it, and `water_depth` under it.
 
 ## Slopes, tilt, boost and sounds
 

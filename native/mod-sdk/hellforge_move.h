@@ -21,6 +21,9 @@
 /* SDK 43: fliers, physics bodies like a hover, held hover.height over the ground; they take off from the ground */
 #define HF_MOVE_HELI 7u  /* rotor or VTOL: hovers in place, tilts toward the way it speeds up, turns on the spot */
 #define HF_MOVE_PLANE 8u /* fixed wing: needs stall_speed to climb, banks to turn, rolls along the ground below it */
+/* SDK 43: vessels, physics bodies afloat wade_depth (their draft) under the water's surface; aground they sit still */
+#define HF_MOVE_BOAT 9u  /* on the surface, steered by its rudder: it turns only while moving */
+#define HF_MOVE_SUB 10u  /* a boat that dives: lift takes it down to dive_depth under the surface and back */
 
 
 /* HfMoverDef.water (SDK 36): what a walker or driver does in water. A hover always crosses over it. */
@@ -78,7 +81,7 @@ typedef struct HfMoverSounds
 typedef struct HfMoverDef
 {
     uint32_t size;        /* sizeof(HfMoverDef) */
-    uint32_t mode;        /* HF_MOVE_WALK (default), HF_MOVE_DRIVE, _DRIVE_FWD, _RWD, _4WD, HF_MOVE_HOVER, _HELI or _PLANE */
+    uint32_t mode;        /* HF_MOVE_WALK (default), _DRIVE, _DRIVE_FWD, _RWD, _4WD, _HOVER, _HELI, _PLANE, _BOAT or _SUB */
     uint64_t entity;      /* the entity resource its units are */
     float speed;          /* top speed forward, m/s (default 4, at most 40; a flier 120) */
     float reverse_speed;  /* top speed backward, m/s; negative: a share of speed (-0.5 half, -1 as fast); 0: it can't reverse */
@@ -108,6 +111,7 @@ typedef struct HfMoverDef
     /* SDK 43 (an SDK 39 size moves with the fields above) */
     float stall_speed;    /* HF_MOVE_PLANE: below this its wings carry it less (lift grows with speed squared), m/s (default 0.45 x speed) */
     float bank_max;       /* HF_MOVE_PLANE: its steepest bank at full steer, degrees; the bank sets its turn (default 40) */
+    float dive_depth;     /* HF_MOVE_SUB: the deepest it dives, metres under the surface, at hover.climb_rate (default 3) */
 } HfMoverDef;
 
 #define HF_MOVER_DEF_SIZE_39 ((uint32_t)offsetof(HfMoverDef, stall_speed))

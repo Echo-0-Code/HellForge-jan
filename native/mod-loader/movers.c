@@ -19,9 +19,10 @@ typedef void* (*MvLevelFn)(uint32_t unit);
 typedef float (*MvWaterFn)(void* state, const float* position, void* level);
 
 typedef struct MvDef { HfMod* mod; HfMoverDef def; int ai; float arrive, slopeTan; uint32_t axles, asked; } MvDef; /* axles: HF_AXLE_ bits; asked: its mode */
-/* A hover or flier: a physics body HellForge pushes (movers_hover.c, movers_fly.c), followed on every machine. */
-static int MvPhysical(uint32_t mode) { return mode == HF_MOVE_HOVER || mode == HF_MOVE_HELI || mode == HF_MOVE_PLANE; }
+/* A hover, flier or vessel: a physics body HellForge pushes (movers_hover.c, movers_fly.c), followed on every machine. */
 static int MvFlier(uint32_t mode) { return mode == HF_MOVE_HELI || mode == HF_MOVE_PLANE; }
+static int MvVessel(uint32_t mode) { return mode == HF_MOVE_BOAT || mode == HF_MOVE_SUB; }
+static int MvPhysical(uint32_t mode) { return mode == HF_MOVE_HOVER || MvFlier(mode) || MvVessel(mode); }
 
 typedef struct MvUnit
 {
@@ -704,23 +705,42 @@ static void MvFlierDefaults(HfMoverHover* h, int plane)
     MvOr(&h->side_drag, plane ? 3.0f : 0.8f);
 }
 
-/* Per kind (walker or driver, hover, helicopter, plane): top speed, acceleration, turn rate, strafe (0: half of speed).
- * A walker's pace; HV-1's hovercraft; a utility helicopter's 40 m/s and a light plane's 60 m/s cruise. */
-static const float kMvKind[4][4] = {{4.0f, 8.0f, 120.0f, 0}, {22.0f, 3.0f, 57.0f, 5.0f}, {40.0f, 5.0f, 45.0f, 10.0f}, {60.0f, 4.0f, 30.0f, 0}};
+/* A vessel's hull: a patrol boat's or small submarine's mass, a keel against sideways slides, and a dive rate. */
+static void MvVesselDefaults(HfMoverHover* h, int sub)
+{
+    MvOr(&h->mass, sub ? 8000.0f : 4000.0f);
+    MvOr(&h->side_drag, 2.0f);
+    MvOr(&h->climb_rate, sub ? 0.5f : 2.0f);
+    MvOr(&h->stiffness, 0.6f);
+}
+
+/* Per kind: top speed, acceleration, turn rate, strafe (0: half of speed), wade depth or draft, turn radius. A walker's
+ * pace and mid-thigh wading; an SUV's wading depth; HV-1's hovercraft; a utility helicopter's 40 m/s and a light
+ * plane's 60 m/s cruise on a nose wheel; a patrol boat's 12 m/s (23 knots) and a small submarine's 7 m/s on a rudder. */
+static const float kMvKind[][6] = {
+    {4.0f, 8.0f, 120.0f, 0, 0.8f, 0},       /* walk */
+    {4.0f, 8.0f, 120.0f, 0, 0.5f, 0},       /* drive (and its drivetrains) */
+    {22.0f, 3.0f, 57.0f, 5.0f, 0.8f, 0},    /* hover */
+    {40.0f, 5.0f, 45.0f, 10.0f, 0.5f, 0},   /* helicopter */
+    {60.0f, 4.0f, 30.0f, 0, 0.5f, 8.0f},    /* plane */
+    {12.0f, 1.5f, 20.0f, 0, 0.5f, 12.0f},   /* boat */
+    {7.0f, 0.8f, 12.0f, 0, 1.5f, 15.0f},    /* submarine */
+};
 
 static void MvDefaults(HfMoverDef* d)
 {
-    const int plane = d->mode == HF_MOVE_PLANE, kind = d->mode == HF_MOVE_HOVER ? 1 : d->mode == HF_MOVE_HELI ? 2 : plane ? 3 : 0;
-    const float* k = kMvKind[kind];
+    static const int kKindOf[] = {0, 0, 1, 2, 1, 1, 1, 3, 4, 5, 6};
     if (!d->mode) d->mode = HF_MOVE_WALK;
+    const float* k = kMvKind[d->mode <= HF_MOVE_SUB ? kKindOf[d->mode] : 0];
     if (!d->water) d->water = HF_WATER_WADE;
     MvOr(&d->speed, k[0]);
     if (d->reverse_speed < 0) d->reverse_speed *= -d->speed; /* a share of its forward speed */
     MvOr(&d->acceleration, k[1]);
     MvOr(&d->brake, d->acceleration);
-    MvOr(&d->wade_depth, d->mode == HF_MOVE_WALK || kind == 1 ? 0.8f : 0.5f); /* an SUV's wading depth; a person's mid-thigh */
+    MvOr(&d->wade_depth, k[4]);
     MvOr(&d->grip, 0.7f);
     MvOr(&d->turn_rate, k[2]);
+    MvOr(&d->turn_radius, k[5]);
     MvOr(&d->step_up, 0.5f);
     MvOr(&d->step_down, 1.0f);
     MvOr(&d->reach, 0.6f);
@@ -728,9 +748,10 @@ static void MvDefaults(HfMoverDef* d)
     MvOr(&d->boost_time, 3.0f);
     MvOr(&d->strafe_speed, k[3] > 0 ? k[3] : d->speed * 0.5f);
     MvOr(&d->stall_speed, 0.45f * d->speed);
-    if (plane) MvOr(&d->turn_radius, 8.0f); /* it taxis on its nose wheel */
     MvOr(&d->bank_max, 40.0f);
-    if (kind >= 2) MvFlierDefaults(&d->hover, plane);
+    MvOr(&d->dive_depth, 3.0f); /* periscope depth: the game draws nothing under water */
+    if (MvFlier(d->mode)) MvFlierDefaults(&d->hover, d->mode == HF_MOVE_PLANE);
+    if (MvVessel(d->mode)) MvVesselDefaults(&d->hover, d->mode == HF_MOVE_SUB);
     MvHoverDefaults(&d->hover);
 }
 
@@ -750,9 +771,9 @@ static const char* MvRefusal(const HfMoverDef* in, HfMoverDef* d)
     memset(d, 0, sizeof *d);
     memcpy(d, in, in->size < sizeof *d ? in->size : sizeof *d);
     MvDefaults(d);
-    if (d->mode > HF_MOVE_PLANE || d->water > HF_WATER_SINK) return "mode WALK, DRIVE (_FWD, _RWD, _4WD), HOVER, HELI or PLANE, water WADE, DRY, FLOAT or SINK";
-    if (!AiIn(d->speed, 0.1f, MvFlier(d->mode) ? 120.0f : 40.0f) || !AiIn(d->stall_speed, 1, d->speed) || !AiIn(d->bank_max, 5, 80))
-        return "speed 0.1 .. 40 (a flier 120), stall_speed 1 .. speed, bank_max 5 .. 80";
+    if (d->mode > HF_MOVE_SUB || d->water > HF_WATER_SINK) return "mode WALK, DRIVE (_FWD, _RWD, _4WD), HOVER, HELI, PLANE, BOAT or SUB, water WADE, DRY, FLOAT or SINK";
+    if (!AiIn(d->speed, 0.1f, MvFlier(d->mode) ? 120.0f : 40.0f) || !AiIn(d->stall_speed, 1, d->speed) || !AiIn(d->bank_max, 5, 80) || !AiIn(d->dive_depth, 0.5f, 30))
+        return "speed 0.1 .. 40 (a flier 120), stall_speed 1 .. speed, bank_max 5 .. 80, dive_depth 0.5 .. 30";
     if (!AiIn(d->reverse_speed, 0, 40) || !AiIn(d->acceleration, 0.1f, 200) || !AiIn(d->brake, 0.1f, 200) ||
         !AiIn(d->turn_rate, 1, 1440) || !AiIn(d->turn_radius, 0, 100) || !AiIn(d->step_up, 0, 10) || !AiIn(d->step_down, 0, 50) ||
         !AiIn(d->reach, 0, 20) || !AiIn(d->start_delay, 0, 120))
@@ -774,11 +795,11 @@ static int ApiAddMover(HfMod* mod, const HfMoverDef* in)
         if (g_mvDefs[i].def.entity == d.entity) { ApiLog(mod, "add_mover(%016llx): refused: it has a mover already", (unsigned long long)d.entity); return 1; }
     LONG at = InterlockedIncrement(&g_mvDefCount) - 1;
     if (at >= MV_DEFS) { InterlockedDecrement(&g_mvDefCount); ApiLog(mod, "add_mover: refused: %d movers already", MV_DEFS); return 1; }
-    static const uint32_t kAxles[] = {0, 0, 0, 0, HF_AXLE_FRONT, HF_AXLE_REAR, HF_AXLE_FRONT | HF_AXLE_REAR, 0, 0};
+    static const uint32_t kAxles[] = {0, 0, 0, 0, HF_AXLE_FRONT, HF_AXLE_REAR, HF_AXLE_FRONT | HF_AXLE_REAR, 0, 0, 0, 0};
     const uint32_t asked = d.mode;
     if (kAxles[d.mode]) d.mode = HF_MOVE_DRIVE; /* one driver from here on, with its axles */
     g_mvDefs[at] = (MvDef){mod, d, 0, 3.0f, d.max_slope >= 89.9f ? 1e9f : tanf(d.max_slope * 0.0174533f), kAxles[asked], asked};
-    static const char* const kMode[] = {"", "walks", "drives", "hovers", "drives (FWD)", "drives (RWD)", "drives (4WD)", "flies (helicopter)", "flies (plane)"}, * const kWater[] = {"", "wades", "stays dry", "floats", "sinks"};
+    static const char* const kMode[] = {"", "walks", "drives", "hovers", "drives (FWD)", "drives (RWD)", "drives (4WD)", "flies (helicopter)", "flies (plane)", "sails (boat)", "sails (submarine)"}, * const kWater[] = {"", "wades", "stays dry", "floats", "sinks"};
     ApiLog(mod, "add_mover(%016llx): %s, %.1f m/s (%.1f back), %s at %.0f deg/s, brakes %.1f m/s2, %s (%.2f m)%s", (unsigned long long)d.entity,
         kMode[asked], (double)d.speed, (double)d.reverse_speed, d.turn_radius > 0 ? "turns like a vehicle" : "turns on the spot",
         (double)d.turn_rate, (double)d.brake, MvPhysical(d.mode) ? "crosses water" : kWater[d.water], (double)d.wade_depth, d.drive ? ", its own push" : "");
