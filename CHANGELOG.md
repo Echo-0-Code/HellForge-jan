@@ -12,6 +12,9 @@ On `dev`, since 0.4.0-beta.
 
 ### Added
 
+- **Hover movers, brakes, water and drivetrains (SDK 36).** `add_mover` takes `HF_MOVE_HOVER` for a physics vehicle
+  that holds a height over ground and water, driven from its seat. Every mover gets `brake`, water wading or crossing,
+  and drivetrains FWD, RWD, 4WD or a mod's own push ([Movers](docs/modding/movers.md)).
 - **Movers (SDK 35).** `add_mover` makes HellForge move an entity's units itself: walk or drive, speed, turning on the
   spot or like a vehicle, step heights. `mover_input` drives one from code, and `ai_drive` hands it to the custom AI
   ([Movers](docs/modding/movers.md)).
