@@ -147,18 +147,18 @@ static int MvSurface(MvUnit* m, const HfMoverDef* d, float x, float y, float z, 
 {
     float g;
     const int ok = MvGround(m, d, x, y, z, &g);
-    const float w = d->water == HF_WATER_IGNORE ? -500.0f : MvWaterAt(x, y, z);
+    const float w = d->water == HF_WATER_SINK ? -500.0f : MvWaterAt(x, y, z);
     m->waterDepth = 0;
     if (w < -499.0f) { if (ok) *out = g; return ok; }
     if (!ok)
     {
         const float top[3] = {x, y, z + 0.3f}, deep[3] = {x, y, z - 80.0f};
-        if (d->water != HF_WATER_CROSS) return 0;
+        if (d->water != HF_WATER_FLOAT) return 0;
         if (!MvRay(m, top, deep, &g)) g = w - 80.0f;
     }
     if (w <= g) { *out = g; return 1; }
-    if (d->water == HF_WATER_CROSS) return MvFloat(m, d, g, w, z, out);
-    if (w - g > (d->water == HF_WATER_BLOCK ? 0.05f : d->wade_depth)) return 0;
+    if (d->water == HF_WATER_FLOAT) return MvFloat(m, d, g, w, z, out);
+    if (w - g > (d->water == HF_WATER_DRY ? 0.05f : d->wade_depth)) return 0;
     m->waterDepth = w - g;
     *out = g;
     return 1;
@@ -209,7 +209,7 @@ static void MvSlide(MvUnit* m, const MvDef* def, float dist)
     m->pos[0] += ux * len; m->pos[1] += uy * len; m->pos[2] = g;
 }
 
-/* align_to_ground: pitch and roll from the ground half a metre ahead, behind and to either side, within tilt_limit. */
+/* tilt_limit: pitch and roll from the ground half a metre ahead, behind and to either side, within tilt_limit. */
 static void MvAlign(MvUnit* m, const HfMoverDef* d)
 {
     const float fx = -sinf(m->yaw), fy = cosf(m->yaw), lim = d->tilt_limit * 0.0174533f;
@@ -315,7 +315,7 @@ static void MvAiInputs(MvUnit* m, const MvDef* def)
     const float back = AcReversing(m->entity) ? -1.0f : 1.0f;
     const float err = MvWrap(atan2f(-dx * back, dy * back) - m->yaw), spot = 0.6f;
     const float close = MvClamp(dist / def->arrive, 0.25f, 1.0f) * back;
-    if (def->def.turn == HF_TURN_SPOT)
+    if (def->def.turn_radius == 0)
     {
         m->steer = MvClamp(err / spot, -1.0f, 1.0f);
         m->throttle = fabsf(err) > spot ? 0.0f : close * (1.0f - fabsf(err) / (spot * 2.0f));
@@ -345,7 +345,7 @@ static HfMoverPush MvPush(MvUnit* m, const MvDef* def, float dt)
 static float MvRate(const HfMoverDef* d, float speed)
 {
     const float rate = d->turn_rate * 0.0174533f;
-    return d->turn == HF_TURN_VEHICLE ? fminf(rate, fabsf(speed) / d->turn_radius) * (speed < 0 ? -1.0f : 1.0f) : rate;
+    return d->turn_radius > 0 ? fminf(rate, fabsf(speed) / d->turn_radius) * (speed < 0 ? -1.0f : 1.0f) : rate;
 }
 
 /* A driven axle's share of the weight on a grade. The load moves to the rear by about (centre of mass height /
@@ -429,7 +429,7 @@ static void MvDrive(MvUnit* m, const MvDef* def, float dt)
     else if (d->mode == HF_MOVE_WALK) MvSlide(m, def, m->side * dt);
     if (fabsf(m->speed * dt) >= 0.0005f && !MvStep(m, def, m->speed * dt)) MvBlocked(m, def);
     else m->blockedLogged = 0;
-    if (d->align_to_ground) MvAlign(m, d);
+    if (d->tilt_limit > 0) MvAlign(m, d);
 }
 
 /* Its first half minute every 2 s: where HellForge puts its root against where the game shows it, to see a move go wrong. */
@@ -545,7 +545,7 @@ static void MvSpawned(HfMod* mod, const HfSpawnEvent* e, void* user)
                 MvUnit* m = &g_mvUnits[i];
                 memset(m, 0, sizeof *m);
                 m->entity = e->entity; m->def = (uint32_t)d + 1;
-                m->boostLeft = g_mvDefs[d].def.boost_time; m->targetHeight = g_mvDefs[d].def.hover_height;
+                m->boostLeft = g_mvDefs[d].def.boost_time; m->targetHeight = g_mvDefs[d].def.hover.height;
                 break;
             }
         ReleaseSRWLockExclusive(&g_mvLock);
@@ -598,63 +598,65 @@ static int MvSettling(uint32_t entity)
 /* ---- the API ---- */
 
 /* Hover defaults are the tested HV-1's: 0.3 g of fan thrust and 22 m/s, a light hovercraft's; reversed fans brake as
- * hard as they push. A reverse speed of 0.7 x top speed is half the thrust backward. */
+ * hard as they push. */
 static void MvOr(float* v, float fallback) { if (*v == 0) *v = fallback; }
+
+static void MvHoverDefaults(HfMoverHover* h)
+{
+    MvOr(&h->height, 1.5f);
+    MvOr(&h->height_min, h->height);
+    MvOr(&h->height_max, h->height);
+    MvOr(&h->climb_rate, 2.0f);
+    MvOr(&h->mass, 3000.0f);
+    MvOr(&h->stiffness, 1.2f);
+    MvOr(&h->damping, 0.7f);
+    MvOr(&h->side_drag, 0.5f);
+}
 
 static void MvDefaults(HfMoverDef* d)
 {
     const int hover = d->mode == HF_MOVE_HOVER;
     if (!d->mode) d->mode = HF_MOVE_WALK;
-    if (!d->turn) d->turn = HF_TURN_SPOT;
     if (!d->water) d->water = HF_WATER_WADE;
     MvOr(&d->speed, hover ? 22.0f : 4.0f);
-    MvOr(&d->reverse_speed, d->speed * (hover ? 0.7f : 0.5f));
+    if (d->reverse_speed < 0) d->reverse_speed *= -d->speed; /* a share of its forward speed */
     MvOr(&d->acceleration, hover ? 3.0f : 8.0f);
     MvOr(&d->brake, d->acceleration);
     MvOr(&d->wade_depth, d->mode == HF_MOVE_WALK || hover ? 0.8f : 0.5f); /* an SUV's wading depth; a person's mid-thigh */
     MvOr(&d->grip, 0.7f);
-    MvOr(&d->hover_height, 1.5f);
-    MvOr(&d->mass, 3000.0f);
-    MvOr(&d->hover_hz, 1.2f);
-    MvOr(&d->hover_damping, 0.7f);
-    MvOr(&d->side_drag, 0.5f);
     MvOr(&d->turn_rate, hover ? 57.0f : 120.0f);
-    MvOr(&d->turn_radius, 4.0f);
     MvOr(&d->step_up, 0.5f);
     MvOr(&d->step_down, 1.0f);
     MvOr(&d->reach, 0.6f);
     MvOr(&d->max_slope, atanf(d->step_up) * 57.29578f); /* step_up risen over 1 m */
-    MvOr(&d->tilt_limit, 30.0f);
-    MvOr(&d->fly_height_min, d->hover_height);
-    MvOr(&d->fly_height_max, d->hover_height);
-    MvOr(&d->climb_rate, 2.0f);
     MvOr(&d->boost_time, 3.0f);
-    MvOr(&d->strafe_speed, hover ? 5.0f : d->reverse_speed);
+    MvOr(&d->strafe_speed, hover ? 5.0f : d->speed * 0.5f);
+    MvHoverDefaults(&d->hover);
+}
+
+static const char* MvHoverRefusal(const HfMoverHover* h)
+{
+    if (!AiIn(h->height_min, 0.2f, 25) || !AiIn(h->height_max, h->height_min, 25) || !AiIn(h->height, h->height_min, h->height_max) ||
+        !AiIn(h->climb_rate, 0.1f, 50) || !AiIn(h->carried, 0, 1) || !AiIn(h->mass, 50, 200000) || !AiIn(h->stiffness, 0.2f, 5) ||
+        !AiIn(h->damping, 0.1f, 2) || !AiIn(h->side_drag, 0, 20))
+        return "hover: heights 0.2 .. 25 with height between min and max, climb_rate 0.1 .. 50, carried 0 .. 1, mass 50 .. 200000, stiffness 0.2 .. 5, damping 0.1 .. 2, side_drag 0 .. 20";
+    return NULL;
 }
 
 static const char* MvRefusal(const HfMoverDef* in, HfMoverDef* d)
 {
-    if (in == NULL || in->size < HF_MOVER_DEF_SIZE_35 || in->entity == 0) return "no HfMoverDef, its size or its entity";
-    memset(d, 0, sizeof *d);
-    memcpy(d, in, in->size < sizeof *d ? in->size : sizeof *d);
-    if (in->size < HF_MOVER_DEF_SIZE_36) d->water = HF_WATER_IGNORE; /* an SDK 35 mover keeps walking along the bottom */
-    if (in->size < sizeof *d) d->max_slope = 90.0f;                  /* and an older one climbs any slope its steps allow */
+    if (in == NULL || in->size < sizeof *in || in->entity == 0) return "no HfMoverDef, its size (build against SDK 39's header) or its entity";
+    *d = *in;
     MvDefaults(d);
-    if (d->mode > HF_MOVE_DRIVE_4WD || d->turn > HF_TURN_VEHICLE || d->water > HF_WATER_IGNORE)
-        return "mode WALK, DRIVE (_FWD, _RWD, _4WD) or HOVER, turn SPOT or VEHICLE, water WADE .. IGNORE";
-    if (!AiIn(d->brake, 0.1f, 200) || !AiIn(d->wade_depth, 0, 20) || !AiIn(d->grip, 0.05f, 2) || !AiIn(d->hover_height, 0.2f, 20) ||
-        !AiIn(d->carried, 0, 1) || !AiIn(d->mass, 50, 200000) || !AiIn(d->hover_hz, 0.2f, 5) || !AiIn(d->hover_damping, 0.1f, 2) ||
-        !AiIn(d->side_drag, 0, 20))
-        return "brake 0.1 .. 200, wade_depth 0 .. 20, grip 0.05 .. 2, hover_height 0.2 .. 20, carried 0 .. 1, mass 50 .. 200000, hover_hz 0.2 .. 5, hover_damping 0.1 .. 2, side_drag 0 .. 20";
-    if (!AiIn(d->max_slope, 1, 90) || !AiIn(d->tilt_limit, 1, 90) || d->align_to_ground > 1 || !AiIn(d->fly_height_min, 0.2f, 25) ||
-        !AiIn(d->fly_height_max, d->fly_height_min, 25) || !AiIn(d->hover_height, d->fly_height_min, d->fly_height_max) ||
-        !AiIn(d->climb_rate, 0.1f, 50) || !AiIn(d->boost_speed, 0, 60) || !AiIn(d->boost_time, 0.1f, 600) || !AiIn(d->strafe_speed, 0, 40))
-        return "max_slope 1 .. 90, tilt_limit 1 .. 90, align_to_ground 0 or 1, fly heights 0.2 .. 25 round hover_height, climb_rate 0.1 .. 50, boost_speed 0 .. 60, boost_time 0.1 .. 600, strafe_speed 0 .. 40";
-    if (!AiIn(d->speed, 0.1f, 40) || !AiIn(d->reverse_speed, 0, 40) || !AiIn(d->acceleration, 0.1f, 200) || !AiIn(d->turn_rate, 1, 1440) ||
-        !AiIn(d->turn_radius, 0.1f, 100) || !AiIn(d->step_up, 0, 10) || !AiIn(d->step_down, 0, 50) || !AiIn(d->reach, 0, 20) ||
-        !AiIn(d->start_delay, 0, 120))
-        return "speed 0.1 .. 40, reverse 0 .. 40, acceleration 0.1 .. 200, turn_rate 1 .. 1440, turn_radius 0.1 .. 100, steps 0 .. 10 up and 50 down, reach 0 .. 20, start_delay 0 .. 120";
-    return NULL;
+    if (d->mode > HF_MOVE_DRIVE_4WD || d->water > HF_WATER_SINK) return "mode WALK, DRIVE (_FWD, _RWD, _4WD) or HOVER, water WADE, DRY, FLOAT or SINK";
+    if (!AiIn(d->speed, 0.1f, 40) || !AiIn(d->reverse_speed, 0, 40) || !AiIn(d->acceleration, 0.1f, 200) || !AiIn(d->brake, 0.1f, 200) ||
+        !AiIn(d->turn_rate, 1, 1440) || !AiIn(d->turn_radius, 0, 100) || !AiIn(d->step_up, 0, 10) || !AiIn(d->step_down, 0, 50) ||
+        !AiIn(d->reach, 0, 20) || !AiIn(d->start_delay, 0, 120))
+        return "speed 0.1 .. 40, reverse 0 .. 40 (or -1 .. 0 of speed), acceleration and brake 0.1 .. 200, turn_rate 1 .. 1440, turn_radius 0 .. 100, steps 0 .. 10 up and 50 down, reach 0 .. 20, start_delay 0 .. 120";
+    if (!AiIn(d->wade_depth, 0, 20) || !AiIn(d->grip, 0.05f, 2) || !AiIn(d->max_slope, 1, 90) || !AiIn(d->tilt_limit, 0, 90) ||
+        !AiIn(d->boost_speed, 0, 60) || !AiIn(d->boost_time, 0.1f, 600) || !AiIn(d->strafe_speed, 0, 40))
+        return "wade_depth 0 .. 20, grip 0.05 .. 2, max_slope 1 .. 90, tilt_limit 0 .. 90, boost_speed 0 .. 60, boost_time 0.1 .. 600, strafe_speed 0 .. 40";
+    return MvHoverRefusal(&d->hover);
 }
 
 /* SDK 35, add_mover: HellForge moves the entity's units (hellforge_move.h). Any time, best from hellforge_mod_init.
@@ -672,13 +674,13 @@ static int ApiAddMover(HfMod* mod, const HfMoverDef* in)
     const uint32_t asked = d.mode;
     if (d.mode >= HF_MOVE_DRIVE_FWD) d.mode = HF_MOVE_DRIVE; /* one driver from here on, with its axles */
     g_mvDefs[at] = (MvDef){mod, d, 0, 3.0f, d.max_slope >= 89.9f ? 1e9f : tanf(d.max_slope * 0.0174533f), kAxles[asked], asked};
-    static const char* const kMode[] = {"", "walks", "drives", "hovers", "drives (FWD)", "drives (RWD)", "drives (4WD)"}, * const kWater[] = {"", "wades", "stays dry", "floats", "ignores water"};
+    static const char* const kMode[] = {"", "walks", "drives", "hovers", "drives (FWD)", "drives (RWD)", "drives (4WD)"}, * const kWater[] = {"", "wades", "stays dry", "floats", "sinks"};
     ApiLog(mod, "add_mover(%016llx): %s, %.1f m/s (%.1f back), %s at %.0f deg/s, brakes %.1f m/s2, %s (%.2f m)%s", (unsigned long long)d.entity,
-        kMode[asked], (double)d.speed, (double)d.reverse_speed, d.turn == HF_TURN_VEHICLE ? "turns like a vehicle" : "turns on the spot",
+        kMode[asked], (double)d.speed, (double)d.reverse_speed, d.turn_radius > 0 ? "turns like a vehicle" : "turns on the spot",
         (double)d.turn_rate, (double)d.brake, d.mode == HF_MOVE_HOVER ? "crosses water" : kWater[d.water], (double)d.wade_depth, d.drive ? ", its own push" : "");
     if (d.mode == HF_MOVE_HOVER)
         ApiLog(mod, "add_mover(%016llx): hovers %.2f m up, %.0f kg (%.0f%% carried by its data), %.1f Hz", (unsigned long long)d.entity,
-            (double)d.hover_height, (double)d.mass, (double)(d.carried * 100), (double)d.hover_hz);
+            (double)d.hover.height, (double)d.hover.mass, (double)(d.hover.carried * 100), (double)d.hover.stiffness);
     MvStart();
     if (d.mode == HF_MOVE_HOVER) HvStart();
     return 0;

@@ -20,9 +20,12 @@ On `dev`, since 0.4.0-beta.
 - **Fighting movers (SDK 37).** `ai_drive` takes an engage range, a distance to keep, a leash and a reaction time. It
   retreats below a health share, running or backing off while firing, and takes whose orders and a spacing from other
   units ([Movers](docs/modding/movers.md#let-it-fight)).
+- **Simpler mover options (SDK 39).** `HfMoverDef` is reordered. Hover fields move into a `hover` block and the drive
+  modes carry the drivetrain (`HF_MOVE_DRIVE_FWD`, `_RWD`, `_4WD`). Water is `WADE`, `DRY`, `FLOAT` or `SINK`.
+  `turn_radius` 0 turns on the spot and `reverse_speed` 0 can't reverse ([Movers](docs/modding/movers.md)).
 - **Mover slopes, tilt, flying heights, boost, strafe and sounds (SDK 37).** `add_mover` takes `max_slope`,
-  `tilt_limit`, `align_to_ground`, hover fly heights and `climb_rate`, `boost_speed`, `strafe_speed` and six sound
-  slots. `mover_input` gives `strafe`, `lift` and `boost` ([Movers](docs/modding/movers.md)).
+  `tilt_limit`, hover fly heights and `climb_rate`, `boost_speed`, `strafe_speed` and six sound slots. `mover_input`
+  gives `strafe`, `lift` and `boost` ([Movers](docs/modding/movers.md)).
 - **Hover movers, brakes, water and drivetrains (SDK 36).** `add_mover` takes `HF_MOVE_HOVER` for a physics vehicle
   that holds a height over ground and water, driven from its seat. Every mover gets `brake`, water wading or crossing,
   drive modes FWD, RWD and 4WD with tyre grip, and a mod's own push in any mode ([Movers](docs/modding/movers.md)).

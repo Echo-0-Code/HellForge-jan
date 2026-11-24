@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 38
+#define HF_MOD_SDK_VERSION 39
 #define HF_MOD_EXPORT __declspec(dllexport)
 
 typedef struct HfMod HfMod; /* Identifies the calling mod in logs and status. Opaque, but for SDK 6's HF_API(mod). */

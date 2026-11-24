@@ -24,12 +24,11 @@ player. The types are in `hellforge_move.h`, which `hellforge_mod.h` includes.
 
 ## Before you call
 
-- Check `hf->size >= offsetof(HfApi, ai_drive) + sizeof(void*)` and set `"sdk": 37` in `hellforge-mod.json`.
+- Check `hf->size >= offsetof(HfApi, ai_drive) + sizeof(void*)` and set `"sdk": 39` in `hellforge-mod.json`.
 - Call `add_mover` and `ai_drive` from `hellforge_mod_init`.
 - Walkers and drivers run on the host. Their moves reach the other players as their root's moves do.
 - The game's own physics no longer move a walker or driver. Leave out any movement code of your own for it.
-- A mod built against SDK 35 or 36 keeps working: its shorter `HfMoverDef` keeps that SDK's behaviour (SDK 35 ignores
-  water; neither has a slope limit).
+- SDK 39 reordered `HfMoverDef`. Build movers against SDK 39's header; an older one is refused.
 
 ## Describe how it moves
 
@@ -38,7 +37,6 @@ HfMoverDef walker = {sizeof walker};
 walker.entity = MY_SENTRY;
 walker.mode = HF_MOVE_WALK;
 walker.speed = 3.5f;
-walker.turn = HF_TURN_SPOT;
 walker.step_up = 0.6f;
 api->add_mover(mod, &walker);
 ```
@@ -47,20 +45,20 @@ api->add_mover(mod, &walker);
 |---|---|---|
 | `mode` | `HF_MOVE_WALK` | `HF_MOVE_WALK` steps to either side of a block. `HF_MOVE_DRIVE` (and its `_FWD`, `_RWD`, `_4WD`) goes only where it faces. `HF_MOVE_HOVER`: [Hover vehicles](#hover-vehicles) |
 | `speed` | 4 m/s, hover 22 | Top speed forward |
-| `reverse_speed` | half of `speed`, hover 0.7 × | Top speed backward |
+| `reverse_speed` | 0: no reverse | Top speed backward in m/s. A negative value is a share of `speed`: -0.5 is half |
 | `acceleration` | 8 m/s², hover 3 | How fast it speeds up |
 | `brake` | `acceleration` | How fast it slows down, stops or turns about |
-| `turn` | `HF_TURN_SPOT` | `HF_TURN_SPOT` turns standing still. `HF_TURN_VEHICLE` turns only while it moves |
 | `turn_rate` | 120 °/s | Its fastest turn |
-| `turn_radius` | 4 m | `HF_TURN_VEHICLE`: its tightest circle |
+| `turn_radius` | 0: on the spot | Its tightest circle. Above 0 it turns only while it moves, like wheels |
 | `step_up` | 0.5 m | The highest step it climbs |
 | `step_down` | 1 m | The deepest drop it steps down |
 | `reach` | 0.6 m | How far its body reaches ahead of its root: a wall this close blocks it |
 | `start_delay` | 0 s | Time after its spawn before HellForge moves it, such as a hellpod's landing |
 | `water`, `wade_depth` | wade, 0.8 m (drive 0.5) | [Water](#water) |
 | `grip`, `drive` | 0.7, none | [Drivetrains](#drivetrains-and-your-own-drive-code) |
-| `max_slope`, `tilt_limit`, `align_to_ground` | from `step_up`, 30°, off | [Slopes, tilt, boost and sounds](#slopes-tilt-boost-and-sounds) |
-| `boost_speed`, `boost_time`, `strafe_speed`, `sounds` | none, 3 s, `reverse_speed`, none | The same section |
+| `max_slope`, `tilt_limit` | from `step_up`, 0 (upright) | [Slopes, tilt, boost and sounds](#slopes-tilt-boost-and-sounds) |
+| `boost_speed`, `boost_time`, `strafe_speed`, `sounds` | none, 3 s, half of `speed`, none | The same section |
+| `hover` | | [Hover vehicles](#hover-vehicles) |
 
 Fly mode comes in a later SDK.
 
@@ -71,10 +69,10 @@ when it floats.
 
 | `water` | What deeper water does |
 |---|---|
-| `HF_WATER_WADE` (default) | It stops at the edge: `status` is `HF_MOVER_BLOCKED` |
-| `HF_WATER_BLOCK` | It stays out of all water |
-| `HF_WATER_CROSS` | It floats across, `wade_depth` under the surface |
-| `HF_WATER_IGNORE` | It walks along the bottom, as in SDK 35 |
+| `HF_WATER_WADE` (default) | It wades to `wade_depth` and stops at deeper water: `status` is `HF_MOVER_BLOCKED` |
+| `HF_WATER_DRY` | It stays out of all water |
+| `HF_WATER_FLOAT` | It floats across, `wade_depth` (its draft) under the surface |
+| `HF_WATER_SINK` | It goes along the bottom, however deep |
 
 The defaults are real fording depths: about 0.8 m for a person (mid-thigh) and 0.5 m for an SUV. A hover always crosses
 water. `mover_state` gives `water_depth`, the water over the ground where it is.
@@ -113,29 +111,29 @@ static void MyDrive(HfMod* mod, uint32_t entity, const HfMoverState* s, float dt
 `HF_MOVE_HOVER` is for a vehicle with a physics body and seats. It stays the game's physics body, so it collides,
 replicates and seats players as before. HellForge pushes its chassis on the machine that simulates it:
 
-- It holds `hover_height` over the ground or water, by a spring at `hover_hz` and `hover_damping`.
-- It levels its roll and pitch, and turns at the steer's rate. It turns on the spot unless `turn` is `HF_TURN_VEHICLE`.
-- Thrust is `acceleration` along its level heading. Air drag tops it out at `speed` and `reverse_speed`.
+- It holds `hover.height` over the ground or water, by a spring at `hover.stiffness` and `hover.damping`.
+- It levels its roll and pitch, and turns at the steer's rate. It turns on the spot unless `turn_radius` is above 0.
+- Thrust is `acceleration` along its level heading. Air drag tops it out at `speed` and `reverse_speed` (-0.7 is the tested craft's).
 - `brake` slows it against its whole slide, and holds it still with no throttle below 1.5 m/s.
-- `side_drag` sets how long a sideways slide lasts.
-- It takes hold once the surface is within twice `hover_height`, never while it hangs under the Pelican.
+- `hover.side_drag` sets how long a sideways slide lasts.
+- It takes hold once the surface is within twice `hover.height`, never while it hangs under the Pelican.
 
-| Field | Default | What it does |
+| `hover.` field | Default | What it does |
 |---|---|---|
-| `hover_height` | 1.5 m | Its root over the ground or water |
-| `mass` | 3000 kg | Its physics body's mass, the M-102 FRV's. Pushes scale with it |
-| `carried` | 0 | The share of its weight its physics data carries already |
-| `hover_hz` | 1.2 Hz | How stiffly it holds its height |
-| `hover_damping` | 0.7 | Its height and tilt springs' share of critical damping |
-| `side_drag` | 0.5 /s | How fast a sideways slide dies |
-| `drive` | none | Your own push: forward, sideways and turn |
-| `fly_height_min`, `fly_height_max` | `hover_height` | The heights the `lift` input moves it between, up to 25 m |
+| `height` | 1.5 m | Its root over the ground or water |
+| `height_min`, `height_max` | `height` | The heights the `lift` input moves it between, up to 25 m |
 | `climb_rate` | 2 m/s | How fast full `lift` raises or lowers it |
-| `strafe_speed` | 5 m/s | Its sideways top speed at full `strafe` |
+| `carried` | 0 | The share of its weight its physics data carries already |
+| `mass` | 3000 kg | Its physics body's mass, the M-102 FRV's. Pushes scale with it |
+| `stiffness` | 1.2 Hz | How stiffly it holds its height and level |
+| `damping` | 0.7 | Its height and tilt springs' share of critical damping |
+| `side_drag` | 0.5 /s | How fast a sideways slide dies |
+
+A hover's `strafe_speed` defaults to 5 m/s, and its `drive` function, if any, gives forward and sideways pushes and a turn.
 
 Make the physics data match:
 
-- Set its `VRA` extraGravity z to `carried` × 9.81. If HellForge stops pushing, it then settles at the rest.
+- Set its `VRA` extraGravity z to `hover.carried` × 9.81. If HellForge stops pushing, it then settles at the rest.
 - Lower its wheels' friction to about 0.02, so they never drive it or hold it.
 - Set `VRD` word 11 to 0. Touching wheels pin it below 2 m/s otherwise.
 - Move its get-on joints down by the height it gains, so the prompts stay in reach.
@@ -147,8 +145,8 @@ and the seat over `ai_drive` while its driver gave input in the last 2 s. `mover
 
 - `max_slope` is the steepest incline a walker or driver climbs. A step is a sudden rise and a slope a long one, so the
   slope is measured over several steps. The default rises `step_up` in 1 m: 27° for 0.5 m steps.
-- `align_to_ground` 1 pitches and rolls a walker or driver with the ground under it, up to `tilt_limit`. A hover
-  rights itself to the ground's slope instead of level, and harder once it tilts past `tilt_limit`.
+- `tilt_limit` above 0 pitches and rolls a walker or driver with the ground under it, up to that angle. A hover then
+  rights itself to the ground's slope instead of level, and harder once it tilts past it. 0 keeps it upright.
 - `boost_speed` is its top speed while the `boost` input holds. A full boost lasts `boost_time` and refills in twice
   that. A hover's fans push harder to reach it.
 - `strafe_speed` is a walker's or hover's sideways top speed at full `strafe`. A driver doesn't strafe.
@@ -181,7 +179,7 @@ SDK 37 adds three inputs. Only `mover_input` gives them; a seated player can't y
 | Input | Range | What it does |
 |---|---|---|
 | `strafe` | -1 right .. 1 left | Slides a walker or hover sideways |
-| `lift` | -1 down .. 1 up | Moves a hover's height at `climb_rate` |
+| `lift` | -1 down .. 1 up | Moves a hover's height at `hover.climb_rate` |
 | `boost` | 0 or 1 | Boosts while its boost lasts |
 
 ## Let the custom AI drive it
@@ -249,7 +247,7 @@ or within 30 m when that is 0. Once the fight is over it goes back to its order.
 ## What HellForge does each update
 
 1. It sets the speed from the throttle, no faster than `acceleration` and `brake` allow, and its tyres' grip.
-2. It turns by the steer: at `turn_rate`, or no tighter than `turn_radius` for `HF_TURN_VEHICLE`.
+2. It turns by the steer: at `turn_rate`, or no tighter than `turn_radius` when it has one.
 3. It casts rays for the ground ahead. Helldivers, enemies and other units nearby are passed; rocks and walls are solid.
 4. A step within `step_up` and `step_down`, and water its `water` setting allows, is taken. A walker tries 35, 70 and 105 degrees to either side first.
 5. When no step works, `status` is `HF_MOVER_BLOCKED` and the speed drops to 0.

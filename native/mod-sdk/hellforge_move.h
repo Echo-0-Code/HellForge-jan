@@ -13,21 +13,32 @@
 /* HfMoverDef.mode */
 #define HF_MOVE_WALK 1u  /* feet: may step to either side of a block to get round it */
 #define HF_MOVE_DRIVE 2u /* wheels or tracks: goes only where it faces; a block stops it */
-#define HF_MOVE_HOVER 3u /* SDK 36: a vehicle with a physics body, held hover_height over ground or water by pushes */
+#define HF_MOVE_HOVER 3u /* SDK 36: a vehicle with a physics body, held hover.height over ground or water by pushes */
 /* SDK 36: drivers whose tyres' grip caps how hard they speed up and brake, and which axles push (HF_MOVE_DRIVE: neither) */
 #define HF_MOVE_DRIVE_FWD 4u /* front-wheel drive: its grip falls going uphill, as the load moves back */
 #define HF_MOVE_DRIVE_RWD 5u /* rear-wheel drive: its grip grows going uphill */
 #define HF_MOVE_DRIVE_4WD 6u /* four-wheel drive: all of its weight gives grip */
 
-/* HfMoverDef.turn */
-#define HF_TURN_SPOT 1u    /* turns at turn_rate standing still too (legs, tracks) */
-#define HF_TURN_VEHICLE 2u /* turns only while it moves, no tighter than turn_radius (wheels) */
 
-/* HfMoverDef.water (SDK 36): what water deeper than wade_depth does to a walker or driver. A hover always crosses. */
-#define HF_WATER_WADE 1u   /* it stops at water deeper than wade_depth (default) */
-#define HF_WATER_BLOCK 2u  /* it stays out of water */
-#define HF_WATER_CROSS 3u  /* it floats across deep water, at most wade_depth under the surface */
-#define HF_WATER_IGNORE 4u /* water is not looked at: it goes along the bottom (SDK 35's way) */
+/* HfMoverDef.water (SDK 36): what a walker or driver does in water. A hover always crosses over it. */
+#define HF_WATER_WADE 1u  /* it wades water up to wade_depth and stops at deeper water (default) */
+#define HF_WATER_DRY 2u   /* it stays out of water */
+#define HF_WATER_FLOAT 3u /* it floats across deep water, wade_depth (its draft) under the surface */
+#define HF_WATER_SINK 4u  /* it goes along the bottom, however deep */
+
+/* HfMoverDef.hover (SDK 39): a hover vehicle's lift and body. Zero fields take the defaults. */
+typedef struct HfMoverHover
+{
+    float height;         /* its root over the ground or water, metres (default 1.5) */
+    float height_min;     /* the lowest the lift input takes it, metres (default height) */
+    float height_max;     /* the highest, at most 25 (default height: lift does nothing) */
+    float climb_rate;     /* metres a second at full lift (default 2) */
+    float carried;        /* the share of its weight its physics data carries already (VRA extraGravity), 0 .. 1 */
+    float mass;           /* its physics body's mass, kg (default 3000, the M-102 FRV's) */
+    float stiffness;      /* how stiffly it holds its height and level, Hz (default 1.2) */
+    float damping;        /* share of critical damping on its height and tilt (default 0.7) */
+    float side_drag;      /* how fast a sideways slide dies, 1/s (default 0.5: it drifts) */
+} HfMoverHover;
 
 /* HfMoverState.driven (SDK 36): the axles pushing now, for wheel animation */
 #define HF_AXLE_FRONT 1u
@@ -59,18 +70,17 @@ typedef struct HfMoverSounds
 } HfMoverSounds;
 
 /* One entity's way of moving (add_mover). Zero-initialize it and set size and entity; zero fields take the defaults,
- * which hang on the mode (docs/modding/movers.md). A mod built against SDK 35 passes the shorter SDK 35 size. */
+ * which hang on the mode (docs/modding/movers.md). SDK 39 reordered it: build against SDK 39's header. */
 typedef struct HfMoverDef
 {
     uint32_t size;        /* sizeof(HfMoverDef) */
     uint32_t mode;        /* HF_MOVE_WALK (default), HF_MOVE_DRIVE, _DRIVE_FWD, _RWD, _4WD or HF_MOVE_HOVER */
     uint64_t entity;      /* the entity resource its units are */
     float speed;          /* top speed forward, m/s (default 4, at most 40) */
-    float reverse_speed;  /* top speed backward, m/s (default half of speed; 0 is the default, so give 0.01 for none) */
-    float acceleration;   /* m/s per second, speeding up and slowing down (default 8) */
-    uint32_t turn;        /* HF_TURN_SPOT (default) or HF_TURN_VEHICLE */
-    float turn_rate;      /* its fastest turn, degrees a second (default 120) */
-    float turn_radius;    /* HF_TURN_VEHICLE: its tightest circle's radius, metres (default 4) */
+    float reverse_speed;  /* top speed backward, m/s; negative: a share of speed (-0.5 half, -1 as fast); 0: it can't reverse */
+    float acceleration;   /* m/s per second speeding up (default 8; hover 3) */
+    float turn_rate;      /* its fastest turn, degrees a second (default 120; hover 57) */
+    float turn_radius;    /* its tightest circle, metres: it turns only while moving (wheels); 0 turns on the spot */
     float step_up;        /* the highest step it climbs, metres (default 0.5) */
     float step_down;      /* the deepest drop it steps down, metres (default 1) */
     float reach;          /* how far ahead of its root its body reaches, metres: walls closer than this block it (default 0.6) */
@@ -82,27 +92,17 @@ typedef struct HfMoverDef
     float grip;           /* HF_MOVE_DRIVE_FWD, _RWD, _4WD: tyre friction on the ground (default 0.7, dirt and gravel) */
     HfMoverDriveFn drive; /* any mode: the mod's own push each update instead of HellForge's (NULL: HellForge's) */
     void* drive_user;     /* passed to drive */
-    float hover_height;   /* HF_MOVE_HOVER: its root over the ground or water, metres (default 1.5) */
-    float carried;        /* hover: the share of its weight its physics data carries already (VRA extraGravity), 0 .. 1 */
-    float mass;           /* hover: its physics body's mass, kg (default 3000, the M-102 FRV's) */
-    float hover_hz;       /* hover: how stiffly it holds its height, Hz (default 1.2) */
-    float hover_damping;  /* hover: share of critical damping on its height and tilt (default 0.7) */
-    float side_drag;      /* hover: how fast a sideways slide dies, 1/s (default 0.5: it drifts) */
     /* SDK 37 */
     float max_slope;      /* the steepest incline it climbs, degrees (default: rising step_up in 1 m, 27 for 0.5 m steps) */
-    float tilt_limit;     /* the most it tilts, degrees: align_to_ground follows slopes to this, a hover is righted past it (default 30) */
-    uint32_t align_to_ground; /* 1: it pitches and rolls with the ground under it; 0 (default): it stays upright, a hover level */
-    float fly_height_min; /* hover: the lowest height lift takes it to, metres (default hover_height) */
-    float fly_height_max; /* hover: the highest, at most 25 (default hover_height: lift does nothing) */
-    float climb_rate;     /* hover: metres a second at full lift (default 2) */
+    float tilt_limit;     /* degrees it pitches and rolls with the ground under it, at most; 0 stays upright (a hover level) */
     float boost_speed;    /* top speed while boosting, m/s (default 0: no boost) */
     float boost_time;     /* seconds a full boost lasts; it refills in twice that (default 3) */
-    float strafe_speed;   /* walk or hover: top speed sideways at full strafe, m/s (default reverse_speed, hover 5) */
+    float strafe_speed;   /* walk or hover: top speed sideways at full strafe, m/s (default half of speed, hover 5) */
     HfMoverSounds sounds;
+    HfMoverHover hover;   /* HF_MOVE_HOVER */
+    uint32_t reserved[4]; /* 0; keeps this larger than SDK 37's layout, so that one is refused */
 } HfMoverDef;
 
-#define HF_MOVER_DEF_SIZE_35 ((uint32_t)offsetof(HfMoverDef, brake))
-#define HF_MOVER_DEF_SIZE_36 ((uint32_t)offsetof(HfMoverDef, max_slope))
 
 /* mover_input: what a driver asks of it now. It holds for half a second; call it every update while driving. */
 typedef struct HfMoverInput
@@ -112,7 +112,7 @@ typedef struct HfMoverInput
     float steer;          /* -1 full right .. 1 full left */
     /* SDK 37 (an SDK 35 size drives with the two above) */
     float strafe;         /* -1 full right .. 1 full left: a walker or hover slides sideways at strafe_speed */
-    float lift;           /* -1 down .. 1 up: a hover's height moves at climb_rate between fly_height_min and _max */
+    float lift;           /* -1 down .. 1 up: a hover's height moves at hover.climb_rate between hover.height_min and _max */
     float boost;          /* 1 boosts, while its boost lasts (boost_speed); 0 not */
 } HfMoverInput;
 
@@ -147,7 +147,7 @@ typedef struct HfMoverState
     float grade;          /* the slope it climbs, rise per metre along its heading (negative downhill) */
     uint32_t driven;      /* HF_AXLE_FRONT / _REAR bits of the axles pushing now, for wheel animation */
     /* SDK 37 */
-    float pitch, roll;    /* radians, nose up and right side down (align_to_ground, or a hover's body) */
+    float pitch, roll;    /* radians, nose up and right side down (tilt_limit, or a hover's body) */
     float boost_left;     /* seconds of boost left */
     uint32_t boosting;    /* 1 while it boosts */
     float strafe, lift;   /* the inputs it moves by now */
