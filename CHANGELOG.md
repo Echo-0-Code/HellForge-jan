@@ -12,6 +12,8 @@ On `dev`, since 0.4.0-beta.
 
 ### Added
 
+- **WEAPONRY boxes (SDK 42).** `add_loadout_box` adds a box of a mod's own after THROWABLE on ARMORY > WEAPONRY that
+  opens its armory tab; `set_loadout_layout` sets the boxes' sizes and a second row ([ui.md](docs/modding/ui.md)).
 - **Vehicle Customization categories (SDK 41).** `add_hangar_category` shows a mod's cards in a 6th category of Ship
   Management > Vehicle Customization, with the game's EQUIP; the mod keeps the pick ([ui.md](docs/modding/ui.md)).
 - **XAML inserts.** A data spec's `xaml` edit puts text into one of the game's views after an anchor that occurs once,

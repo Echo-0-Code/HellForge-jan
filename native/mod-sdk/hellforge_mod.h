@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 41
+#define HF_MOD_SDK_VERSION 42
 #define HF_WEAPON_PAINTS 1 /* HfWeapon.paints exists */
 #define HF_MOD_EXPORT __declspec(dllexport)
 
@@ -252,8 +252,7 @@ typedef struct HfExplosion
     const char* name;       /* names it in the logs; unique, prefixed with your name and mod */
     uint32_t damage;        /* the damage id it deals (vanilla, or one add_damage returned; 0: the base's) */
     float inner_radius;     /* metres; 0 keeps the base's */
-    float outer_radius;
-    float shockwave_radius;
+    float outer_radius, shockwave_radius;
     uint32_t arc;           /* the arc it chains (vanilla, or one add_arc returned; 0: the base's) */
 } HfExplosion;
 
@@ -644,8 +643,7 @@ typedef struct HfStat
     const char* component;
     uint64_t resource;
     int64_t record;
-    uint32_t offset;
-    uint32_t type;
+    uint32_t offset, type;
 } HfStat;
 
 /* The session as co-op sees it (session): solo, hosting friends who play with this machine's stats, or joined to a
@@ -1823,6 +1821,8 @@ typedef struct HfApi
     int (*set_list_band)(HfMod* mod, uint32_t list, float height); /* room (0 .. 200 units) above its heading. 0 done */
     uint32_t (*add_hangar_category)(HfMod* mod, const HfHangarCategory* category); /* SDK 41 (hellforge_hangar.h): handle or 0 */
     int (*set_hangar_equipped)(HfMod* mod, uint32_t category, uint32_t card); /* shown as equipped; 0 done, 1 refused */
+    uint32_t (*add_loadout_box)(HfMod* mod, const HfLoadoutBoxDef* def); /* SDK 42 (hellforge_loadout.h): handle or 0 */
+    int (*set_loadout_layout)(HfMod* mod, const HfLoadoutLayout* layout); /* the WEAPONRY boxes' sizes and rows. 0 done */
 } HfApi;
 
 /* SDK 6: an HfMod starts with the API, so these need only the mod. */

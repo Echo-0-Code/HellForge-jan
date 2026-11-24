@@ -19,6 +19,7 @@ For a screen drawn with HellForge's own drawing calls (a map, a graph), see [Scr
 - [Texts for the game's own widgets](#texts-for-the-games-own-widgets)
 - [Tabs on the game's tab bars](#tabs-on-the-games-tab-bars)
 - [A category in Vehicle Customization](#a-category-in-vehicle-customization)
+- [Boxes on the WEAPONRY overview](#boxes-on-the-weaponry-overview)
 - [Settings in the MODS menu](#settings-in-the-mods-menu)
 - [Limits](#limits)
 
@@ -191,6 +192,44 @@ The tab itself comes from the mod's data spec: a [xaml edit](data.md#edit) of th
 - The game keeps 12 unit skin picks, all in use, so it never saves or syncs the category's pick: the mod does.
 - Cards have no thumbnail or 3D preview yet.
 - `HF_HANGAR_CATEGORIES` is defined where the call exists.
+
+## Boxes on the WEAPONRY overview
+
+`add_loadout_box` (SDK 42) adds a box after THROWABLE on ARMORY > WEAPONRY. The game builds and draws it like its own:
+heading, weapon art and 3D preview, hover, highlight and the left and right moves. A click opens the mod's tab:
+
+```c
+static uint32_t MeleeItem(HfMod* mod, uint32_t box, void* user)
+{
+    return g_meleePick; /* a loadout item id, or 0 for an empty box */
+}
+
+uint32_t tab = hf->add_armory_tab(mod, HF_ARMORY_TABS_WEAPONS, "MELEE", OnMelee, NULL);
+HfLoadoutBoxDef box = {sizeof box, "MELEE", tab, MeleeItem, NULL};
+uint32_t handle = HAS(hf, add_loadout_box) && tab ? hf->add_loadout_box(mod, &box) : 0;
+```
+
+`set_loadout_layout` sets the boxes' sizes and rows. 0 in a field keeps the game's value:
+
+```c
+HfLoadoutLayout layout = {sizeof layout, 3, 240.0f, 380.0f, 10.0f, 360.0f}; /* 3 a row, smaller boxes */
+if (HAS(hf, set_loadout_layout)) hf->set_loadout_layout(mod, &layout);
+```
+
+| Field | Game's value | What it sets |
+| --- | --- | --- |
+| `columns` | all in one row | boxes a row, 3 to 6; the rest go in a second row below |
+| `box_width`, `box_height` | 326, 770 | a box's size |
+| `gap` | 14 | the space between boxes |
+| `wide_width` | 500 | the selected box's width: the game widens the box under the cursor |
+
+- Call both from `hellforge_mod_init`. All mods together get 3 boxes, `HF_LOADOUT_EXTRA`: the preview render has room
+  for 6. The last `set_loadout_layout` call counts.
+- The box needs a mod tab on `HF_ARMORY_TABS_WEAPONS`. A click or confirm opens the weapon page and picks that tab, as a
+  click on its label would.
+- `item_fn` runs on the game thread each time the overview shows. The box draws the item as a secondary weapon's box.
+- The game's three boxes stay in the first row. The APPAREL overview, which shares the widgets, keeps the game's layout.
+- `HF_LOADOUT_BOXES` is defined where the calls exist.
 
 ## Settings in the MODS menu
 

@@ -47,5 +47,6 @@ typedef struct HfListState
 } HfListState;
 
 #include "hellforge_hangar.h" /* SDK 41: a category of the mod's own in Vehicle Customization */
+#include "hellforge_loadout.h" /* SDK 42: boxes of mods' own on ARMORY > WEAPONRY */
 
 #endif
