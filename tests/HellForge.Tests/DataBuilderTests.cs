@@ -226,6 +226,9 @@ static class DataBuilderTests
             var grown = XamlText.Insert(View("<Tabs><TabItem x:Name=\"Frvs\"></TabItem></Tabs>"), [new XamlInsert("<TabItem x:Name=\"Frvs\"></TabItem>", "<TabItem/>")]);
             check(System.Text.Encoding.UTF8.GetString(grown, 16, grown.Length - 16) == "<Tabs><TabItem x:Name=\"Frvs\"></TabItem><TabItem/></Tabs>" &&
                 BitConverter.ToUInt32(grown, 0) == grown.Length - 16, "A xaml insert did not land after its anchor with the length updated.");
+            var crlf = XamlText.Insert(View("<T>\r\n  <I/>\r\n</T>"), [new XamlInsert("<T>\n  <I/>", "\n  <J/>")]);
+            check(System.Text.Encoding.UTF8.GetString(crlf, 16, crlf.Length - 16) == "<T>\r\n  <I/>\r\n  <J/>\r\n</T>",
+                "A xaml insert written with plain newlines did not match and keep a CRLF view's line endings.");
             reject(() => XamlText.Insert(View("<a/><a/>"), [new XamlInsert("<a/>", "<b/>")]));
             reject(() => XamlText.Insert(View("<a/>"), [new XamlInsert("<c/>", "<b/>")]));
             File.WriteAllText(Path.Combine(folder, DataSpecs.FileName), """{"format":1,"patches":[{"archives":["1111111111111111"],"resources":[""" + copy +
