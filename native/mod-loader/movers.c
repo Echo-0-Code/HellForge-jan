@@ -21,7 +21,7 @@ typedef struct MvUnit
 {
     uint32_t entity, unit, def, started, status, driver;
     float pos[3], yaw, speed, turning, throttle, steer, par[4][3], parYaw, put[4];
-    uint32_t written, reframed;
+    uint32_t written, reframed, undone, physics; /* physics: driven through its body, which undid HellForge's moves */
     double age, inputAge, sinceSolid, sinceTrace;
     uint32_t mobile[32], mobileCount, blockedLogged;
     float height, waterDepth, grade, climb, pitch, roll, side, strafe, lift, boost, boostLeft, targetHeight;
@@ -269,18 +269,33 @@ static int MvParent(MvUnit* m)
     return 1;
 }
 
-/* Its parent (a hellpod) may move or let go after the frame was read: when the game shows the root away from where it
- * was put, the frame is read again before the next write. 0 when the root no longer reads. */
+/* Between its own moves the game may move it: a Pelican carries it, its hellpod lets go, something pushes it. When the
+ * game shows the root away from where it was put, it goes on from where the game shows it. 0 when the root no longer reads. */
+static int HvReady(void);
+static uint32_t HvChassis(const MvUnit* m);
+
+/* A physics body (a vehicle's) puts its unit back where it simulates it, so moves written to the root don't stick: twice in
+ * a row while it drives and it is driven through its body instead, as a hover is. */
+static void MvBodyUndoes(MvUnit* m, const MvDef* def)
+{
+    if (++m->undone < 2 || m->physics) return;
+    m->body = HvReady() ? HvChassis(m) : 0;
+    m->physics = m->body != 0;
+    if (m->physics) ApiLog(def->mod, "mover: unit %u: its physics body undoes HellForge's moves; it is driven through the body (actor %08x)", m->entity, m->body);
+    else if (m->undone == 2) ApiLog(def->mod, "mover: unit %u: something undoes HellForge's moves, and it has no physics body to push", m->entity);
+}
+
 static int MvKeepFrame(MvUnit* m, const MvDef* def)
 {
     float w[16];
     if (!ApiJointPose(&g_mvMod, m->unit, 0, HF_POSE_WORLD, w)) return 0;
     const float dx = w[12] - m->put[0], dy = w[13] - m->put[1], dz = w[14] - m->put[2];
-    if (!m->written || dx * dx + dy * dy + dz * dz < 0.25f) return 1;
+    if (!m->written || dx * dx + dy * dy + dz * dz < 0.25f) { if (m->written) m->undone = 0; return 1; }
+    if (fabsf(m->speed) > 0.3f || fabsf(m->turning) > 0.1f) MvBodyUndoes(m, def);
     if (m->reframed++ < 3)
-        ApiLog(def->mod, "mover: unit %u shown %.2f m from where it was put: its parent moved, its frame is read again", m->entity,
+        ApiLog(def->mod, "mover: unit %u shown %.2f m from where it was put: the game moved it, it goes on from there", m->entity,
             (double)sqrtf(dx * dx + dy * dy + dz * dz));
-    return MvFrame(m, w);
+    return MvParent(m);
 }
 
 /* Written only when it moved or turned: a root held still is left to its parent, as the game holds it. */
@@ -406,10 +421,10 @@ static void MvStrafe(MvUnit* m, const MvDef* def, float dt)
 }
 
 /* Speed and heading from the inputs (or a mod's push), then the step over the ground and a walker's sideways slide. */
-static void MvDrive(MvUnit* m, const MvDef* def, float dt)
+/* Speed, turn and (a walker's, from a mod's push) sideways speed from the inputs or the mod's drive function. */
+static void MvSpeedTurn(MvUnit* m, const MvDef* def, float top, float dt)
 {
     const HfMoverDef* d = &def->def;
-    const float top = MvTop(m, d, dt);
     if (d->drive != NULL)
     {
         const HfMoverPush push = MvPush(m, def, dt);
@@ -417,12 +432,17 @@ static void MvDrive(MvUnit* m, const MvDef* def, float dt)
         m->speed = MvClamp(m->speed + push.forward * dt, -d->reverse_speed, top);
         m->turning = MvClamp(push.turn, -rate, rate);
         if (d->mode == HF_MOVE_WALK) m->side = MvClamp(m->side + push.side * dt, -d->strafe_speed, d->strafe_speed);
+        return;
     }
-    else
-    {
-        m->speed = MvSpeedToward(m, def, m->throttle >= 0 ? m->throttle * top : m->throttle * d->reverse_speed, top, dt);
-        m->turning = m->steer * MvRate(d, m->speed);
-    }
+    m->speed = MvSpeedToward(m, def, m->throttle >= 0 ? m->throttle * top : m->throttle * d->reverse_speed, top, dt);
+    m->turning = m->steer * MvRate(d, m->speed);
+}
+
+static void MvDrive(MvUnit* m, const MvDef* def, float dt)
+{
+    const HfMoverDef* d = &def->def;
+    const float top = MvTop(m, d, dt);
+    MvSpeedTurn(m, def, top, dt);
     m->driven = fabsf(m->throttle) > 0.02f ? def->axles : 0;
     m->yaw = MvWrap(m->yaw + m->turning * dt);
     m->status = HF_MOVER_MOVING;
@@ -460,6 +480,43 @@ static void MvDriver(MvUnit* m, const MvDef* def)
 
 #include "movers_hover.c" /* SDK 36: hover vehicles (MvUnit, MvRay, MvWaterAt, MvPush, MvRate) */
 
+/* A walker or driver whose physics body undid its moves: the body is pushed toward the speed, sideways speed and turn
+ * HellForge wants, as tyres or feet would; the ground, walls and its height stay the body's own. */
+static void MvBodyTick(MvUnit* m, const MvDef* def, float dt)
+{
+    const HfMoverDef* d = &def->def;
+    float w[16], v[3] = {0}, om[3] = {0};
+    if (!g_hvResolves(m->body) || g_hvUnit(m->body) != m->unit) { m->physics = 0; m->undone = 0; m->started = 0; return; }
+    if (!ApiJointPose(&g_mvMod, m->unit, 0, HF_POSE_WORLD, w) || !isfinite(w[12])) return;
+    g_hvVelocity(m->body, v, om);
+    memcpy(m->pos, w + 12, 12);
+    m->yaw = atan2f(-w[4], w[5]);
+    MvDriver(m, def);
+    const float top = MvTop(m, d, dt);
+    MvSpeedTurn(m, def, top, dt);
+    if (d->drive == NULL) m->side = d->mode == HF_MOVE_WALK ? m->strafe * d->strafe_speed : 0;
+    m->driven = fabsf(m->throttle) > 0.02f ? def->axles : 0;
+    const float fx = -sinf(m->yaw), fy = cosf(m->yaw), k = fminf(1.0f, 8.0f * dt), mass = d->hover.mass > 0 ? d->hover.mass : 3000.0f;
+    const float want[2] = {fx * m->speed - fy * m->side, fy * m->speed + fx * m->side};
+    const float j[3] = {(want[0] - v[0]) * mass * k, (want[1] - v[1]) * mass * k, 0};
+    const float t[3] = {0, 0, (m->turning - om[2]) * mass * 2.0f * k}; /* about 2 m^2 x mass: a car's yaw inertia */
+    g_hvImpulse(m->body, j, NULL);
+    g_hvAngular(m->body, t);
+    const float got = v[0] * fx + v[1] * fy;
+    m->status = fabsf(m->speed) > 0.5f && fabsf(got) < 0.1f * fabsf(m->speed) ? HF_MOVER_BLOCKED : HF_MOVER_MOVING;
+    MvSounds(m, &d->sounds);
+    MvTrace(m, def, dt);
+}
+
+/* A hover, or a walker or driver its body drives: 1 when it had its update here. */
+static int MvBodyModes(MvUnit* m, const MvDef* def, float dt)
+{
+    if (def->def.mode == HF_MOVE_HOVER) { HvUnitTick(m, def, dt); return 1; }
+    if (!m->physics || !m->started) return 0;
+    MvBodyTick(m, def, dt);
+    return 1;
+}
+
 static void MvUnitTick(MvUnit* m, float dt)
 {
     const MvDef* def = &g_mvDefs[m->def - 1];
@@ -474,7 +531,7 @@ static void MvUnitTick(MvUnit* m, float dt)
         m->unit = unit; m->started = 0;
     }
     if (m->age < def->def.start_delay) { m->status = HF_MOVER_WAITING; return; }
-    if (def->def.mode == HF_MOVE_HOVER) { HvUnitTick(m, def, dt); return; }
+    if (MvBodyModes(m, def, dt)) return;
     if (!m->started)
     {
         if (!MvParent(m)) { m->status = HF_MOVER_WAITING; return; }
@@ -487,6 +544,7 @@ static void MvUnitTick(MvUnit* m, float dt)
         MvListMobile(m);
         if (!MvKeepFrame(m, def)) { ApiLog(def->mod, "mover: unit %u: its root no longer reads; it waits", m->entity); m->started = 0; return; }
     }
+    if (!m->written && !MvParent(m)) { m->status = HF_MOVER_WAITING; return; } /* still the game's: where it shows it now */
     MvDriver(m, def);
     MvDrive(m, def, dt);
     MvSounds(m, &def->def.sounds);
