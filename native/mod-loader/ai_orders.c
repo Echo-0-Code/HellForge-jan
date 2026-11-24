@@ -64,6 +64,8 @@ static uint32_t g_aiInboxCount;
 static SRWLOCK g_aiLock = SRWLOCK_INIT;      /* the units, held by the game thread's whole update */
 static SRWLOCK g_aiInboxLock = SRWLOCK_INIT;
 static HfMod g_aiMod;
+static int MvWhere(uint32_t entity, float out[3]); /* movers.c: a mover's unit this machine moves */
+static int MvPending(uint32_t entity);
 static volatile LONG g_aiTicking;
 static int g_aiState;                        /* 0 waiting for the game, 1 ready, -1 off (logged) */
 static int g_aiHooked, g_aiListening;
@@ -332,14 +334,39 @@ static void AiNextPoint(const AiUnit* u, float out[3])
         if (AiFlat(u->lastPos, u->corner[i]) > 1.0f) { memcpy(out, u->corner[i], 12); return; }
 }
 
+/* Its brain's ctx and position when this machine simulates it; 0 when it has no brain record here. */
+static int AiPlace(uint32_t entity, AiCtx* c, float pos[3])
+{
+    return AiCtxOf(entity, c) && AiAuthority(c) && AiOwnPos(c, pos);
+}
+
+static AiUnit* AiUnitOf(uint32_t entity, int create);
+
+/* movers.c: where the AI sends a driven unit now, and its status. 0 when it doesn't obey (or the update holds it). */
+static int AiDrivePoint(uint32_t entity, float out[3], uint32_t* status)
+{
+    if (!TryAcquireSRWLockShared(&g_aiLock)) return 0;
+    const AiUnit* u = AiUnitOf(entity, 0);
+    int ok = u != NULL && u->route != 0;
+    if (ok) { AiNextPoint(u, out); *status = u->status; }
+    ReleaseSRWLockShared(&g_aiLock);
+    return ok;
+}
+
+/* Where a unit stands, when this machine walks it: its brain with a path agent or a route, or (no brain record) its mover. */
+static int AiStepPlace(const AiUnit* u, AiCtx* c, float pos[3])
+{
+    if (AiPlace(u->entity, c, pos)) return u->route || AiAgentOf(u->entity);
+    return u->route && MvWhere(u->entity, pos); /* a mover's unit: HellForge moves it */
+}
+
 /* One unit, every AI_STEP_S; 0 when it is gone. */
 static int AiUnitStep(AiUnit* u)
 {
     if (!EvpAlive(u->entity)) return 0;
     AiCtx c;
     float pos[3], at[3];
-    if (!AiCtxOf(u->entity, &c) || !AiAuthority(&c) || (!u->route && !AiAgentOf(u->entity)) || !AiOwnPos(&c, pos))
-    { u->status = u->order ? HF_AI_NO_AGENT : HF_AI_IDLE; return 1; }
+    if (!AiStepPlace(u, &c, pos)) { u->status = u->order ? HF_AI_NO_AGENT : HF_AI_IDLE; return 1; }
     u->moved = AiDist(pos, u->lastPos) > 0.05f;
     memcpy(u->lastPos, pos, 12);
     u->sinceSent += AI_STEP_S;
@@ -528,14 +555,19 @@ static void AiTakeInbox(void)
 
 /* ---- units of the rules ---- */
 
+/* The unit settles (AiSettled) after `wait` seconds. */
+static void AiPend(uint32_t entity, uint64_t resource, double wait)
+{
+    for (int i = 0; i < AI_PENDING; i++)
+        if (!g_aiPending[i].entity) { g_aiPending[i].entity = entity; g_aiPending[i].resource = resource; g_aiPending[i].at = g_aiClock + wait; return; }
+}
+
 static void AiSpawned(HfMod* mod, const HfSpawnEvent* e, void* user)
 {
     (void)mod; (void)user;
     if (!e->authority) return;
     for (LONG r = 0; r < g_aiRuleCount; r++)
-        if (g_aiRules[r].def.entity == e->resource)
-            for (int i = 0; i < AI_PENDING; i++)
-                if (!g_aiPending[i].entity) { g_aiPending[i].entity = e->entity; g_aiPending[i].resource = e->resource; g_aiPending[i].at = g_aiClock + 1.0; return; }
+        if (g_aiRules[r].def.entity == e->resource) { AiPend(e->entity, e->resource, 1.0); return; }
 }
 
 /* The nearest living Helldiver to a point, 0 none. */
@@ -577,6 +609,30 @@ static uint32_t AiOpenRoute(uint32_t preset)
     return ApiNavRouteOpen(&g_aiMod, &profile);
 }
 
+/* A unit with no brain record settles only as a mover's (movers.c), once its mover has read its root. */
+static int AiMoverPlace(const AiRule* rule, uint32_t entity, float pos[3])
+{
+    if (MvWhere(entity, pos)) return 1;
+    if (MvPending(entity)) { AiPend(entity, rule->def.entity, 1.0); return 0; } /* its mover's start_delay */
+    ApiLog(rule->mod, "ai: unit %u not taken: it has no brain record here, and no mover", entity);
+    return 0;
+}
+
+static const char* AiHowWalked(const AiUnit* u)
+{
+    if (AiAgentOf(u->entity)) return "its path agent";
+    if (!u->route) return "no path agent and no route";
+    return MvWhere(u->entity, (float[3]){0}) ? "no path agent: routed, its mover drives it" : "no path agent: routed, the mod walks it";
+}
+
+static void AiStartOrder(AiUnit* u, const AiRule* rule, const float pos[3])
+{
+    if (rule->def.start_order != HF_ORDER_FOLLOW) return;
+    uint32_t player = AiNearestPlayer(pos);
+    if (player) AiSetOrder(u, HF_ORDER_FOLLOW, player, NULL, "its start order");
+    else AiLog(u, "no standing Helldiver to follow: it waits for an order");
+}
+
 static void AiSettled(uint32_t entity, uint64_t resource)
 {
     LONG r = 0;
@@ -585,19 +641,17 @@ static void AiSettled(uint32_t entity, uint64_t resource)
     float pos[3];
     if (r == g_aiRuleCount) return;
     const AiRule* rule = &g_aiRules[r];
-    if (!AiCtxOf(entity, &c) || !AiOwnPos(&c, pos)) { ApiLog(rule->mod, "ai: unit %u not taken: it has no brain record here", entity); return; }
-    if (AiNativeObeys(AiBehaviour(&c))) { ApiLog(rule->mod, "ai: unit %u runs a S.E.A.F. brain, which obeys the wheel itself", entity); return; }
+    const int brain = AiCtxOf(entity, &c) && AiOwnPos(&c, pos);
+    if (!brain && !AiMoverPlace(rule, entity, pos)) return;
+    if (brain && AiNativeObeys(AiBehaviour(&c))) { ApiLog(rule->mod, "ai: unit %u runs a S.E.A.F. brain, which obeys the wheel itself", entity); return; }
     AiUnit* u = AiUnitOf(entity, 1);
     if (u == NULL) { ApiLog(rule->mod, "ai: unit %u not taken: %d units already obey", entity, AI_UNITS); return; }
     u->mod = rule->mod; u->rule = (uint32_t)r + 1; u->follow = rule->def.follow_distance; u->hold = rule->def.hold_radius;
     u->rider = AiRiderOf(entity, rule->def.rider, pos);
     memcpy(u->lastPos, pos, 12);
     if (!AiAgentOf(entity) && !u->route) u->route = AiOpenRoute(rule->def.nav_preset);
-    AiLog(u, "obeys the comms wheel (behaviour %u, %s, rider %u)", AiBehaviour(&c),
-        AiAgentOf(entity) ? "its path agent" : u->route ? "no path agent: routed, the mod walks it" : "no path agent and no route", u->rider);
-    uint32_t player = rule->def.start_order == HF_ORDER_FOLLOW ? AiNearestPlayer(pos) : 0;
-    if (player) AiSetOrder(u, HF_ORDER_FOLLOW, player, NULL, "its start order");
-    else if (rule->def.start_order == HF_ORDER_FOLLOW) AiLog(u, "no standing Helldiver to follow: it waits for an order");
+    AiLog(u, "obeys the comms wheel (behaviour %u, %s, rider %u)", brain ? AiBehaviour(&c) : 0, AiHowWalked(u), u->rider);
+    AiStartOrder(u, rule, pos);
 }
 
 /* ---- friendly fire ---- */

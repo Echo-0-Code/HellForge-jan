@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 34
+#define HF_MOD_SDK_VERSION 35
 #define HF_MOD_EXPORT __declspec(dllexport)
 
 typedef struct HfMod HfMod; /* Identifies the calling mod in logs and status. Opaque, but for SDK 6's HF_API(mod). */
@@ -769,6 +769,7 @@ typedef struct HfEventInfo
 } HfEventInfo;
 typedef void (*HfListener)(HfMod* mod, const HfEventInfo* event, void* user);
 #include "hellforge_ai.h" /* SDK 31: orders for AI units (HfOrderEvent needs HfEventInfo) */
+#include "hellforge_move.h" /* SDK 35: movers */
 
 typedef struct HfStateEvent { HfEventInfo info; uint32_t from, to; } HfStateEvent;
 typedef struct HfPlayerEvent
@@ -1802,6 +1803,12 @@ typedef struct HfApi
     /* A stratagem card's ITEM TRAITS lines, any type: up to 4 text ids in this order, instead of the lines its flags
      * give (count 0: the game's again); the flags stay. Any time. 0 done, 1 refused (the mod's log says why). */
     int (*set_stratagem_traits)(HfMod* mod, uint32_t type, const uint32_t* traits, uint32_t count);
+    /* ---- SDK 35: movers, units HellForge moves itself (hellforge_move.h, docs/modding/movers.md; check hf->size) ------ */
+    int (*add_mover)(HfMod* mod, const HfMoverDef* def); /* the entity's units move by HellForge, on the host. 0 done, 1 refused */
+    /* A driver's throttle and steer, holding half a second. Game thread, on the host. 0 taken, 1 not a mover's unit here. */
+    int (*mover_input)(HfMod* mod, uint32_t entity, const HfMoverInput* input);
+    uint32_t (*mover_state)(HfMod* mod, uint32_t entity, HfMoverState* state); /* how it moves (HF_MOVER_...). Any thread */
+    int (*ai_drive)(HfMod* mod, uint64_t entity, const HfAiDrive* ai); /* the custom AI drives its mover. 0 done, 1 refused */
 } HfApi;
 
 /* SDK 6: an HfMod starts with the API, so these need only the mod. */
@@ -1894,23 +1901,17 @@ static inline int hf_subscribe_(HfMod* mod, uint32_t kind, void (*listener)(void
 #define HF_LISTENER_(listener) ((void (*)(void))(listener))
 
 /* HF_ON_STATE: the game's state changed (HfStateEvent.from, to: HF_STATE_...). */
-static inline int hf_on_state(HfMod* mod, HfStateListener listener, void* user, int32_t priority)
-{ return hf_subscribe_(mod, HF_ON_STATE, HF_LISTENER_(listener), user, priority); }
+static inline int hf_on_state(HfMod* mod, HfStateListener listener, void* user, int32_t priority) { return hf_subscribe_(mod, HF_ON_STATE, HF_LISTENER_(listener), user, priority); }
 /* HF_ON_MISSION_START: the game entered HF_STATE_MISSION. */
-static inline int hf_on_mission_start(HfMod* mod, HfStateListener listener, void* user, int32_t priority)
-{ return hf_subscribe_(mod, HF_ON_MISSION_START, HF_LISTENER_(listener), user, priority); }
+static inline int hf_on_mission_start(HfMod* mod, HfStateListener listener, void* user, int32_t priority) { return hf_subscribe_(mod, HF_ON_MISSION_START, HF_LISTENER_(listener), user, priority); }
 /* HF_ON_MISSION_END: the game left HF_STATE_MISSION (to: where it went). */
-static inline int hf_on_mission_end(HfMod* mod, HfStateListener listener, void* user, int32_t priority)
-{ return hf_subscribe_(mod, HF_ON_MISSION_END, HF_LISTENER_(listener), user, priority); }
+static inline int hf_on_mission_end(HfMod* mod, HfStateListener listener, void* user, int32_t priority) { return hf_subscribe_(mod, HF_ON_MISSION_END, HF_LISTENER_(listener), user, priority); }
 /* HF_ON_PLAYER_SPAWN: a player is on the ground (dropped in, or reinforced). */
-static inline int hf_on_player_spawn(HfMod* mod, HfPlayerListener listener, void* user, int32_t priority)
-{ return hf_subscribe_(mod, HF_ON_PLAYER_SPAWN, HF_LISTENER_(listener), user, priority); }
+static inline int hf_on_player_spawn(HfMod* mod, HfPlayerListener listener, void* user, int32_t priority) { return hf_subscribe_(mod, HF_ON_PLAYER_SPAWN, HF_LISTENER_(listener), user, priority); }
 /* HF_ON_PLAYER_DOWN: a player died and waits to be reinforced. */
-static inline int hf_on_player_down(HfMod* mod, HfPlayerListener listener, void* user, int32_t priority)
-{ return hf_subscribe_(mod, HF_ON_PLAYER_DOWN, HF_LISTENER_(listener), user, priority); }
+static inline int hf_on_player_down(HfMod* mod, HfPlayerListener listener, void* user, int32_t priority) { return hf_subscribe_(mod, HF_ON_PLAYER_DOWN, HF_LISTENER_(listener), user, priority); }
 /* HF_ON_DAMAGE: damage this machine's game applies, before armour and multipliers. */
-static inline int hf_on_damage(HfMod* mod, HfDamageListener listener, void* user, int32_t priority)
-{ return hf_subscribe_(mod, HF_ON_DAMAGE, HF_LISTENER_(listener), user, priority); }
+static inline int hf_on_damage(HfMod* mod, HfDamageListener listener, void* user, int32_t priority) { return hf_subscribe_(mod, HF_ON_DAMAGE, HF_LISTENER_(listener), user, priority); }
 /* HF_ON_DAMAGE_PRE (SDK 11): damage about to apply; the listener may change event->damage.amount or set cancel. */
 static inline int hf_on_damage_pre(HfMod* mod, HfDamagePreListener listener, void* user, int32_t priority)
 { return hf_subscribe_(mod, HF_ON_DAMAGE_PRE, HF_LISTENER_(listener), user, priority); }

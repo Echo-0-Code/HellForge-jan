@@ -12,6 +12,9 @@ On `dev`, since 0.4.0-beta.
 
 ### Added
 
+- **Movers (SDK 35).** `add_mover` makes HellForge move an entity's units itself: walk or drive, speed, turning on the
+  spot or like a vehicle, step heights. `mover_input` drives one from code, and `ai_drive` hands it to the custom AI
+  ([Movers](docs/modding/movers.md)).
 - **Item traits (SDK 34).** `set_item_traits` sets a primary's, secondary's, throwable's or loadout item's trait
   slots; `set_stratagem_traits` gives any stratagem card up to 4 lines in the mod's order, the mod's own labels
   included. `hellforge_traits.h` names the game's labels ([Item traits](docs/modding/traits.md)).
