@@ -101,7 +101,12 @@ On enemies, use material looks (SDK 33). The game draws units of one kind in one
 material, so a texture set on one bug shows on others of its kind and flickers as the batch order changes.
 
 A row with `texture_slot` 0 names a material resource per level instead (0: the unit's own) and leaves `own` 0. HellForge moves the
-slot to that resource (`UnitSetMaterial`) and back (`UnitResetMaterial`), so the enemy is drawn in a batch of its own.
+slot to that resource (`UnitSetMaterial`), so the enemy is drawn in a batch of its own.
+
+To go back, HellForge sets the material resource the slot had before the first swap. The engine's reset
+(`UnitResetMaterial`, `Unit.set_material` with no material) gives the slot an empty material, which draws purple and
+see-through. A row whose unit has no drawn material in that slot is not shown.
+
 Make the materials as copies of the unit's own with `textures` in the same session package
 ([data](data.md#copy)):
 

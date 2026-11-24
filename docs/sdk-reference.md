@@ -7781,7 +7781,7 @@ typedef void* (*HfFn_UnitSetMaterial)(uint32_t unit, uint32_t slot, uint64_t mat
 
 ### UnitResetMaterial
 
-`helldivers2.exe+0x1FF300`, hook or call. Puts a unit's material slot back on the material resource the unit's data gives it, as a new instance; returns the new material: the Unit table's (EngineApi +0x18, 0x27C8F10) +0x190 (UnitSetMaterial with no resource). From the Unit table's slot 50 (+0x190) and Unit.set_material without a material (callback 0x414490); the arguments from the code (build 25480438).
+`helldivers2.exe+0x1FF300`, hook or call. Gives a unit's material slot an empty material with no resource (it draws purple and see-through; set the slot's own resource with UnitSetMaterial to undo a swap): the Unit table's (EngineApi +0x18, 0x27C8F10) +0x190 (UnitSetMaterial with no resource; 0x50EEE0 makes the empty material). From the Unit table's slot 50 (+0x190) and Unit.set_material without a material (callback 0x414490); the arguments from the code (build 25480438).
 
 ```c
 typedef void* (*HfFn_UnitResetMaterial)(uint32_t unit, uint32_t slot);
