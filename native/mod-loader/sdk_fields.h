@@ -1509,6 +1509,10 @@ static const SdkField kSdkFieldsFaction[] = {
     {"priority", 72, 4, HF_TYPE_F32, HF_APPLIES_RESPAWN, REF_NONE},
     {"complex_targeting_nodes", 84, 64, HF_TYPE_U32, HF_APPLIES_RESPAWN, REF_NONE},
 };
+static const SdkField kSdkFieldsTargeting[] = {
+    {"aim_damping", 8, 4, HF_TYPE_F32, HF_APPLIES_RESPAWN, REF_NONE},
+    {"aim_spring", 12, 4, HF_TYPE_F32, HF_APPLIES_RESPAWN, REF_NONE},
+};
 static const SdkComponent kSdkComponents[] = {
     {"ProjectileWeapon", "ProjectileWeaponComponentData", 25480438u, 616u, kSdkFieldsProjectileWeapon, 45, 0, 321},
     {"WeaponData", "WeaponDataComponentData", 25480438u, 1232u, kSdkFieldsWeaponData, 21, 0, 236},
@@ -1588,4 +1592,5 @@ static const SdkComponent kSdkComponents[] = {
     {"Interactable", "InteractableComponentData", 25480438u, 1104u, kSdkFieldsInteractable, 48, 0, 244},
     {"Vehicle", "VehicleComponentData", 25480438u, 3704u, kSdkFieldsVehicle, 32, 0, 91},
     {"Faction", "FactionComponentData", 25480438u, 152u, kSdkFieldsFaction, 6, 0, 90},
+    {"Targeting", "TargetingComponentData", 25480438u, 64u, kSdkFieldsTargeting, 2, 0, 234},
 };

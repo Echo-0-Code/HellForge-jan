@@ -77,6 +77,8 @@ Reference and related pages:
   Hold position, and moving a unit through the game's own pathing.
 - [Movers](modding/movers.md): for code mod authors; units HellForge moves itself (walk, drive or SDK 36 hover, with
   brakes, water and drivetrains), driven by code, a seat or the custom AI.
+- [Turrets](modding/turrets.md): for code mod authors; SDK 37 turret settings (turning, limits, sight, fire rate,
+  who aims it) and turrets on movers and objects.
 - [Building a lobby browser](lobby-browser.md): for front-end developers drawing their own lobby browser on the ship's
   terminal; the SDK 16 calls, the terminal's visit, what each lobby says and the rules a browser keeps.
 

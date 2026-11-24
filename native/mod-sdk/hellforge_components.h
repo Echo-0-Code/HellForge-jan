@@ -5258,6 +5258,21 @@ HF_ASSERT_OFFSET(HfFaction, priority, 72);
 HF_ASSERT_OFFSET(HfFaction, complex_targeting_nodes, 84);
 #define HF_TYPE_Faction_complex_targeting_nodes HF_TYPE_U32
 
+/* TargetingComponentData (component 234, 64-byte records): how a unit's aim follows its target: a spring pulling the aim on and a damper holding its swing */
+#define HfTargeting_INFO "TargetingComponentData", 25480438u
+typedef struct HfTargeting
+{
+    uint8_t _unknown_00[8];
+    float aim_damping;                           /* +0x08 how much the aim's swing is held back (vanilla sentries and the Scout Strider 1) (unverified) [respawn?] */
+    float aim_spring;                            /* +0x0C how hard the aim pulls onto the target (vanilla 10) (unverified) [respawn?] */
+    uint8_t _unknown_10[48];
+} HfTargeting;
+HF_ASSERT_SIZE(HfTargeting, 64);
+HF_ASSERT_OFFSET(HfTargeting, aim_damping, 8);
+#define HF_TYPE_Targeting_aim_damping HF_TYPE_F32
+HF_ASSERT_OFFSET(HfTargeting, aim_spring, 12);
+#define HF_TYPE_Targeting_aim_spring HF_TYPE_F32
+
 #pragma pack(pop)
 
 #endif

@@ -8,6 +8,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include "hellforge_turret.h" /* SDK 37: turrets, which movers carry */
 
 /* HfMoverDef.mode */
 #define HF_MOVE_WALK 1u  /* feet: may step to either side of a block to get round it */
