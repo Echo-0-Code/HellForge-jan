@@ -9,6 +9,8 @@
 #define MV_INPUT_S 0.5     /* a mod's input holds this long */
 #define MV_SOLID_S 0.5     /* how often the moving units near a mover are listed */
 #define MV_G 9.81f
+#define MV_SLOPE_BASE 0.5f /* metres: an incline is read over at least this, so a millimetre step reads no slope */
+#define MV_SLOPE_RUN 2.0f  /* metres: the incline is averaged over this much travel; a shorter rise is a step */
 #define MV_WATER_STATE 0x347CE48u /* game.dll: the water state WaterHeight takes (its +0x44 byte: the map has water) */
 #define MV_GAME_LEVEL 0xAE288u    /* the Game's mission level, WaterHeight's third argument (mappings/globals.json) */
 
@@ -174,6 +176,18 @@ static int MvWall(const MvUnit* m, const HfMoverDef* d, float ux, float uy, floa
     return MvRay(m, from, to, &z);
 }
 
+/* The incline along (ux, uy): the ground over MV_SLOPE_BASE or more ahead against the ground under it (its root may sit
+ * off the ground: a pod drops it a little low). The reads leave waterDepth as the step's own surface set it. */
+static float MvIncline(MvUnit* m, const HfMoverDef* d, float ux, float uy, float len, float g)
+{
+    const float base = fmaxf(len, MV_SLOPE_BASE), depth = m->waterDepth;
+    float here = m->pos[2], ahead = g;
+    if (!MvSurface(m, d, m->pos[0], m->pos[1], m->pos[2], &here)) here = m->pos[2];
+    if (base > len && !MvSurface(m, d, m->pos[0] + ux * base, m->pos[1] + uy * base, m->pos[2], &ahead)) ahead = g;
+    m->waterDepth = depth;
+    return MvClamp((ahead - here) / base, -3, 3);
+}
+
 /* One step of `step` metres (negative: backward) along its heading; a walker also tries 35, 70 and 105 degrees to either
  * side. 1 moved. */
 static int MvStep(MvUnit* m, const MvDef* def, float step)
@@ -188,11 +202,12 @@ static int MvStep(MvUnit* m, const MvDef* def, float step)
         const float ux = (fx * c - fy * s) * sign, uy = (fx * s + fy * c) * sign;
         float g;
         if (MvWall(m, d, ux, uy, len) || !MvSurface(m, d, m->pos[0] + ux * len, m->pos[1] + uy * len, m->pos[2], &g)) continue;
-        /* a slope is a long incline, a step a sudden rise: the incline is smoothed over steps, so a step passes */
-        const float climb = 0.8f * m->climb + 0.2f * MvClamp((g - m->pos[2]) / len, -3, 3);
-        if (climb > def->slopeTan) continue;
+        /* a slope is a long incline, a step a sudden rise: averaged over MV_SLOPE_RUN of travel, a step passes */
+        const float incline = MvIncline(m, d, ux, uy, len, g), k = fminf(1.0f, len / MV_SLOPE_RUN);
+        const float climb = m->climb + k * (incline - m->climb);
+        if (climb > def->slopeTan && incline > def->slopeTan) continue; /* still steep here: a stale average never pins it */
         m->climb = climb;
-        m->grade = 0.8f * m->grade + 0.2f * MvClamp((g - m->pos[2]) / step, -3, 3);
+        m->grade = m->grade + k * (incline * sign - m->grade);
         m->pos[0] += ux * len; m->pos[1] += uy * len; m->pos[2] = g;
         return 1;
     }
@@ -205,7 +220,7 @@ static void MvSlide(MvUnit* m, const MvDef* def, float dist)
     const float ux = -cosf(m->yaw) * (dist < 0 ? -1.0f : 1.0f), uy = -sinf(m->yaw) * (dist < 0 ? -1.0f : 1.0f), len = fabsf(dist);
     float g;
     if (len < 0.0005f || MvWall(m, &def->def, ux, uy, len) || !MvSurface(m, &def->def, m->pos[0] + ux * len, m->pos[1] + uy * len, m->pos[2], &g) ||
-        (g - m->pos[2]) / len > def->slopeTan)
+        MvIncline(m, &def->def, ux, uy, len, g) > def->slopeTan)
     { m->side = 0; return; }
     m->pos[0] += ux * len; m->pos[1] += uy * len; m->pos[2] = g;
 }
