@@ -25,7 +25,7 @@
 #define HF_WATER_CROSS 3u  /* it floats across deep water, at most wade_depth under the surface */
 #define HF_WATER_IGNORE 4u /* water is not looked at: it goes along the bottom (SDK 35's way) */
 
-/* HfMoverDef.drivetrain (SDK 36): which axles push a driver. FWD, RWD and 4WD are also HfMoverState.driven's bits. */
+/* HfMoverDef.drivetrain (SDK 36): which axles push a driver (walkers and hovers: 0 or NONE only). FWD, RWD and 4WD are also HfMoverState.driven's bits. */
 #define HF_DRIVETRAIN_FWD 1u  /* the front axle: its grip falls going uphill, as the load moves back */
 #define HF_DRIVETRAIN_RWD 2u  /* the rear axle: its grip grows going uphill */
 #define HF_DRIVETRAIN_4WD 3u  /* both: all of its weight gives grip */
@@ -36,7 +36,7 @@ typedef struct HfMoverPush
 {
     uint32_t size;   /* sizeof(HfMoverPush) */
     float forward;   /* m/s2 along its heading (negative backward) */
-    float side;      /* m/s2 to its left: a hover only */
+    float side;      /* m/s2 to its left: a walker or hover */
     float turn;      /* the turn it wants, radians a second (positive left) */
 } HfMoverPush;
 

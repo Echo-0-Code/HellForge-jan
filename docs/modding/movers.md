@@ -97,6 +97,7 @@ speeds up and brakes, and slopes pull on it.
 - The load moves back by about a quarter of (a/g + the slope's sine), a car's ratio of centre of mass height to wheelbase.
 - A slope its grip can't climb holds it still. `mover_state` gives `grade` and the axles pushing now in `driven`.
 
+FWD, RWD and 4WD are for `HF_MOVE_DRIVE` only; a walker or hover refuses them. `HF_DRIVETRAIN_NONE` works in every mode.
 With `HF_DRIVETRAIN_NONE`, HellForge calls `drive` on the host's game thread every update, before it moves the unit.
 Fill `HfMoverPush` with `forward` and `side` in m/s² and `turn` in radians a second. HellForge keeps the ground, steps,
 water and top speeds. Don't call `mover_*` from it.

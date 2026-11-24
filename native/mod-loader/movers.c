@@ -414,6 +414,7 @@ static void MvDrive(MvUnit* m, const MvDef* def, float dt)
         const float rate = fabsf(MvRate(d, m->speed));
         m->speed = MvClamp(m->speed + push.forward * dt, -d->reverse_speed, top);
         m->turning = MvClamp(push.turn, -rate, rate);
+        if (d->mode == HF_MOVE_WALK) m->side = MvClamp(m->side + push.side * dt, -d->strafe_speed, d->strafe_speed);
     }
     else
     {
@@ -423,7 +424,8 @@ static void MvDrive(MvUnit* m, const MvDef* def, float dt)
     m->driven = d->mode == HF_MOVE_DRIVE && d->drivetrain <= HF_DRIVETRAIN_4WD && fabsf(m->throttle) > 0.02f ? d->drivetrain : 0;
     m->yaw = MvWrap(m->yaw + m->turning * dt);
     m->status = HF_MOVER_MOVING;
-    if (d->mode == HF_MOVE_WALK) MvStrafe(m, def, dt);
+    if (d->mode == HF_MOVE_WALK && d->drivetrain != HF_DRIVETRAIN_NONE) MvStrafe(m, def, dt);
+    else if (d->mode == HF_MOVE_WALK) MvSlide(m, def, m->side * dt);
     if (fabsf(m->speed * dt) >= 0.0005f && !MvStep(m, def, m->speed * dt)) MvBlocked(m, def);
     else m->blockedLogged = 0;
     if (d->align_to_ground) MvAlign(m, d);
@@ -639,7 +641,7 @@ static const char* MvRefusal(const HfMoverDef* in, HfMoverDef* d)
     MvDefaults(d);
     if (d->mode > HF_MOVE_HOVER || d->turn > HF_TURN_VEHICLE || d->water > HF_WATER_IGNORE || d->drivetrain > HF_DRIVETRAIN_NONE)
         return "mode WALK, DRIVE or HOVER, turn SPOT or VEHICLE, water WADE .. IGNORE, drivetrain 0 .. NONE";
-    if (d->mode == HF_MOVE_HOVER && d->drivetrain && d->drivetrain != HF_DRIVETRAIN_NONE) return "a hover has no driven wheels: drivetrain 0 or NONE";
+    if (d->mode != HF_MOVE_DRIVE && d->drivetrain && d->drivetrain != HF_DRIVETRAIN_NONE) return "only a driver has driven wheels: walk and hover take drivetrain 0 or NONE";
     if (!AiIn(d->brake, 0.1f, 200) || !AiIn(d->wade_depth, 0, 20) || !AiIn(d->grip, 0.05f, 2) || !AiIn(d->hover_height, 0.2f, 20) ||
         !AiIn(d->carried, 0, 1) || !AiIn(d->mass, 50, 200000) || !AiIn(d->hover_hz, 0.2f, 5) || !AiIn(d->hover_damping, 0.1f, 2) ||
         !AiIn(d->side_drag, 0, 20))
