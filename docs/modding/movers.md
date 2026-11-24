@@ -5,8 +5,8 @@
 SDK 35 lets HellForge move a unit itself: a sentry that walks, a cart that drives, any object your mod spawns. SDK 36
 adds hover vehicles, brakes, water and drivetrains. SDK 37 adds slopes, tilting, flying heights, boost, strafing and
 sounds. SDK 43 adds helicopters, planes, boats, submarines and rail vehicles. You describe how it moves once with `add_mover`. A driver then
-gives it a throttle and a steer: your code with `mover_input`, the custom AI with `ai_drive`, or a hover's seated
-player. The types are in `hellforge_move.h`, which `hellforge_mod.h` includes.
+gives it a throttle and a steer: your code with `mover_input`, the custom AI with `ai_drive`, or the player in its
+driver's seat, in any mode whose unit has one. The types are in `hellforge_move.h`, which `hellforge_mod.h` includes.
 
 ## Contents
 
@@ -234,6 +234,7 @@ api->add_mover(mod, &tram);
 - Steer does nothing. Its heading follows the track, and with a `tilt_limit` its pitch follows the grade.
 - At a line's end it stops, as at a buffer, and `status` is `HF_MOVER_BLOCKED`.
 - It is moved by its root like a driver, so it runs on the host. It ploughs through units and walls on its way.
+- A vehicle copy's physics body is pushed along the line instead, and its wheels keep its height.
 
 Its defaults are light rail's: 15 m/s, and 1 m/s² to speed up and brake. A mod builds its own track and lays it along
 the line. Lines from the map's own routes come in a later SDK.
@@ -270,6 +271,9 @@ api->mover_input(mod, entity, &in);
 
 `throttle` runs from -1 (full reverse) to 1 (full ahead). `steer` runs from -1 (full right) to 1 (full left). A mod's
 input wins over `ai_drive` for as long as it holds, so a mod can make its own fight moves.
+
+A unit with a driver's seat, such as a vehicle copy, is also driven from it in any mode. A walker, driver, rail or
+tracked mover reads the seat on the host, so there it is the host's own player who drives it.
 
 SDK 37 adds three inputs. `mover_input` gives all three. A seated driver gives `lift` with Space (up) and Control
 (down), on a craft its seat drove in the last 30 s.
@@ -338,7 +342,7 @@ the same animation code works there.
 | Field | Meaning |
 |---|---|
 | `status` | `HF_MOVER_MOVING`, `HF_MOVER_BLOCKED`, `HF_MOVER_WAITING` (its start delay, or a hover not over a surface) or `HF_MOVER_REMOTE` |
-| `driver` | `HF_DRIVER_MOD`, `HF_DRIVER_AI`, `HF_DRIVER_SEAT` (a hover's player) or `HF_DRIVER_NONE` |
+| `driver` | `HF_DRIVER_MOD`, `HF_DRIVER_AI`, `HF_DRIVER_SEAT` (the player in its driver's seat) or `HF_DRIVER_NONE` |
 | `position`, `yaw` | Where its root is, and its heading (radians, counter-clockwise from +Y) |
 | `speed`, `turning` | Metres a second along its heading, and radians a second to the left |
 | `throttle`, `steer` | The inputs it moves by now |

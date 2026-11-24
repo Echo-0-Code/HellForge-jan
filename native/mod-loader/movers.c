@@ -519,13 +519,31 @@ static void MvDriver(MvUnit* m, const MvDef* def)
 {
     if (m->inputAge < MV_INPUT_S) { m->driver = HF_DRIVER_MOD; return; }
     m->strafe = m->lift = m->boost = 0; /* a mod's input has them, and a seat's lift keys */
-    if (MvPhysical(def->def.mode) && m->seatAge < HV_SEAT_S)
+    if (m->seatAge < HV_SEAT_S) /* any mover whose unit has a driver's seat, read where it is moved */
     { m->driver = HF_DRIVER_SEAT; m->throttle = m->seatThrottle; m->steer = m->seatSteer; m->lift = m->seatLift; }
     else if (def->ai) { m->driver = HF_DRIVER_AI; MvAiInputs(m, def); }
     else { m->driver = HF_DRIVER_NONE; m->throttle = 0; m->steer = 0; }
 }
 
 #include "movers_hover.c" /* SDK 36: hover vehicles (MvUnit, MvRay, MvWaterAt, MvPush, MvRate) */
+
+/* A rail mover whose physics body undid its moves (a vehicle copy): the line runs as ever, and the body is pushed along
+ * it at its speed and back onto it, turned toward the track's heading. Its height stays the body's. */
+static void MvBodyRail(MvUnit* m, const MvDef* def, const float w[16], const float v[3], const float om[3], float dt)
+{
+    const float body[2] = {w[12], w[13]}, bodyYaw = atan2f(-w[4], w[5]);
+    MvDriver(m, def);
+    MvRailDrive(m, def, dt);
+    if (!m->rail) return;
+    const float fx = -sinf(m->yaw), fy = cosf(m->yaw), k = fminf(1.0f, 8.0f * dt), mass = def->def.hover.mass > 0 ? def->def.hover.mass : 3000.0f;
+    const float want[2] = {fx * m->speed + (m->pos[0] - body[0]) * 2.0f, fy * m->speed + (m->pos[1] - body[1]) * 2.0f};
+    const float j[3] = {(want[0] - v[0]) * mass * k, (want[1] - v[1]) * mass * k, 0};
+    const float t[3] = {0, 0, (MvWrap(m->yaw - bodyYaw) * 3.0f - om[2]) * mass * 2.0f * k};
+    g_hvImpulse(m->body, j, NULL);
+    g_hvAngular(m->body, t);
+    MvSounds(m, &def->def.sounds);
+    MvTrace(m, def, dt);
+}
 
 /* A walker or driver whose physics body undid its moves: the body is pushed toward the speed, sideways speed and turn
  * HellForge wants, as tyres or feet would; the ground, walls and its height stay the body's own. */
@@ -538,6 +556,7 @@ static void MvBodyTick(MvUnit* m, const MvDef* def, float dt)
     g_hvVelocity(m->body, v, om);
     memcpy(m->pos, w + 12, 12);
     m->yaw = atan2f(-w[4], w[5]);
+    if (d->mode == HF_MOVE_RAIL) { MvBodyRail(m, def, w, v, om, dt); return; }
     MvDriver(m, def);
     const float top = MvTop(m, d, dt);
     MvSpeedTurn(m, def, top, dt);
@@ -843,7 +862,7 @@ static int ApiAddMover(HfMod* mod, const HfMoverDef* in)
         ApiLog(mod, "add_mover(%016llx): holds %.2f m up, %.0f kg (%.0f%% carried by its data), %.1f Hz", (unsigned long long)d.entity,
             (double)d.hover.height, (double)d.hover.mass, (double)(d.hover.carried * 100), (double)d.hover.stiffness);
     MvStart();
-    if (MvPhysical(d.mode)) HvStart();
+    HvStart(); /* any mover with a driver's seat is driven from it */
     return 0;
 }
 

@@ -302,7 +302,7 @@ static void HvSeat(uintptr_t record, uintptr_t input, uintptr_t leverAt)
     float in[3];
     if (!EvpPtr(record, &r) || SafeRead(r + 8, &entity, 4)) return;
     MvUnit* m = MvUnitOf(entity);
-    if (m == NULL || !MvPhysical(g_mvDefs[m->def - 1].def.mode) || SafeRead(input, in, 12) || SafeRead(leverAt, &lever, 4) ||
+    if (m == NULL || m->remote || SafeRead(input, in, 12) || SafeRead(leverAt, &lever, 4) ||
         !AiIn(in[0], -1.01f, 1.01f) || !AiIn(in[1], -0.01f, 1.01f) || !AiIn(in[2], -0.01f, 1.01f))
         return;
     const float throttle = lever == 0 ? -fmaxf(in[1], in[2]) : lever == 1 ? 0.0f : in[1] - in[2];
@@ -331,10 +331,10 @@ static void HvMotionDetour(void* manager, float dt)
     g_hvMotionNext(manager, dt);
 }
 
-/* The first hover mover hooks the vehicles' motion update for its seats (chained: mods may hook it too). */
+/* The first mover hooks the vehicles' motion update for their seats (chained: mods may hook it too). */
 static void HvStart(void)
 {
     if (InterlockedExchange(&g_hvHooked, 1)) return;
     if (ApiHookFunction(&g_mvMod, "VehicleMotionUpdate", (void*)HvMotionDetour, (void**)&g_hvMotionNext, 0))
-        Note("movers: hover vehicles can't be driven from their seats (VehicleMotionUpdate not hooked)");
+        Note("movers: vehicles can't be driven from their seats (VehicleMotionUpdate not hooked)");
 }
