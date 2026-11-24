@@ -16,13 +16,13 @@ jobs:
       - name: Download the artifact and publish it
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: '45407823035'
-          TAG: test-c0ad89d
+          RUN_ID: '45414771890'
+          TAG: test-a1f2608
         run: |
           gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n test-package -D pkg
           find pkg -type f -exec ls -la {} \;
           cp "$(find pkg -name HellForge-Setup.exe | head -1)" HellForge-Setup.exe
           sha256sum HellForge-Setup.exe | tee SHA256SUMS
-          gh release create "$TAG" -R "$GITHUB_REPOSITORY" --prerelease --target c0ad89db5030b07dc4690aaefa523b3d19ba3be8 \
-            --title "Test build c0ad89d, 69dd45e + movers follow unit changes, write the root only on moves, keep the parent frame (run $RUN_ID)" --notes "test-package artifact of run $RUN_ID, republished for download." \
+          gh release create "$TAG" -R "$GITHUB_REPOSITORY" --prerelease --target a1f2608c066a68a02a5f015ef2c21e5cfd21b282 \
+            --title "Test build a1f2608, c0ad89d + movers hover mode, brakes, water, drivetrains (SDK 36) (run $RUN_ID)" --notes "test-package artifact of run $RUN_ID, republished for download." \
             HellForge-Setup.exe SHA256SUMS
