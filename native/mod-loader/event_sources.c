@@ -68,6 +68,7 @@ static int SeWantsDamage(void);       /* status_effects.c: effects that scale th
 static void SeDamage(uint8_t* event);
 static int AiWantsDamage(void);       /* ai_orders.c: units that obey spare their own side */
 static void AiDamage(uint8_t* event);
+static void AiExplosion(uint32_t type, uint32_t source, uint32_t owner, const float* position);
 
 static uint64_t ConsumeDamageDetour(void* system, uint8_t* event, uint64_t r8, uint64_t r9, uint64_t s5, uint64_t s6)
 {
@@ -132,6 +133,7 @@ static uint64_t SpawnDetour(void* manager, uint32_t entity, uint64_t resource, c
 static uint64_t ExplosionDetour(void* queue, const float* position, uint32_t type, uint32_t source, uint32_t owner, uint64_t creditor, // lint-ok: R12 mirrors RequestExplosion 0x13C0A80 (ExplosionFn)
     uint64_t a7, uint64_t a8, uint64_t a9, uint64_t a10, uint64_t a11, uint64_t a12, uint64_t a13, uint64_t a14, uint64_t a15)
 {
+    AiExplosion(type, source, owner, position);
     uint64_t result = g_explosion(queue, position, type, source, owner, creditor, a7, a8, a9, a10, a11, a12, a13, a14, a15);
     if (AnyListener(HF_ON_EXPLOSION))
     {
@@ -157,7 +159,8 @@ static ULONGLONG g_eventHooksFirstTry;
  * behaviour (the co-op diagnostics, behaviours.c); the damage consumer also for damage before it applies. */
 static int EventHookWanted(const EventHook* h)
 {
-    return AnyListener(h->kind) || (h->kind == HF_ON_SPAWN && BehaviourSpawnsWatched()) || (h->kind == HF_ON_DAMAGE && (AnyListener(HF_ON_DAMAGE_PRE) || SeWantsDamage() || AiWantsDamage()));
+    return AnyListener(h->kind) || (h->kind == HF_ON_SPAWN && BehaviourSpawnsWatched()) || (h->kind == HF_ON_DAMAGE && (AnyListener(HF_ON_DAMAGE_PRE) || SeWantsDamage() || AiWantsDamage())) ||
+        (h->kind == HF_ON_EXPLOSION && AiWantsDamage());
 }
 
 /* A source's hook, when it is wanted and its bytes read as reviewed (60 s for them to decode). */

@@ -34,7 +34,7 @@ typedef struct AiUnit
 {
     HfMod* mod;
     uint32_t entity, rider, rule; /* rule: its ai_obey row + 1, 0 none */
-    uint32_t order, target, status, issued, tries, detour, moved, spared;
+    uint32_t order, target, status, issued, tries, detour, moved, spared, selfKills;
     float point[3], goal[3], sent[3], detourAt[3], lastPos[3], headwayFrom[3];
     float follow, hold;
     float trail[AI_TRAIL][3];
@@ -569,6 +569,60 @@ static AiUnit* AiDealer(uint32_t network)
     return NULL;
 }
 
+/* The game removes a stranded obeying unit with a 10000 explosion of its own (kind 4, the unit the dealer). Until what
+ * asks for it is known, the hit is spared and logged; the explosion log below names the code that asked. */
+static void AiSelfKill(AiUnit* u, uint8_t* event, int32_t amount)
+{
+    const int32_t none = 0;
+    memcpy(event + 0x2C, &none, 4);
+    float pos[3] = {0, 0, 0};
+    AiWhere(u->entity, pos);
+    if (u->selfKills++ < 8)
+        AiLog(u, "the game dealt it %d of its own (kind 4) at %.1f %.1f %.1f, %s for %.1f s: spared", amount, (double)pos[0], (double)pos[1],
+            (double)pos[2], AiStatusName(u->status), u->status == HF_AI_UNREACHABLE ? AI_RETRY_S - u->retryIn : u->sinceHeadway);
+}
+
+/* 1 when the entity is an obeying unit; never waits for the game thread's update. */
+static int AiObeying(uint32_t a, uint32_t b)
+{
+    if (!TryAcquireSRWLockShared(&g_aiLock)) return 0;
+    int ours = 0;
+    for (int i = 0; i < AI_UNITS && !ours; i++)
+        ours = g_aiUnits[i].rule && g_aiUnits[i].entity && (g_aiUnits[i].entity == a || g_aiUnits[i].entity == b);
+    ReleaseSRWLockShared(&g_aiLock);
+    return ours;
+}
+
+/* The caller's return addresses, as game.dll offsets. */
+static void AiCallers(char* text, size_t size)
+{
+    void* frames[12];
+    USHORT n = RtlCaptureStackBackTrace(0, 12, frames, NULL);
+    uintptr_t game = (uintptr_t)GetModuleHandleA("game.dll");
+    text[0] = 0;
+    for (USHORT i = 0; i < n; i++)
+    {
+        uintptr_t at = (uintptr_t)frames[i];
+        size_t used = strlen(text);
+        int inGame = game && at > game && at - game < 0x5000000u;
+        snprintf(text + used, size - used, inGame ? " game+0x%llx" : " ?", (unsigned long long)(at - game));
+    }
+}
+
+/* Which game code asks for an explosion of an obeying unit. */
+static void AiExplosion(uint32_t type, uint32_t source, uint32_t owner, const float* position)
+{
+    static volatile LONG logged;
+    if (g_aiRuleCount == 0 || (source == 0 && owner == 0) || logged >= 16 || !AiObeying(source, owner)) return;
+    if (InterlockedIncrement(&logged) > 16) return;
+    char text[300];
+    AiCallers(text, sizeof text);
+    float at[3] = {0, 0, 0};
+    if (position != NULL) memcpy(at, position, 12);
+    Note("ai: explosion type %u from entity %u (owner %u) at %.1f %.1f %.1f, asked by%s", type, source, owner, (double)at[0],
+        (double)at[1], (double)at[2], text);
+}
+
 /* An obeying unit's melee ability (damage kind 6: the Scout Strider's kick) on its own side deals nothing. The brain
  * swings it at whatever stands in reach, whatever its side, so a unit that follows at a few metres kicked the Helldiver
  * it followed with no enemy near. Its gunfire and explosions still hit friends in the way, as a sentry's do. */
@@ -578,10 +632,12 @@ static void AiDamage(uint8_t* event)
     uint32_t target, kind, dealer, owner;
     int32_t amount;
     memcpy(&kind, event + 4, 4);
-    if (kind != 6) return;
+    if (kind != 6 && kind != 4) return;
     memcpy(&target, event, 4); memcpy(&dealer, event + 0x10, 4); memcpy(&owner, event + 0x14, 4); memcpy(&amount, event + 0x2C, 4);
     AiUnit* u = AiDealer(dealer);
     if (u == NULL && owner != dealer) u = AiDealer(owner);
+    if (u != NULL && kind == 4 && amount >= 10000 && target == u->entity) { AiSelfKill(u, event, amount); return; }
+    if (kind != 6) return;
     if (u == NULL || amount == 0 || target == u->entity || target == u->rider) return;
     uint32_t mine = ApiFactionOf(&g_aiMod, u->entity), theirs = ApiFactionOf(&g_aiMod, target);
     if (!(mine & theirs)) return;
