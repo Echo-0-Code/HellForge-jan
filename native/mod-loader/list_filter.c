@@ -22,6 +22,7 @@
 #define LF_PICKER_STATE 0x2818u   /* the picker's screen: 10 while the picker is up */
 #define LF_POS 0x14476A0u        /* (widget, packed x, y): a widget's position, +y up */
 #define LF_SIZE 0x1447160u       /* (widget, packed w, h): a widget's size */
+#define LF_OPACITY 0x44u        /* a widget's opacity (0x1448AD0 sets it; 0 hidden) */
 #define LF_SCROLL_MAX 0xF90u    /* the grid's scroll range in units: the scroll offset (+0x93030) stays in 0 .. it */
 #define LF_BAND_MAX 200.0f       /* units: the list keeps at least two rows of cards below the band */
 #define LF_ROWS_MAX 1024u
@@ -257,6 +258,14 @@ static void LfBandApply(uint32_t list, uintptr_t root)
     at->headY = h[1], at->x = h[0], at->w = h[2], at->top = -h[1] - h[3] - at->applied;
 }
 
+/* Whether a grid is on screen: its screen keeps it, and its state, while it is hidden (the loadout card under the
+ * picker), and hides it by its root widget's opacity, which the grid starts at 0. */
+static int LfShown(uintptr_t root)
+{
+    float opacity = 0;
+    return root && !SafeRead(root + LF_OPACITY, &opacity, 4) && opacity > 0.01f;
+}
+
 /* ---- the stratagem picker ---- */
 
 static int LfHiddenType(uint32_t type) { return type < LF_TYPES_MAX && (g_lfHidden[type / 8] >> (type % 8) & 1); }
@@ -387,7 +396,11 @@ static void LfTick(HfMod* mod, float dt, void* user)
     if (!g_fired[HF_EVENT_GAME_LOADED] || ((g_lfArmory == 0 || g_lfPicker == 0) && !LfInstall())) return;
     /* open follows the screen each update both ways: a tab change can pass a frame or two without a list */
     const uintptr_t screen = LfArmoryScreen();
-    const int armory = g_lfArmory == 1 && LfArmoryTab(screen) >= 0, picker = g_lfPicker == 1 && LfPickerOpen();
+    const int armoryPage = g_lfArmory == 1 && LfArmoryTab(screen) >= 0, pickerPage = g_lfPicker == 1 && LfPickerOpen();
+    const int armory = armoryPage && LfShown(screen + LF_ARMORY_GRID), picker = pickerPage && LfShown((uintptr_t)g_lfPickerArgs[0]);
+    static int seen = -1;
+    const int now = armoryPage | armory << 1 | pickerPage << 2 | picker << 3;
+    if (now != seen) Note("lists: Armory page %d shown %d, picker page %d shown %d", armoryPage, armory, pickerPage, picker), seen = now;
     g_lfState[0].open = (uint32_t)armory, g_lfState[1].open = (uint32_t)picker;
     LfRebuildNow();
     if (armory) LfBandApply(HF_LIST_ARMORY_WEAPONS, screen + LF_ARMORY_GRID);
