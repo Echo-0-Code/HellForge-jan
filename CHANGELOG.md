@@ -12,6 +12,9 @@ On `dev`, since 0.4.0-beta.
 
 ### Added
 
+- **Item icons.** `EncyclopediaEntry.icon` sets the grey HUD silhouette of a weapon, tool or backpack, and a data
+  spec `icon` may now be wide (power-of-two sides, 32 to 1024). The loader takes only icons a data spec builds or the
+  game has, since a missing one crashes the game ([Item icons](docs/modding/icons.md)).
 - **List bands (SDK 40).** `set_list_band` moves the heading and rows of the Armory's weapon grids or the stratagem
   picker down, so a mod can draw a search box above them; `list_state` gives its place ([Item lists](docs/modding/lists.md)).
 - **Paints on throwable copies (SDK 40).** `HfWeapon.paints = 1` gives a grenade copy the game's paints, the patterns

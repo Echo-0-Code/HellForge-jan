@@ -119,7 +119,7 @@ public sealed class SdkMappings
     public IReadOnlyList<SdkGlobal> Globals { get; init; } = [];
 
     public static readonly string[] AppliesValues = ["now", "respawn", "mission"];
-    public static readonly string[] RefValues = ["projectile", "explosion", "status", "damage", "mount", "pickup"];
+    public static readonly string[] RefValues = ["projectile", "explosion", "status", "damage", "mount", "pickup", "icon"];
 
     // The field a stats-schema field is (by component or table kind, offset and storage): itself, or one element of an
     // array field of that type. Null if the mappings do not have it.
@@ -375,9 +375,9 @@ public sealed class SdkMappings
             Ref = v.TryGetProperty("ref", out _) ? Text(v, "ref") : null
         };
         // an array of u32 references is checked element by element (a magazine's projectile pattern)
-        if (field.Ref != null && (!RefValues.Contains(field.Ref) || type != (field.Ref is "mount" or "pickup" ? "u64" : "u32") ||
-                                  (count != 1 && field.Ref is "mount" or "pickup")))
-            throw new InvalidDataException($"{at}: ref must be projectile, explosion, status or damage on u32s, or mount on a single u64.");
+        if (field.Ref != null && (!RefValues.Contains(field.Ref) || type != (field.Ref is "mount" or "pickup" or "icon" ? "u64" : "u32") ||
+                                  (count != 1 && field.Ref is "mount" or "pickup" or "icon")))
+            throw new InvalidDataException($"{at}: ref must be projectile, explosion, status or damage on u32s, or mount, pickup or icon on a single u64.");
         if (count < 1 || field.Offset < 0 || field.Offset + field.Size > stride || field.Offset % Math.Min(TypeSize(type), 4) != 0)
             throw new InvalidDataException($"{at}: outside the {stride}-byte record or misaligned.");
         return field;

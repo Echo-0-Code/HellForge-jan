@@ -10,7 +10,6 @@ namespace HellForge.Core.GameData;
 public static class IconImage
 {
     public const int Size = 256;
-    const int Mips = 9;
     const int Bc1Unorm = 71;
     const int Bc3Unorm = 77; // the UI atlas pages' format (the difficulty icons' page, 0x610644579AE05635)
     // The first word of the vanilla icon textures' header; the rest is the "no streamed mips" form.
@@ -26,17 +25,27 @@ public static class IconImage
     public static Dictionary<ResourceKey, ResourceParts> Family(byte[] png, ulong name, string prepare = "raw")
     {
         var (width, height, rgba) = ReadPng(png);
-        if (width != Size || height != Size) throw new InvalidDataException($"icon images must be {Size} x {Size} pixels (this one is {width} x {height}).");
+        if (!IconSide(width) || !IconSide(height))
+            throw new InvalidDataException($"icon images are {Size} x {Size} pixels, or for an item's silhouette two powers of two from {MinSide} to {MaxSide}, such as 512 x 128 (this one is {width} x {height}).");
         if (prepare == "auto" && !IsIconMasks(rgba)) rgba = IconMasks(rgba);
         else if (prepare is not ("auto" or "raw" or "image")) throw new InvalidDataException($"an icon is prepared auto, raw or image, not {prepare}.");
-        var texture = prepare == "image" ? new ResourceParts(TextureMain(Size, Size, Mips, Bc3Unorm), Bc3Mips(Size, Size, rgba), [])
-            : new ResourceParts(TextureMain(Size, Size, Mips), Bc1Mips(Size, Size, rgba), []);
+        var mips = MipCount(width, height);
+        var texture = prepare == "image" ? new ResourceParts(TextureMain(width, height, mips, Bc3Unorm), Bc3Mips(width, height, rgba), [])
+            : new ResourceParts(TextureMain(width, height, mips), Bc1Mips(width, height, rgba), []);
         return new()
         {
             [new(ResourceTypes.Texture, name)] = texture,
             [new(ResourceTypes.Material, name)] = new(IconMaterial(name), [], []),
         };
     }
+
+    // Item silhouettes are wide (the game's are about 2 to 5 times as wide as high), so an icon may be any power-of-two
+    // rectangle in this range; a stratagem's is still 256 x 256.
+    public const int MinSide = 32, MaxSide = 1024;
+    static bool IconSide(int side) => side is >= MinSide and <= MaxSide && (side & (side - 1)) == 0;
+
+    // The full chain down to 1 x 1, as Bc1Mips and Bc3Mips write it (9 for 256 x 256).
+    public static int MipCount(int width, int height) => 1 + (int)Math.Log2(Math.Max(width, height));
 
     // The texture's main part: the icon texture header, then a DDS header with the DX10 extension.
     public static byte[] TextureMain(int width, int height, int mips, int dxgi = Bc1Unorm)

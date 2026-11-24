@@ -169,7 +169,8 @@ copy. Materials are rebuilt in the game copy's shader layout, as from Steam.
 ### icon
 
 `icon` turns a 256 x 256 PNG in the mod folder into an icon named `name`, with the material that draws it (the game
-crashes on an icon without one). `"prepare": "auto"` turns a red-and-white picture into the stratagem icon format: red
+crashes on an icon without one). An item's HUD silhouette ([item icons](icons.md)) may be any power-of-two size from
+32 to 1024 a side, such as 512 x 128. `"prepare": "auto"` turns a red-and-white picture into the stratagem icon format: red
 takes the category's colour and green becomes white. The default, `"raw"`, uses the pixels as they are, and `"image"`
 keeps the picture's colours and transparency for widgets that draw it as it is (a difficulty icon).
 

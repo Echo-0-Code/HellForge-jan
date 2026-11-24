@@ -5273,6 +5273,17 @@ HF_ASSERT_OFFSET(HfTargeting, aim_damping, 8);
 HF_ASSERT_OFFSET(HfTargeting, aim_spring, 12);
 #define HF_TYPE_Targeting_aim_spring HF_TYPE_F32
 
+/* EncyclopediaEntryComponentData (component 76, 56-byte records): what the game calls an entity and the flat icon (silhouette) it shows for it */
+#define HfEncyclopediaEntry_INFO "EncyclopediaEntryComponentData", 25480438u
+typedef struct HfEncyclopediaEntry
+{
+    uint8_t _unknown_00[48];
+    uint64_t icon;                               /* +0x30 its icon: a GUI material resource (name hash) the HUD draws as the item's silhouette. A mod sets an icon its data spec builds ("icon"), or another entity's; anything else is refused, since a missing icon crashes the game [mission?] */
+} HfEncyclopediaEntry;
+HF_ASSERT_SIZE(HfEncyclopediaEntry, 56);
+HF_ASSERT_OFFSET(HfEncyclopediaEntry, icon, 48);
+#define HF_TYPE_EncyclopediaEntry_icon HF_TYPE_U64
+
 #pragma pack(pop)
 
 #endif

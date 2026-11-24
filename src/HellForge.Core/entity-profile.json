@@ -136,6 +136,16 @@
    "stride": 152,
    "type": 1433400971
   },
+  "EncyclopediaEntryComponentData": {
+   "offset": 800040,
+   "header": "2ffe408a4c444c44010000002ffe408a98e400000100000000000000",
+   "index": 76,
+   "indices": 1330,
+   "records": 665,
+   "recordOffset": 21280,
+   "stride": 56,
+   "type": 2319515183
+  },
   "ExplosiveComponentData": {
    "offset": 27298048,
    "header": "8c9bcff54c444c44010000008c9bcff5206e00000100000000000000",

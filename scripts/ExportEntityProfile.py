@@ -52,6 +52,9 @@ components = {name: schema['components'][name] for name in keep if name in schem
 # header, the component index before it, index rows, records, stride) with HD2Runtime-dev6's scan.tables; the method
 # reproduces DepositComponentData's schema entry exactly.
 EXTRA = {
+    'EncyclopediaEntryComponentData': {'offset': 800040, 'header': '2ffe408a4c444c44010000002ffe408a98e400000100000000000000',
+                                       'index': 76, 'indices': 1330, 'records': 665, 'record_offset': 21280, 'stride': 56,
+                                       'type': 2319515183},
     'BehaviorComponentData': {'offset': 29820096, 'header': '3d809bba4c444c44010000003d809bbaa0ac00000100000000000000', 'index': 284,
                               'indices': 2008, 'records': 1005, 'record_offset': 32128, 'stride': 12, 'type': 3130753085},
     'TargetingComponentData': {'offset': 26108376, 'header': 'd268092c4c444c4401000000d268092ca06e00000100000000000000', 'index': 234,
