@@ -44,6 +44,18 @@ struct HfMoverState;
 /* Called on the host's game thread each update, before HellForge moves the unit. Don't call mover_* from it. */
 typedef void (*HfMoverDriveFn)(HfMod* mod, uint32_t entity, const struct HfMoverState* state, float dt, HfMoverPush* push, void* user);
 
+/* SDK 37: sounds a mover posts on its unit as its state changes: Wwise event ids (hf_wwise_id), 0 none. A loop the
+ * moving or idle event starts is the mod's bank's to end, on the next start or stop event. */
+typedef struct HfMoverSounds
+{
+    uint32_t idle;        /* it comes to rest (with stop), and at its start: an idle loop */
+    uint32_t moving;      /* it sets off (with start): a moving loop */
+    uint32_t start;       /* it sets off */
+    uint32_t stop;        /* it comes to rest */
+    uint32_t boost;       /* a boost begins */
+    uint32_t blocked;     /* a step, wall, slope or water stops it */
+} HfMoverSounds;
+
 /* One entity's way of moving (add_mover). Zero-initialize it and set size and entity; zero fields take the defaults,
  * which hang on the mode (docs/modding/movers.md). A mod built against SDK 35 passes the shorter SDK 35 size. */
 typedef struct HfMoverDef
@@ -75,9 +87,21 @@ typedef struct HfMoverDef
     float hover_hz;       /* hover: how stiffly it holds its height, Hz (default 1.2) */
     float hover_damping;  /* hover: share of critical damping on its height and tilt (default 0.7) */
     float side_drag;      /* hover: how fast a sideways slide dies, 1/s (default 0.5: it drifts) */
+    /* SDK 37 */
+    float max_slope;      /* the steepest incline it climbs, degrees (default: rising step_up in 1 m, 27 for 0.5 m steps) */
+    float tilt_limit;     /* the most it tilts, degrees: align_to_ground follows slopes to this, a hover is righted past it (default 30) */
+    uint32_t align_to_ground; /* 1: it pitches and rolls with the ground under it; 0 (default): it stays upright, a hover level */
+    float fly_height_min; /* hover: the lowest height lift takes it to, metres (default hover_height) */
+    float fly_height_max; /* hover: the highest, at most 25 (default hover_height: lift does nothing) */
+    float climb_rate;     /* hover: metres a second at full lift (default 2) */
+    float boost_speed;    /* top speed while boosting, m/s (default 0: no boost) */
+    float boost_time;     /* seconds a full boost lasts; it refills in twice that (default 3) */
+    float strafe_speed;   /* walk or hover: top speed sideways at full strafe, m/s (default reverse_speed, hover 5) */
+    HfMoverSounds sounds;
 } HfMoverDef;
 
 #define HF_MOVER_DEF_SIZE_35 ((uint32_t)offsetof(HfMoverDef, brake))
+#define HF_MOVER_DEF_SIZE_36 ((uint32_t)offsetof(HfMoverDef, max_slope))
 
 /* mover_input: what a driver asks of it now. It holds for half a second; call it every update while driving. */
 typedef struct HfMoverInput
@@ -85,7 +109,13 @@ typedef struct HfMoverInput
     uint32_t size;        /* sizeof(HfMoverInput) */
     float throttle;       /* -1 full reverse .. 1 full ahead */
     float steer;          /* -1 full right .. 1 full left */
+    /* SDK 37 (an SDK 35 size drives with the two above) */
+    float strafe;         /* -1 full right .. 1 full left: a walker or hover slides sideways at strafe_speed */
+    float lift;           /* -1 down .. 1 up: a hover's height moves at climb_rate between fly_height_min and _max */
+    float boost;          /* 1 boosts, while its boost lasts (boost_speed); 0 not */
 } HfMoverInput;
+
+#define HF_MOVER_INPUT_SIZE_35 ((uint32_t)offsetof(HfMoverInput, strafe))
 
 /* HfMoverState.status (mover_state's answer) */
 #define HF_MOVER_NONE 0u     /* not a mover's unit, or gone */
@@ -115,7 +145,14 @@ typedef struct HfMoverState
     float water_depth;    /* water over the ground where it is, metres (0: dry) */
     float grade;          /* the slope it climbs, rise per metre along its heading (negative downhill) */
     uint32_t driven;      /* HF_DRIVETRAIN_FWD / _RWD bits of the axles pushing now, for wheel animation */
+    /* SDK 37 */
+    float pitch, roll;    /* radians, nose up and right side down (align_to_ground, or a hover's body) */
+    float boost_left;     /* seconds of boost left */
+    uint32_t boosting;    /* 1 while it boosts */
+    float strafe, lift;   /* the inputs it moves by now */
 } HfMoverState;
+
+#define HF_MOVER_STATE_SIZE_36 ((uint32_t)offsetof(HfMoverState, pitch))
 
 #define HF_MOVER_STATE_SIZE_35 ((uint32_t)offsetof(HfMoverState, height))
 

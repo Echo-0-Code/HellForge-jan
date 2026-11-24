@@ -3,7 +3,8 @@
 <!-- diataxis: how-to -->
 
 SDK 35 lets HellForge move a unit itself: a sentry that walks, a cart that drives, any object your mod spawns. SDK 36
-adds hover vehicles, brakes, water and drivetrains. You describe how it moves once with `add_mover`. A driver then
+adds hover vehicles, brakes, water and drivetrains. SDK 37 adds slopes, tilting, flying heights, boost, strafing and
+sounds. You describe how it moves once with `add_mover`. A driver then
 gives it a throttle and a steer: your code with `mover_input`, the custom AI with `ai_drive`, or a hover's seated
 player. The types are in `hellforge_move.h`, which `hellforge_mod.h` includes.
 
@@ -14,6 +15,7 @@ player. The types are in `hellforge_move.h`, which `hellforge_mod.h` includes.
 - [Water](#water)
 - [Drivetrains and your own drive code](#drivetrains-and-your-own-drive-code)
 - [Hover vehicles](#hover-vehicles)
+- [Slopes, tilt, boost and sounds](#slopes-tilt-boost-and-sounds)
 - [Drive it from code](#drive-it-from-code)
 - [Let the custom AI drive it](#let-the-custom-ai-drive-it)
 - [Let it fight](#let-it-fight)
@@ -22,11 +24,12 @@ player. The types are in `hellforge_move.h`, which `hellforge_mod.h` includes.
 
 ## Before you call
 
-- Check `hf->size >= offsetof(HfApi, ai_drive) + sizeof(void*)` and set `"sdk": 36` in `hellforge-mod.json`.
+- Check `hf->size >= offsetof(HfApi, ai_drive) + sizeof(void*)` and set `"sdk": 37` in `hellforge-mod.json`.
 - Call `add_mover` and `ai_drive` from `hellforge_mod_init`.
 - Walkers and drivers run on the host. Their moves reach the other players as their root's moves do.
 - The game's own physics no longer move a walker or driver. Leave out any movement code of your own for it.
-- A mod built against SDK 35 keeps working: its shorter `HfMoverDef` gets SDK 35's behaviour, water ignored.
+- A mod built against SDK 35 or 36 keeps working: its shorter `HfMoverDef` keeps that SDK's behaviour (SDK 35 ignores
+  water; neither has a slope limit).
 
 ## Describe how it moves
 
@@ -56,6 +59,8 @@ api->add_mover(mod, &walker);
 | `start_delay` | 0 s | Time after its spawn before HellForge moves it, such as a hellpod's landing |
 | `water`, `wade_depth` | wade, 0.8 m (drive 0.5) | [Water](#water) |
 | `drivetrain`, `grip`, `drive` | none set | [Drivetrains](#drivetrains-and-your-own-drive-code) |
+| `max_slope`, `tilt_limit`, `align_to_ground` | from `step_up`, 30°, off | [Slopes, tilt, boost and sounds](#slopes-tilt-boost-and-sounds) |
+| `boost_speed`, `boost_time`, `strafe_speed`, `sounds` | none, 3 s, `reverse_speed`, none | The same section |
 
 Fly mode comes in a later SDK.
 
@@ -125,6 +130,9 @@ replicates and seats players as before. HellForge pushes its chassis on the mach
 | `hover_damping` | 0.7 | Its height and tilt springs' share of critical damping |
 | `side_drag` | 0.5 /s | How fast a sideways slide dies |
 | `drivetrain` | 0 | 0, or `HF_DRIVETRAIN_NONE` for your own `drive` push |
+| `fly_height_min`, `fly_height_max` | `hover_height` | The heights the `lift` input moves it between, up to 25 m |
+| `climb_rate` | 2 m/s | How fast full `lift` raises or lowers it |
+| `strafe_speed` | 5 m/s | Its sideways top speed at full `strafe` |
 
 Make the physics data match:
 
@@ -135,6 +143,27 @@ Make the physics data match:
 
 The seated driver's W, S, A and D drive it, and the lever's reverse and neutral count. `mover_input` wins over the seat,
 and the seat over `ai_drive` while its driver gave input in the last 2 s. `mover_state` gives `height` over the surface.
+
+## Slopes, tilt, boost and sounds
+
+- `max_slope` is the steepest incline a walker or driver climbs. A step is a sudden rise and a slope a long one, so the
+  slope is measured over several steps. The default rises `step_up` in 1 m: 27° for 0.5 m steps.
+- `align_to_ground` 1 pitches and rolls a walker or driver with the ground under it, up to `tilt_limit`. A hover
+  rights itself to the ground's slope instead of level, and harder once it tilts past `tilt_limit`.
+- `boost_speed` is its top speed while the `boost` input holds. A full boost lasts `boost_time` and refills in twice
+  that. A hover's fans push harder to reach it.
+- `strafe_speed` is a walker's or hover's sideways top speed at full `strafe`. A driver doesn't strafe.
+
+`sounds` holds one Wwise event per change of state, posted on its unit (`hf_wwise_id`). 0 is none.
+
+| Slot | Posted when |
+|---|---|
+| `start`, then `moving` | It sets off. `moving` can start a loop |
+| `stop`, then `idle` | It comes to rest. `idle` also plays when it starts |
+| `boost` | A boost begins |
+| `blocked` | A step, wall, slope or water stops it |
+
+A loop that `moving` or `idle` starts is your sound bank's to end, on the next `start` or `stop` event.
 
 ## Drive it from code
 
@@ -147,6 +176,14 @@ api->mover_input(mod, entity, &in);
 
 `throttle` runs from -1 (full reverse) to 1 (full ahead). `steer` runs from -1 (full right) to 1 (full left). A mod's
 input wins over `ai_drive` for as long as it holds, so a mod can make its own fight moves.
+
+SDK 37 adds three inputs. Only `mover_input` gives them; a seated player can't yet.
+
+| Input | Range | What it does |
+|---|---|---|
+| `strafe` | -1 right .. 1 left | Slides a walker or hover sideways |
+| `lift` | -1 down .. 1 up | Moves a hover's height at `climb_rate` |
+| `boost` | 0 or 1 | Boosts while its boost lasts |
 
 ## Let the custom AI drive it
 
@@ -208,6 +245,7 @@ or within 30 m when that is 0. Once the fight is over it goes back to its order.
 | `speed`, `turning` | Metres a second along its heading, and radians a second to the left |
 | `throttle`, `steer` | The inputs it moves by now |
 | `height`, `water_depth`, `grade`, `driven` | SDK 36: a hover's height, the water there, the slope ahead, the axles pushing |
+| `pitch`, `roll`, `boost_left`, `boosting`, `strafe`, `lift` | SDK 37: its tilt in radians, its boost, the two new inputs |
 
 ## What HellForge does each update
 

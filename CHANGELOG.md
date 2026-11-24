@@ -18,6 +18,9 @@ On `dev`, since 0.4.0-beta.
 - **Fighting movers (SDK 37).** `ai_drive` takes an engage range, a distance to keep, a leash and a reaction time. It
   retreats below a health share, running or backing off while firing, and takes whose orders and a spacing from other
   units ([Movers](docs/modding/movers.md#let-it-fight)).
+- **Mover slopes, tilt, flying heights, boost, strafe and sounds (SDK 37).** `add_mover` takes `max_slope`,
+  `tilt_limit`, `align_to_ground`, hover fly heights and `climb_rate`, `boost_speed`, `strafe_speed` and six sound
+  slots. `mover_input` gives `strafe`, `lift` and `boost` ([Movers](docs/modding/movers.md)).
 - **Hover movers, brakes, water and drivetrains (SDK 36).** `add_mover` takes `HF_MOVE_HOVER` for a physics vehicle
   that holds a height over ground and water, driven from its seat. Every mover gets `brake`, water wading or crossing,
   and drivetrains FWD, RWD, 4WD or a mod's own push ([Movers](docs/modding/movers.md)).
