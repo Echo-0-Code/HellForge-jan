@@ -174,6 +174,19 @@ static int MvWall(const MvUnit* m, const HfMoverDef* d, float ux, float uy, floa
     return MvRay(m, from, to, &z);
 }
 
+#define MV_INCLINE_M 0.5f /* metres: the ground's incline is read over this, whatever the step */
+
+/* The ground's rise per metre along (ux, uy): the ground under it against the ground MV_INCLINE_M ahead. Measured over
+ * the step itself, a step of millimetres (it starts from standing) turned a root a hair under the ray into a cliff. */
+static float MvIncline(MvUnit* m, const HfMoverDef* d, float ux, float uy, float len, float stepGround)
+{
+    float here, ahead;
+    if (!MvSurface(m, d, m->pos[0], m->pos[1], m->pos[2], &here)) here = m->pos[2];
+    if (len < MV_INCLINE_M && MvSurface(m, d, m->pos[0] + ux * MV_INCLINE_M, m->pos[1] + uy * MV_INCLINE_M, here, &ahead))
+        return (ahead - here) / MV_INCLINE_M;
+    return (stepGround - here) / fmaxf(len, MV_INCLINE_M);
+}
+
 /* One step of `step` metres (negative: backward) along its heading; a walker also tries 35, 70 and 105 degrees to either
  * side. 1 moved. */
 static int MvStep(MvUnit* m, const MvDef* def, float step)
@@ -189,10 +202,10 @@ static int MvStep(MvUnit* m, const MvDef* def, float step)
         float g;
         if (MvWall(m, d, ux, uy, len) || !MvSurface(m, d, m->pos[0] + ux * len, m->pos[1] + uy * len, m->pos[2], &g)) continue;
         /* a slope is a long incline, a step a sudden rise: the incline is smoothed over steps, so a step passes */
-        const float climb = 0.8f * m->climb + 0.2f * MvClamp((g - m->pos[2]) / len, -3, 3);
+        const float incline = MvClamp(MvIncline(m, d, ux, uy, len, g), -3, 3), climb = 0.8f * m->climb + 0.2f * incline;
         if (climb > def->slopeTan) continue;
         m->climb = climb;
-        m->grade = 0.8f * m->grade + 0.2f * MvClamp((g - m->pos[2]) / step, -3, 3);
+        m->grade = 0.8f * m->grade + 0.2f * incline * sign; /* along its heading: backing up a hill is downhill */
         m->pos[0] += ux * len; m->pos[1] += uy * len; m->pos[2] = g;
         return 1;
     }
@@ -205,7 +218,7 @@ static void MvSlide(MvUnit* m, const MvDef* def, float dist)
     const float ux = -cosf(m->yaw) * (dist < 0 ? -1.0f : 1.0f), uy = -sinf(m->yaw) * (dist < 0 ? -1.0f : 1.0f), len = fabsf(dist);
     float g;
     if (len < 0.0005f || MvWall(m, &def->def, ux, uy, len) || !MvSurface(m, &def->def, m->pos[0] + ux * len, m->pos[1] + uy * len, m->pos[2], &g) ||
-        (g - m->pos[2]) / len > def->slopeTan)
+        MvIncline(m, &def->def, ux, uy, len, g) > def->slopeTan)
     { m->side = 0; return; }
     m->pos[0] += ux * len; m->pos[1] += uy * len; m->pos[2] = g;
 }
