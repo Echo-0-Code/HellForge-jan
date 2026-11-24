@@ -45,7 +45,7 @@ api->add_mover(mod, &walker);
 
 | Field | Default | What it does |
 |---|---|---|
-| `mode` | `HF_MOVE_WALK` | `HF_MOVE_WALK` steps to either side of a block. `HF_MOVE_DRIVE` goes only where it faces. `HF_MOVE_HOVER`: [Hover vehicles](#hover-vehicles) |
+| `mode` | `HF_MOVE_WALK` | `HF_MOVE_WALK` steps to either side of a block. `HF_MOVE_DRIVE` (and its `_FWD`, `_RWD`, `_4WD`) goes only where it faces. `HF_MOVE_HOVER`: [Hover vehicles](#hover-vehicles) |
 | `speed` | 4 m/s, hover 22 | Top speed forward |
 | `reverse_speed` | half of `speed`, hover 0.7 × | Top speed backward |
 | `acceleration` | 8 m/s², hover 3 | How fast it speeds up |
@@ -58,7 +58,7 @@ api->add_mover(mod, &walker);
 | `reach` | 0.6 m | How far its body reaches ahead of its root: a wall this close blocks it |
 | `start_delay` | 0 s | Time after its spawn before HellForge moves it, such as a hellpod's landing |
 | `water`, `wade_depth` | wade, 0.8 m (drive 0.5) | [Water](#water) |
-| `drivetrain`, `grip`, `drive` | none set | [Drivetrains](#drivetrains-and-your-own-drive-code) |
+| `grip`, `drive` | 0.7, none | [Drivetrains](#drivetrains-and-your-own-drive-code) |
 | `max_slope`, `tilt_limit`, `align_to_ground` | from `step_up`, 30°, off | [Slopes, tilt, boost and sounds](#slopes-tilt-boost-and-sounds) |
 | `boost_speed`, `boost_time`, `strafe_speed`, `sounds` | none, 3 s, `reverse_speed`, none | The same section |
 
@@ -81,25 +81,23 @@ water. `mover_state` gives `water_depth`, the water over the ground where it is.
 
 ## Drivetrains and your own drive code
 
-`drivetrain` says which axles of an `HF_MOVE_DRIVE` mover push. With one set, its tyres' `grip` caps how hard it
-speeds up and brakes, and slopes pull on it.
+The drive modes say which axles push. With one of the three, its tyres' `grip` caps how hard it speeds up and
+brakes, and slopes pull on it.
 
-| `drivetrain` | Grip it pushes with |
+| `mode` | Grip it pushes with |
 |---|---|
-| 0 (default) | Grip never limits it, as in SDK 35 |
-| `HF_DRIVETRAIN_FWD` | The front axle's load. It falls uphill, as the load moves back |
-| `HF_DRIVETRAIN_RWD` | The rear axle's load. It grows uphill |
-| `HF_DRIVETRAIN_4WD` | All of its weight |
-| `HF_DRIVETRAIN_NONE` | HellForge pushes nothing: your `drive` function does |
+| `HF_MOVE_DRIVE` | Grip never limits it, as in SDK 35 |
+| `HF_MOVE_DRIVE_FWD` | The front axle's load. It falls uphill, as the load moves back |
+| `HF_MOVE_DRIVE_RWD` | The rear axle's load. It grows uphill |
+| `HF_MOVE_DRIVE_4WD` | All of its weight |
 
 - `grip` is tyre friction: 0.7 (the default) for dirt and gravel, about 0.9 for tarmac, 0.3 for mud.
-- Every wheel brakes, so braking is capped at `grip` × g whatever the drivetrain.
+- Every wheel brakes, so braking is capped at `grip` × g whatever the axles.
 - The load moves back by about a quarter of (a/g + the slope's sine), a car's ratio of centre of mass height to wheelbase.
 - A slope its grip can't climb holds it still. `mover_state` gives `grade` and the axles pushing now in `driven`.
 
-FWD, RWD and 4WD are for `HF_MOVE_DRIVE` only; a walker or hover refuses them. `HF_DRIVETRAIN_NONE` works in every mode.
-With `HF_DRIVETRAIN_NONE`, HellForge calls `drive` on the host's game thread every update, before it moves the unit.
-Fill `HfMoverPush` with `forward` and `side` in m/s² and `turn` in radians a second. HellForge keeps the ground, steps,
+In any mode, a `drive` function replaces HellForge's push from the inputs. HellForge calls it on the host's game thread
+every update, before it moves the unit. Fill `HfMoverPush` with `forward` and `side` in m/s² and `turn` in radians a second. HellForge keeps the ground, steps,
 water and top speeds. Don't call `mover_*` from it.
 
 ```c
@@ -130,7 +128,7 @@ replicates and seats players as before. HellForge pushes its chassis on the mach
 | `hover_hz` | 1.2 Hz | How stiffly it holds its height |
 | `hover_damping` | 0.7 | Its height and tilt springs' share of critical damping |
 | `side_drag` | 0.5 /s | How fast a sideways slide dies |
-| `drivetrain` | 0 | 0, or `HF_DRIVETRAIN_NONE` for your own `drive` push |
+| `drive` | none | Your own push: forward, sideways and turn |
 | `fly_height_min`, `fly_height_max` | `hover_height` | The heights the `lift` input moves it between, up to 25 m |
 | `climb_rate` | 2 m/s | How fast full `lift` raises or lowers it |
 | `strafe_speed` | 5 m/s | Its sideways top speed at full `strafe` |
@@ -250,7 +248,7 @@ or within 30 m when that is 0. Once the fight is over it goes back to its order.
 
 ## What HellForge does each update
 
-1. It sets the speed from the throttle, no faster than `acceleration` and `brake` allow, and the drivetrain's grip.
+1. It sets the speed from the throttle, no faster than `acceleration` and `brake` allow, and its tyres' grip.
 2. It turns by the steer: at `turn_rate`, or no tighter than `turn_radius` for `HF_TURN_VEHICLE`.
 3. It casts rays for the ground ahead. Helldivers, enemies and other units nearby are passed; rocks and walls are solid.
 4. A step within `step_up` and `step_down`, and water its `water` setting allows, is taken. A walker tries 35, 70 and 105 degrees to either side first.

@@ -16,7 +16,7 @@ typedef void (*MvPosFn)(uint32_t unit, int32_t node, const float* position);
 typedef void* (*MvLevelFn)(uint32_t unit);
 typedef float (*MvWaterFn)(void* state, const float* position, void* level);
 
-typedef struct MvDef { HfMod* mod; HfMoverDef def; int ai; float arrive, slopeTan; } MvDef;
+typedef struct MvDef { HfMod* mod; HfMoverDef def; int ai; float arrive, slopeTan; uint32_t axles, asked; } MvDef; /* axles: HF_AXLE_ bits; asked: its mode */
 typedef struct MvUnit
 {
     uint32_t entity, unit, def, started, status, driver;
@@ -28,7 +28,7 @@ typedef struct MvUnit
     uint32_t driven, boosting, wasMoving, wasBlocked, sounded;
     /* hover (movers_hover.c) */
     uint32_t body, engaged, told;
-    float lost, seatThrottle, seatSteer;
+    float lost, lastSurface, seatThrottle, seatSteer;
     double seatAge, sinceLog;
 } MvUnit;
 
@@ -327,7 +327,7 @@ static void MvAiInputs(MvUnit* m, const MvDef* def)
 
 static void MvSnapshot(const MvUnit* m, HfMoverState* s);
 
-/* HF_DRIVETRAIN_NONE: the mod's push for this update (zero without a drive function). */
+/* HfMoverDef.drive's push for this update. */
 static HfMoverPush MvPush(MvUnit* m, const MvDef* def, float dt)
 {
     HfMoverPush push = {sizeof push, 0, 0, 0};
@@ -350,24 +350,25 @@ static float MvRate(const HfMoverDef* d, float speed)
 
 /* A driven axle's share of the weight on a grade. The load moves to the rear by about (centre of mass height /
  * wheelbase) x (a/g + sin slope), 0.25 x for a car, so a rear drive climbs best and a front drive worst. */
-static float MvDrivenShare(uint32_t drivetrain, float grade, float accel)
+static float MvDrivenShare(uint32_t axles, float grade, float accel)
 {
     const float rear = MvClamp(0.5f + 0.25f * (accel / MV_G + grade / sqrtf(1 + grade * grade)), 0.1f, 0.9f);
-    return drivetrain == HF_DRIVETRAIN_4WD ? 1.0f : drivetrain == HF_DRIVETRAIN_RWD ? rear : 1.0f - rear;
+    return axles == (HF_AXLE_FRONT | HF_AXLE_REAR) ? 1.0f : axles == HF_AXLE_REAR ? rear : 1.0f - rear;
 }
 
 /* The speed after dt toward `want`: acceleration speeding up, brake slowing down or turning about. With a drivetrain,
  * the tyres' grip caps both, and a grade adds gravity's pull along it. */
-static float MvSpeedToward(const MvUnit* m, const HfMoverDef* d, float want, float top, float dt)
+static float MvSpeedToward(const MvUnit* m, const MvDef* def, float want, float top, float dt)
 {
+    const HfMoverDef* d = &def->def;
     const float v = m->speed;
     const int slowing = fabsf(want) < fabsf(v) || want * v < 0;
     float a = slowing ? d->brake : d->acceleration;
-    if (d->mode == HF_MOVE_DRIVE && d->drivetrain >= HF_DRIVETRAIN_FWD && d->drivetrain <= HF_DRIVETRAIN_4WD)
+    if (def->axles)
     {
         const float c = 1.0f / sqrtf(1 + m->grade * m->grade), dir = want > v ? 1.0f : -1.0f;
         const float grip = d->grip * MV_G * c; /* every wheel brakes; only the driven ones push */
-        a = slowing ? fminf(a, grip) : fminf(a, grip * MvDrivenShare(d->drivetrain, m->grade * dir, a * dir));
+        a = slowing ? fminf(a, grip) : fminf(a, grip * MvDrivenShare(def->axles, m->grade * dir, a * dir));
         a -= MV_G * m->grade * c * dir; /* uphill takes some of it, downhill adds */
         if (a < 0 && fabsf(v) < 0.05f) return 0; /* too steep for its grip: it holds where it is */
     }
@@ -408,7 +409,7 @@ static void MvDrive(MvUnit* m, const MvDef* def, float dt)
 {
     const HfMoverDef* d = &def->def;
     const float top = MvTop(m, d, dt);
-    if (d->drivetrain == HF_DRIVETRAIN_NONE)
+    if (d->drive != NULL)
     {
         const HfMoverPush push = MvPush(m, def, dt);
         const float rate = fabsf(MvRate(d, m->speed));
@@ -418,13 +419,13 @@ static void MvDrive(MvUnit* m, const MvDef* def, float dt)
     }
     else
     {
-        m->speed = MvSpeedToward(m, d, m->throttle >= 0 ? m->throttle * top : m->throttle * d->reverse_speed, top, dt);
+        m->speed = MvSpeedToward(m, def, m->throttle >= 0 ? m->throttle * top : m->throttle * d->reverse_speed, top, dt);
         m->turning = m->steer * MvRate(d, m->speed);
     }
-    m->driven = d->mode == HF_MOVE_DRIVE && d->drivetrain <= HF_DRIVETRAIN_4WD && fabsf(m->throttle) > 0.02f ? d->drivetrain : 0;
+    m->driven = fabsf(m->throttle) > 0.02f ? def->axles : 0;
     m->yaw = MvWrap(m->yaw + m->turning * dt);
     m->status = HF_MOVER_MOVING;
-    if (d->mode == HF_MOVE_WALK && d->drivetrain != HF_DRIVETRAIN_NONE) MvStrafe(m, def, dt);
+    if (d->mode == HF_MOVE_WALK && d->drive == NULL) MvStrafe(m, def, dt);
     else if (d->mode == HF_MOVE_WALK) MvSlide(m, def, m->side * dt);
     if (fabsf(m->speed * dt) >= 0.0005f && !MvStep(m, def, m->speed * dt)) MvBlocked(m, def);
     else m->blockedLogged = 0;
@@ -610,7 +611,7 @@ static void MvDefaults(HfMoverDef* d)
     MvOr(&d->reverse_speed, d->speed * (hover ? 0.7f : 0.5f));
     MvOr(&d->acceleration, hover ? 3.0f : 8.0f);
     MvOr(&d->brake, d->acceleration);
-    MvOr(&d->wade_depth, d->mode == HF_MOVE_DRIVE ? 0.5f : 0.8f); /* an SUV's wading depth; a person's mid-thigh */
+    MvOr(&d->wade_depth, d->mode == HF_MOVE_WALK || hover ? 0.8f : 0.5f); /* an SUV's wading depth; a person's mid-thigh */
     MvOr(&d->grip, 0.7f);
     MvOr(&d->hover_height, 1.5f);
     MvOr(&d->mass, 3000.0f);
@@ -639,9 +640,8 @@ static const char* MvRefusal(const HfMoverDef* in, HfMoverDef* d)
     if (in->size < HF_MOVER_DEF_SIZE_36) d->water = HF_WATER_IGNORE; /* an SDK 35 mover keeps walking along the bottom */
     if (in->size < sizeof *d) d->max_slope = 90.0f;                  /* and an older one climbs any slope its steps allow */
     MvDefaults(d);
-    if (d->mode > HF_MOVE_HOVER || d->turn > HF_TURN_VEHICLE || d->water > HF_WATER_IGNORE || d->drivetrain > HF_DRIVETRAIN_NONE)
-        return "mode WALK, DRIVE or HOVER, turn SPOT or VEHICLE, water WADE .. IGNORE, drivetrain 0 .. NONE";
-    if (d->mode != HF_MOVE_DRIVE && d->drivetrain && d->drivetrain != HF_DRIVETRAIN_NONE) return "only a driver has driven wheels: walk and hover take drivetrain 0 or NONE";
+    if (d->mode > HF_MOVE_DRIVE_4WD || d->turn > HF_TURN_VEHICLE || d->water > HF_WATER_IGNORE)
+        return "mode WALK, DRIVE (_FWD, _RWD, _4WD) or HOVER, turn SPOT or VEHICLE, water WADE .. IGNORE";
     if (!AiIn(d->brake, 0.1f, 200) || !AiIn(d->wade_depth, 0, 20) || !AiIn(d->grip, 0.05f, 2) || !AiIn(d->hover_height, 0.2f, 20) ||
         !AiIn(d->carried, 0, 1) || !AiIn(d->mass, 50, 200000) || !AiIn(d->hover_hz, 0.2f, 5) || !AiIn(d->hover_damping, 0.1f, 2) ||
         !AiIn(d->side_drag, 0, 20))
@@ -668,11 +668,14 @@ static int ApiAddMover(HfMod* mod, const HfMoverDef* in)
         if (g_mvDefs[i].def.entity == d.entity) { ApiLog(mod, "add_mover(%016llx): refused: it has a mover already", (unsigned long long)d.entity); return 1; }
     LONG at = InterlockedIncrement(&g_mvDefCount) - 1;
     if (at >= MV_DEFS) { InterlockedDecrement(&g_mvDefCount); ApiLog(mod, "add_mover: refused: %d movers already", MV_DEFS); return 1; }
-    g_mvDefs[at] = (MvDef){mod, d, 0, 3.0f, d.max_slope >= 89.9f ? 1e9f : tanf(d.max_slope * 0.0174533f)};
-    static const char* const kMode[] = {"", "walks", "drives", "hovers"}, * const kWater[] = {"", "wades", "stays dry", "floats", "ignores water"};
-    ApiLog(mod, "add_mover(%016llx): %s, %.1f m/s (%.1f back), %s at %.0f deg/s, brakes %.1f m/s2, %s (%.2f m), drivetrain %u", (unsigned long long)d.entity,
-        kMode[d.mode], (double)d.speed, (double)d.reverse_speed, d.turn == HF_TURN_VEHICLE ? "turns like a vehicle" : "turns on the spot",
-        (double)d.turn_rate, (double)d.brake, d.mode == HF_MOVE_HOVER ? "crosses water" : kWater[d.water], (double)d.wade_depth, d.drivetrain);
+    static const uint32_t kAxles[] = {0, 0, 0, 0, HF_AXLE_FRONT, HF_AXLE_REAR, HF_AXLE_FRONT | HF_AXLE_REAR};
+    const uint32_t asked = d.mode;
+    if (d.mode >= HF_MOVE_DRIVE_FWD) d.mode = HF_MOVE_DRIVE; /* one driver from here on, with its axles */
+    g_mvDefs[at] = (MvDef){mod, d, 0, 3.0f, d.max_slope >= 89.9f ? 1e9f : tanf(d.max_slope * 0.0174533f), kAxles[asked], asked};
+    static const char* const kMode[] = {"", "walks", "drives", "hovers", "drives (FWD)", "drives (RWD)", "drives (4WD)"}, * const kWater[] = {"", "wades", "stays dry", "floats", "ignores water"};
+    ApiLog(mod, "add_mover(%016llx): %s, %.1f m/s (%.1f back), %s at %.0f deg/s, brakes %.1f m/s2, %s (%.2f m)%s", (unsigned long long)d.entity,
+        kMode[asked], (double)d.speed, (double)d.reverse_speed, d.turn == HF_TURN_VEHICLE ? "turns like a vehicle" : "turns on the spot",
+        (double)d.turn_rate, (double)d.brake, d.mode == HF_MOVE_HOVER ? "crosses water" : kWater[d.water], (double)d.wade_depth, d.drive ? ", its own push" : "");
     if (d.mode == HF_MOVE_HOVER)
         ApiLog(mod, "add_mover(%016llx): hovers %.2f m up, %.0f kg (%.0f%% carried by its data), %.1f Hz", (unsigned long long)d.entity,
             (double)d.hover_height, (double)d.mass, (double)(d.carried * 100), (double)d.hover_hz);
