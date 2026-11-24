@@ -118,6 +118,16 @@ unit that makes no headway for 4 s goes through these steps:
 
 The unit's log lines name each detour and give its path agent's goal.
 
+## A unit that falls behind
+
+A following unit more than 16 m past its follow distance walks the speaker's trail instead of the straight line:
+
+- HellForge keeps a point every 4 m of the speaker's route, up to 24 points.
+- The unit walks to the trail point nearest to it, then on along the trail.
+- The speaker stood on each point, so a path to it exists where the straight line climbs a cliff.
+- On the trail, HellForge takes the path back from the unit's own brain after 0.5 s instead of 2 s. Its combat moves would
+  otherwise drag it further off.
+
 ## Co-op
 
 - Each machine orders only the units it simulates; for a mission's units that is the host.
