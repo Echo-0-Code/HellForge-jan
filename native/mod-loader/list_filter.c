@@ -61,7 +61,7 @@ static LfBand g_lfBands[16];
 static LfBandAt g_lfBandAt[LF_LISTS];
 static uint32_t g_lfRuleCount, g_lfFilterCount, g_lfBandCount;
 static int g_lfWidgets; /* the widget setters match: bands can be given */
-static HfListState g_lfState[LF_LISTS];
+static HfListState g_lfState[LF_LISTS] = {{sizeof(HfListState)}, {sizeof(HfListState)}}; /* open follows the screen */
 static volatile LONG g_lfRebuild[LF_LISTS], g_lfTicking;
 static int g_lfArmory, g_lfPicker; /* 0 not yet, 1 on, -1 off (modloader.log says why) */
 static ULONGLONG g_lfWaitSince;
@@ -372,13 +372,14 @@ static void LfTick(HfMod* mod, float dt, void* user)
 {
     (void)mod, (void)dt, (void)user;
     if (!g_fired[HF_EVENT_GAME_LOADED] || ((g_lfArmory == 0 || g_lfPicker == 0) && !LfInstall())) return;
-    if (g_lfState[0].open && LfArmoryTab(LfArmoryScreen()) < 0) g_lfState[0].open = 0;
-    if (g_lfState[1].open && !LfPickerOpen()) g_lfState[1].open = 0;
-    LfRebuildNow();
+    /* open follows the screen each update both ways: a tab change can pass a frame or two without a list */
     const uintptr_t screen = LfArmoryScreen();
-    if (g_lfArmory == 1 && LfArmoryTab(screen) >= 0) LfBandApply(HF_LIST_ARMORY_WEAPONS, screen + LF_ARMORY_GRID);
+    const int armory = g_lfArmory == 1 && LfArmoryTab(screen) >= 0, picker = g_lfPicker == 1 && LfPickerOpen();
+    g_lfState[0].open = (uint32_t)armory, g_lfState[1].open = (uint32_t)picker;
+    LfRebuildNow();
+    if (armory) LfBandApply(HF_LIST_ARMORY_WEAPONS, screen + LF_ARMORY_GRID);
     else g_lfBandAt[0].root = 0;
-    if (g_lfPicker == 1 && LfPickerOpen()) LfBandApply(HF_LIST_STRATAGEMS, (uintptr_t)g_lfPickerArgs[0]);
+    if (picker) LfBandApply(HF_LIST_STRATAGEMS, (uintptr_t)g_lfPickerArgs[0]);
     else g_lfBandAt[1].root = 0;
 }
 
