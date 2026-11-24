@@ -9,6 +9,7 @@
 #define IT_TEXT_CALL 0x14D9888u  /* call +0x1780410 (key): the tag's label, by its text key */
 #define IT_FLAG 0x11F2680u
 #define IT_TEXT 0x1780410u
+#define IT_TEXT_ID 0x17802E0u    /* (id): a text id's text, the game's wrapper of the engine's text call */
 #define IT_KEYS 0x32EE650u       /* 25 pointers: each tag's "nui_equipment_tag_*" key, the card's order */
 #define IT_TAG_IDS 0x32E5B30u    /* 25 u32: each tag's text id (the HF_ITEM_TRAIT_ ids) */
 #define IT_TAGS 25u
@@ -17,12 +18,13 @@
 static const uint8_t kItBuilderPin[] = {0x48, 0x89, 0x4C, 0x24, 0x08, 0x55, 0x56, 0x41, 0x54};
 static const uint8_t kItFlagCallPin[] = {0xE8, 0x7C, 0x8E, 0xD1, 0xFF, 0x84, 0xC0};
 static const uint8_t kItTextCallPin[] = {0xE8, 0x83, 0x6B, 0x2A, 0x00, 0x48, 0x8B, 0xD0};
+static const uint8_t kItTextIdPin[] = {0x40, 0x53, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x8B, 0x05};
 static const uint8_t kItKeysLeaPin[] = {0x4C, 0x8D, 0x05, 0x68, 0x4E, 0xE1, 0x01}; /* at +0x14D97E1: lea r8, [IT_KEYS] */
 
 typedef struct ItCard { HfMod* mod; uint32_t type, count, ids[HF_STRATAGEM_TRAITS_MAX]; } ItCard;
 typedef uint8_t (*ItFlagFn)(uint32_t type, uint32_t index);
 typedef const char* (*ItTextFn)(const char* key, void* b, void* c, void* d);
-typedef const char* (*ItTextIdFn)(uint32_t id, void* a, void* b, void* c);
+typedef const char* (*ItTextIdWrapFn)(uint32_t id);
 
 static SRWLOCK g_itLock = SRWLOCK_INIT;
 static ItCard* g_itCards;
@@ -36,15 +38,13 @@ static HfMod g_itMod;
 static _Thread_local const char* t_itKey;
 static _Thread_local uint32_t t_itId;
 
-/* A text id's text: a mod's, else the engine's; NULL when neither has one. */
+/* A text id's text, through the game's own id wrapper (the one its menus call). Only from the card's text call: at
+ * start-up the engine's text tables are not ready, and asking then crashed in the engine. NULL when it has none. */
 static const char* ItTextOfId(uint32_t id)
 {
     const char* own = ModTextOf(id);
     if (own != NULL) return own;
-    uintptr_t api = 0, table = 0, fn = 0;
-    if (g_itGame == 0 || SafeRead(g_itGame + REG_ENGINE_API, &api, 8) || api == 0 || SafeRead(api + 0x10, &table, 8) || table == 0 ||
-        SafeRead(table + 1000, &fn, 8) || fn == 0) return NULL;
-    const char* text = ((ItTextIdFn)fn)(id, NULL, NULL, NULL);
+    const char* text = ((ItTextIdWrapFn)(g_itGame + IT_TEXT_ID))(id);
     return text != NULL && text[0] ? text : NULL;
 }
 
@@ -114,7 +114,8 @@ static int ItRedirect(uint8_t* stub, uintptr_t site, void* to, int keep_r8)
 static const char* ItInstallAt(uintptr_t game)
 {
     if (!PinMatches(game + IT_BUILDER, kItBuilderPin, sizeof kItBuilderPin) || !PinMatches(game + 0x14D97E1u, kItKeysLeaPin, sizeof kItKeysLeaPin) ||
-        !PinMatches(game + IT_FLAG_CALL, kItFlagCallPin, sizeof kItFlagCallPin) || !PinMatches(game + IT_TEXT_CALL, kItTextCallPin, sizeof kItTextCallPin))
+        !PinMatches(game + IT_FLAG_CALL, kItFlagCallPin, sizeof kItFlagCallPin) || !PinMatches(game + IT_TEXT_CALL, kItTextCallPin, sizeof kItTextCallPin) ||
+        !PinMatches(game + IT_TEXT_ID, kItTextIdPin, sizeof kItTextIdPin))
         return "the stratagem card's code is not the reviewed one";
     uint8_t* stubs = AllocateNearGame(game, 0x1000);
     if (stubs == NULL) return "no memory within 2 GB of game.dll";
@@ -144,9 +145,10 @@ static void ItLogLines(void)
     for (uint32_t i = 0; i < g_itCardCount; i++)
         for (uint32_t k = 0; k < g_itCards[i].count; k++)
         {
-            const char* text = ItTagOf(g_itCards[i].ids[k]) >= 0 ? "(the game's tag)" : ItTextOfId(g_itCards[i].ids[k]);
-            ApiLog(g_itCards[i].mod, "stratagem traits: type %u line %u: %08x %s", g_itCards[i].type, k + 1, g_itCards[i].ids[k],
-                text ? text : "has no text yet (a mod text added later, or no such id)");
+            const uint32_t id = g_itCards[i].ids[k];
+            const char* own = ModTextOf(id);
+            ApiLog(g_itCards[i].mod, "stratagem traits: type %u line %u: %08x %s%s%s", g_itCards[i].type, k + 1, id,
+                own ? "the mod's text \"" : ItTagOf(id) >= 0 ? "the game's tag" : "a game label", own ? own : "", own ? "\"" : "");
         }
 }
 
