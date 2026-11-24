@@ -239,7 +239,10 @@ static void LfBandApply(uint32_t list, uintptr_t root)
     const uintptr_t column = LfChild(root, 1), heading = LfChild(root, 2), track = LfChild(column, 0);
     float h[4];
     if (!g_lfWidgets || !column || !heading || SafeRead(heading + 4, h, 16)) return;
-    if (root != at->root || (at->applied != 0 && h[1] != at->headY)) at->root = root, at->applied = 0; /* built again */
+    /* built again: the game put the heading back. The same heading still where the band put it (back from CUSTOMIZE,
+     * which hides the list without a build) keeps its band, or it would be given twice */
+    if (at->applied != 0 && (root != at->root || h[1] != at->headY)) at->applied = 0;
+    at->root = root;
     const float dy = LfBandTotal(list) - at->applied;
     if (dy != 0)
     {
@@ -388,9 +391,7 @@ static void LfTick(HfMod* mod, float dt, void* user)
     g_lfState[0].open = (uint32_t)armory, g_lfState[1].open = (uint32_t)picker;
     LfRebuildNow();
     if (armory) LfBandApply(HF_LIST_ARMORY_WEAPONS, screen + LF_ARMORY_GRID);
-    else g_lfBandAt[0].root = 0;
     if (picker) LfBandApply(HF_LIST_STRATAGEMS, (uintptr_t)g_lfPickerArgs[0]);
-    else g_lfBandAt[1].root = 0;
 }
 
 static void LfStartTick(void)
@@ -466,7 +467,7 @@ static void LfOwnBand(HfMod* mod, uint32_t list, HfListState* out)
     for (uint32_t i = 0; i < g_lfBandCount && own == 0; i++)
         if (g_lfBands[i].list == list) *(g_lfBands[i].mod == mod ? &own : &above) += g_lfBands[i].height;
     ReleaseSRWLockShared(&g_lfLock);
-    if (own <= 0 || !at->root || above >= at->applied) return;
+    if (own <= 0 || !out->open || above >= at->applied) return;
     out->band_x = at->x, out->band_y = at->top + above, out->band_w = at->w;
     out->band_h = own < at->applied - above ? own : at->applied - above;
 }
