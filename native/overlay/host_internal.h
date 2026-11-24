@@ -46,6 +46,7 @@ void AddClickBox(int id, float x0, float y0, float x1, float y1);
 void EndClickBoxes();
 int ClickOwner();
 void ReleaseCursorClip();
+void RestoreCursorClip(); /* the clip the game last asked for, back when a modal screen closes */
 /* After a capture change: the game's pointer while a screen has the mouse (NULL: ImGui draws its arrow). */
 void FollowCursor(bool captured);
 /* Whether ImGui draws its arrow this frame: the game hides its cursor in play, and the game's pointer is unknown. */

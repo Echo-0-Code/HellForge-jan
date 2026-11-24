@@ -226,7 +226,16 @@ LRESULT CALLBACK HostProc(HWND window, UINT message, WPARAM w, LPARAM l)
     return CallWindowProcW(g_gameProc, window, message, w, l);
 }
 
-BOOL WINAPI ClipCursorDetour(const RECT* rect) { return g_captured ? TRUE : g_clipCursor(rect); }
+/* The game clips the cursor once, when a menu or the window wants it, so the clip it asks for while a screen has the
+ * mouse is kept and given back when the screen closes, or the cursor would stay free until the game asks again. */
+RECT g_gameClip;
+volatile LONG g_gameClipped;
+BOOL WINAPI ClipCursorDetour(const RECT* rect)
+{
+    if (rect != NULL) g_gameClip = *rect;
+    InterlockedExchange(&g_gameClipped, rect != NULL);
+    return g_captured ? TRUE : g_clipCursor(rect);
+}
 BOOL WINAPI SetCursorPosDetour(int x, int y) { return g_captured ? TRUE : g_setCursorPos(x, y); }
 /* The game reads its mouse and keys in batches; while a screen has them the batch is drained and reported empty. */
 UINT WINAPI RawInputBufferDetour(PRAWINPUT data, PUINT size, UINT header)
@@ -334,6 +343,12 @@ void ResetInput()
 void ReleaseCursorClip()
 {
     if (g_clipCursor != NULL) g_clipCursor(NULL);
+}
+
+void RestoreCursorClip()
+{
+    /* not while another window is in front: the clip would hold the cursor there */
+    if (g_clipCursor != NULL && g_gameClipped && g_window != NULL && GetForegroundWindow() == g_window) g_clipCursor(&g_gameClip);
 }
 
 /* The client area in back-buffer pixels: the swap chain can be another size than the window. */
