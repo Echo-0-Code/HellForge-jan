@@ -2,12 +2,13 @@
 loader: per table, every constant in game.dll that encodes its slot count, with its reviewed instruction bytes, where its
 immediate is and how its new value follows from a new slot count; and the rules a new slot count must keep.
 
-Usage: py scripts/ExportTableGrowth.py <growth-sites.json> native/mod-loader/table_growth_sites.h
+Usage: py scripts/ExportTableGrowth.py <growth-sites.json> [more.json ...] native/mod-loader/table_growth_sites.h
 
 From the static passes in HD2Mods\\research\\table-growth (extract_priority.py, check_priority.py: build 25480438) and
 research\\unlimited-weapons\\walls (scripts\\extract_weapons.py, growth-sites-weapons.json: the tables weapon bases have
 rows in, the matcher's gaps closed). Only tables the pass found growable are written; a table it did not cover, or
-refused, stays at its size and its entities are refused as before. The loader checks every instruction's bytes before
+refused, stays at its size and its entities are refused as before. Later sources add tables:
+mappings/table-growth-vehicles.json holds table 80 (the vehicles). The loader checks every instruction's bytes before
 it writes anything, so a game build these were not made for grows nothing.
 """
 import json
@@ -21,10 +22,26 @@ FORMULAS = {
 }
 
 
-def main(source, out):
-    data = json.load(open(source, encoding='utf-8'))
-    if data.get('build') != '25480438':
-        raise SystemExit(f"{source} is for build {data.get('build')}")
+def load(sources):
+    data = None
+    for source in sources:
+        part = json.load(open(source, encoding='utf-8'))
+        if part.get('build') != '25480438':
+            raise SystemExit(f"{source} is for build {part.get('build')}")
+        if data is None:
+            data = part
+            continue
+        if part.get('game_dll_sha256') != data.get('game_dll_sha256'):
+            raise SystemExit(f"{source} is for another game.dll")
+        for component, t in part['tables'].items():
+            if data['tables'].get(component, {}).get('growable'):
+                raise SystemExit(f"{source}: table {component} is in an earlier source")
+            data['tables'][component] = t
+    return data
+
+
+def main(sources, out):
+    data = load(sources)
     constants, tables = [], []
     for component, t in sorted(data['tables'].items(), key=lambda kv: int(kv[0])):
         if not t['growable']:
@@ -68,6 +85,6 @@ def main(source, out):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 3:
+    if len(sys.argv) < 3:
         raise SystemExit(__doc__)
-    main(sys.argv[1], sys.argv[2])
+    main(sys.argv[1:-1], sys.argv[-1])

@@ -1,0 +1,176 @@
+{
+ "build": "25480438",
+ "game_dll_sha256": "2E2C3B7C2500646DADD5F2B4C6E0504DBB7E7896139F64CDDC0D1813C718F51E",
+ "method": "Ghidra pass on the decoded game.dll: every instruction reading table 80 (entity state + 0xF126F8; 3, all lookups) and every use of the /18 magic 0xE38E38E38E38E38F classified by the table it reads (25; the other 22 read tables 70, 75, 108, 219, 245, 267 and 300). No default-record offset (0x860) and no other 0x120/0xE8 use next to a table 80 load.",
+ "tables": {
+  "80": {
+   "name": "component 80 (vehicles)",
+   "growable": true,
+   "slots": 18,
+   "records": 9,
+   "stride": 232,
+   "rules": {
+    "max_slots": 127,
+    "slots_multiple_of": 1,
+    "pow2": false,
+    "magic64": true
+   },
+   "sites": [
+    {
+     "function": "0x4f8e40",
+     "what": "the lookup (entity -> record)",
+     "constants": [
+      {
+       "rva": "0x4f8e68",
+       "bytes": "48b88fe3388ee3388ee3",
+       "imm_offset": 2,
+       "imm_size": 8,
+       "formula": "magic64(S)"
+      },
+      {
+       "rva": "0x4f8e75",
+       "bytes": "48c1ea04",
+       "imm_offset": 3,
+       "imm_size": 1,
+       "formula": "shift(S)"
+      },
+      {
+       "rva": "0x4f8e79",
+       "bytes": "8d04d203c0",
+       "imm_offset": 0,
+       "imm_size": 5,
+       "formula": "imul8(S)"
+      },
+      {
+       "rva": "0x4f8ebb",
+       "bytes": "4183fa12",
+       "imm_offset": 3,
+       "imm_size": 1,
+       "formula": "S"
+      },
+      {
+       "rva": "0x4f8eb4",
+       "bytes": "83f811",
+       "imm_offset": 2,
+       "imm_size": 1,
+       "formula": "S-1"
+      },
+      {
+       "rva": "0x4f8ecd",
+       "bytes": "4d8d8b20010000",
+       "imm_offset": 3,
+       "imm_size": 4,
+       "formula": "16*S/m",
+       "divisor": 1
+      }
+     ]
+    },
+    {
+     "function": "0x6fef80",
+     "what": "the lookup inlined; reads the field 8 bytes into the record",
+     "constants": [
+      {
+       "rva": "0x700be7",
+       "bytes": "48b88fe3388ee3388ee3",
+       "imm_offset": 2,
+       "imm_size": 8,
+       "formula": "magic64(S)"
+      },
+      {
+       "rva": "0x700bf4",
+       "bytes": "48c1ea04",
+       "imm_offset": 3,
+       "imm_size": 1,
+       "formula": "shift(S)"
+      },
+      {
+       "rva": "0x700bf8",
+       "bytes": "8d04d203c0",
+       "imm_offset": 0,
+       "imm_size": 5,
+       "formula": "imul8(S)"
+      },
+      {
+       "rva": "0x700c3f",
+       "bytes": "4183fb12",
+       "imm_offset": 3,
+       "imm_size": 1,
+       "formula": "S"
+      },
+      {
+       "rva": "0x700c38",
+       "bytes": "83f811",
+       "imm_offset": 2,
+       "imm_size": 1,
+       "formula": "S-1"
+      },
+      {
+       "rva": "0x700c5d",
+       "bytes": "4881c228010000",
+       "imm_offset": 3,
+       "imm_size": 4,
+       "formula": "16*S+k",
+       "divisor": 8
+      }
+     ]
+    },
+    {
+     "function": "0x85a1b0",
+     "what": "the lookup inlined in a loop; the magic is loaded before the loop and again at its end",
+     "constants": [
+      {
+       "rva": "0x85a1fc",
+       "bytes": "49b98fe3388ee3388ee3",
+       "imm_offset": 2,
+       "imm_size": 8,
+       "formula": "magic64(S)"
+      },
+      {
+       "rva": "0x85a9cc",
+       "bytes": "49b98fe3388ee3388ee3",
+       "imm_offset": 2,
+       "imm_size": 8,
+       "formula": "magic64(S)"
+      },
+      {
+       "rva": "0x85a2ad",
+       "bytes": "48c1ea04",
+       "imm_offset": 3,
+       "imm_size": 1,
+       "formula": "shift(S)"
+      },
+      {
+       "rva": "0x85a2b1",
+       "bytes": "8d04d203c0",
+       "imm_offset": 0,
+       "imm_size": 5,
+       "formula": "imul8(S)"
+      },
+      {
+       "rva": "0x85a2ef",
+       "bytes": "4183f912",
+       "imm_offset": 3,
+       "imm_size": 1,
+       "formula": "S"
+      },
+      {
+       "rva": "0x85a2e8",
+       "bytes": "83f811",
+       "imm_offset": 2,
+       "imm_size": 1,
+       "formula": "S-1"
+      },
+      {
+       "rva": "0x85a41f",
+       "bytes": "498d9a20010000",
+       "imm_offset": 3,
+       "imm_size": 4,
+       "formula": "16*S/m",
+       "divisor": 1
+      }
+     ]
+    }
+   ]
+  }
+ }
+}
