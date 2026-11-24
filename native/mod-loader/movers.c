@@ -269,8 +269,8 @@ static int MvParent(MvUnit* m)
     return 1;
 }
 
-/* Its parent (a hellpod) may move or let go after the frame was read: when the game shows the root away from where it
- * was put, the frame is read again before the next write. 0 when the root no longer reads. */
+/* Between its own moves the game may move it: a Pelican carries it, its hellpod lets go, something pushes it. When the
+ * game shows the root away from where it was put, it goes on from where the game shows it. 0 when the root no longer reads. */
 static int MvKeepFrame(MvUnit* m, const MvDef* def)
 {
     float w[16];
@@ -278,9 +278,9 @@ static int MvKeepFrame(MvUnit* m, const MvDef* def)
     const float dx = w[12] - m->put[0], dy = w[13] - m->put[1], dz = w[14] - m->put[2];
     if (!m->written || dx * dx + dy * dy + dz * dz < 0.25f) return 1;
     if (m->reframed++ < 3)
-        ApiLog(def->mod, "mover: unit %u shown %.2f m from where it was put: its parent moved, its frame is read again", m->entity,
+        ApiLog(def->mod, "mover: unit %u shown %.2f m from where it was put: the game moved it, it goes on from there", m->entity,
             (double)sqrtf(dx * dx + dy * dy + dz * dz));
-    return MvFrame(m, w);
+    return MvParent(m);
 }
 
 /* Written only when it moved or turned: a root held still is left to its parent, as the game holds it. */
@@ -487,6 +487,7 @@ static void MvUnitTick(MvUnit* m, float dt)
         MvListMobile(m);
         if (!MvKeepFrame(m, def)) { ApiLog(def->mod, "mover: unit %u: its root no longer reads; it waits", m->entity); m->started = 0; return; }
     }
+    if (!m->written && !MvParent(m)) { m->status = HF_MOVER_WAITING; return; } /* still the game's: where it shows it now */
     MvDriver(m, def);
     MvDrive(m, def, dt);
     MvSounds(m, &def->def.sounds);

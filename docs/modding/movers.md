@@ -252,3 +252,4 @@ or within 30 m when that is 0. Once the fight is over it goes back to its order.
 4. A step within `step_up` and `step_down`, and water its `water` setting allows, is taken. A walker tries 35, 70 and 105 degrees to either side first.
 5. When no step works, `status` is `HF_MOVER_BLOCKED` and the speed drops to 0.
 6. It writes the root's new position and heading, only when it moved or turned. Standing still, its parent (a hellpod) holds it.
+7. When the game moves it between its own moves, such as a Pelican drop or a push, it goes on from where the game shows it.
