@@ -16,13 +16,13 @@ jobs:
       - name: Download the artifact and publish it
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: '45422019313'
-          TAG: test-d115cc7
+          RUN_ID: '45422859399'
+          TAG: test-a990517
         run: |
           gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n test-package -D pkg
           find pkg -type f -exec ls -la {} \;
           cp "$(find pkg -name HellForge-Setup.exe | head -1)" HellForge-Setup.exe
           sha256sum HellForge-Setup.exe | tee SHA256SUMS
-          gh release create "$TAG" -R "$GITHUB_REPOSITORY" --prerelease --target d115cc76d9e2e39b01e344355620052dfca7e00f \
-            --title "Test build d115cc7, 81afe1e + hovers hold over unread surfaces (water fix), drive modes carry the axles (run $RUN_ID)" --notes "test-package artifact of run $RUN_ID, republished for download." \
+          gh release create "$TAG" -R "$GITHUB_REPOSITORY" --prerelease --target a990517c29d50cd54dded9b6457a997d156bc544 \
+            --title "Test build a990517, d115cc7 + item lists: armory and stratagem picker filters (SDK 38) (run $RUN_ID)" --notes "test-package artifact of run $RUN_ID, republished for download." \
             HellForge-Setup.exe SHA256SUMS
