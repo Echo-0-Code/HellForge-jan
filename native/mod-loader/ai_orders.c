@@ -527,14 +527,16 @@ static AiUnit* AiDealer(uint32_t network)
     return NULL;
 }
 
-/* A hit by an obeying unit (its body, rider or a part it owns) on its own side deals nothing. Its brain's area attacks
- * (the Scout Strider's kick, damage kind 6) take no side into account, so a unit that follows at a few metres hurt
- * the Helldiver it followed. */
+/* An obeying unit's melee ability (damage kind 6: the Scout Strider's kick) on its own side deals nothing. The brain
+ * swings it at whatever stands in reach, whatever its side, so a unit that follows at a few metres kicked the Helldiver
+ * it followed with no enemy near. Its gunfire and explosions still hit friends in the way, as a sentry's do. */
 static void AiDamage(uint8_t* event)
 {
     if (g_aiRuleCount == 0) return;
-    uint32_t target, dealer, owner;
+    uint32_t target, kind, dealer, owner;
     int32_t amount;
+    memcpy(&kind, event + 4, 4);
+    if (kind != 6) return;
     memcpy(&target, event, 4); memcpy(&dealer, event + 0x10, 4); memcpy(&owner, event + 0x14, 4); memcpy(&amount, event + 0x2C, 4);
     AiUnit* u = AiDealer(dealer);
     if (u == NULL && owner != dealer) u = AiDealer(owner);
@@ -543,7 +545,7 @@ static void AiDamage(uint8_t* event)
     if (!(mine & theirs)) return;
     const int32_t none = 0;
     memcpy(event + 0x2C, &none, 4);
-    if (u->spared++ == 0) AiLog(u, "its hit on entity %u (faction %u, its own side) deals nothing; later ones are not logged", target, theirs);
+    if (u->spared++ == 0) AiLog(u, "its melee hit on entity %u (faction %u, its own side) deals nothing; later ones are not logged", target, theirs);
 }
 
 /* ---- the game thread ---- */
