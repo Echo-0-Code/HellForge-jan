@@ -17,6 +17,7 @@ from the comms wheel's Follow me and Hold position, or from the mod. The types a
 - [When a point cannot be reached](#when-a-point-cannot-be-reached)
 - [Co-op](#co-op)
 - [Which units can be ordered](#which-units-can-be-ordered)
+- [Walk a unit with no path agent](#walk-a-unit-with-no-path-agent)
 - [Navmesh routes for any walker](#navmesh-routes-for-any-walker)
 
 ## Before you call
@@ -72,6 +73,7 @@ api->ai_obey(mod, &obey);
 | `hold_radius` | 3 m | It may stray this far from its hold point |
 | `rider` | none | A seated pilot's entity: the nearest one within 8 m gets the same moves |
 | `start_order` | none | `HF_ORDER_FOLLOW`: a new unit follows the nearest Helldiver |
+| `nav_preset` | `HF_NAV_TROOPER` | A unit with no path agent: the size its routes are found for |
 
 Units with a S.E.A.F. brain (615 to 631) answer the wheel themselves, so `ai_obey` leaves them alone.
 
@@ -138,16 +140,36 @@ A following unit more than 16 m past its follow distance walks the speaker's tra
 
 ## Which units can be ordered
 
-A unit needs a brain and a navmesh path agent. These come with the unit it copies.
+A unit needs a brain, which comes with the unit it copies. A unit with a navmesh path agent walks itself.
 
 | Base | Path agent |
 |---|---|
 | S.E.A.F. troopers, Helldivers | Yes |
 | Scout Striders, Automaton infantry and walkers | Yes |
-| Sentries, emplacements, props | No: `ai_order` is refused; use [navmesh routes](#navmesh-routes-for-any-walker) |
+| Sentries, emplacements, props | No: HellForge routes it and [your mod walks it](#walk-a-unit-with-no-path-agent) |
 
 A model on a copied unit must be rigged to that unit's skeleton, because the brain sends animation events its body
 plan expects.
+
+## Walk a unit with no path agent
+
+A unit with no path agent, such as a sentry your mod walks, still obeys `ai_obey` and `ai_order`. HellForge keeps its
+order, follow distance, trail, detours and rests, and finds a navmesh route for it. Your mod only moves it.
+
+1. Set `"sdk": 32` or later and call `ai_obey`, with `nav_preset` for the unit's size.
+2. On the host, read `ai_state` every update. Older HellForge builds leave `steered` at 0.
+3. While `status` is `HF_AI_MOVING` or `HF_AI_DETOUR`, walk the unit toward `point`, the route's next corner.
+4. Stand it while `status` is `HF_AI_THERE`, `HF_AI_UNREACHABLE` or `HF_AI_IDLE`.
+
+| `HfAiState` field | For a unit with no path agent |
+|---|---|
+| `steered` | 1 |
+| `point` | Where to walk now: the route's first corner over a metre away, or the order's point before the route is found |
+| `goal` | Where the route ends |
+| `order`, `target` | The order and the entity it follows, for the mod's own fight moves |
+
+Speed, turning, steps and fight moves stay the mod's. A unit the mod does not move makes no headway, so after 4 s it
+takes a detour as a walker does.
 
 ## Navmesh routes for any walker
 

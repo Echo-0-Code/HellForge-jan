@@ -1,8 +1,9 @@
 /* HellForge mod SDK 31-32: orders for AI units and navmesh routes (docs/modding/ai.md). Included by hellforge_mod.h.
  * A unit keeps its own brain: it aims, fights and walks with the game's AI. HellForge only tells it where to go, through
  * the game's own path agent (the navmesh), the way the S.E.A.F. troopers' brains do. Orders come from the comms wheel
- * (Follow me, Hold position) or from the mod (ai_order). A unit needs a navmesh path agent: walkers and troopers have
- * one, sentries and props do not. Put a unit on the players' side with its Faction record (HfFaction). */
+ * (Follow me, Hold position) or from the mod (ai_order). Walkers and troopers walk with their navmesh path agent. A unit
+ * with none (a sentry the mod walks) gets a navmesh route instead: the mod moves it to ai_state's point. Put a unit on
+ * the players' side with its Faction record (HfFaction). */
 #ifndef HELLFORGE_AI_H
 #define HELLFORGE_AI_H
 
@@ -20,7 +21,7 @@
 #define HF_AI_THERE 2u       /* at the point, or near enough to the entity it follows */
 #define HF_AI_DETOUR 3u      /* the point could not be reached: walking to a nearer one first */
 #define HF_AI_UNREACHABLE 4u /* no nearer point worked either: it stands still and tries again later */
-#define HF_AI_NO_AGENT 5u    /* the entity has no path agent, or no brain on this machine: it cannot be walked */
+#define HF_AI_NO_AGENT 5u    /* no brain on this machine, or neither a path agent nor a route: it cannot be walked */
 
 /* HF_ON_ORDER (SDK 31): a player gave an order on the comms wheel, on every machine of the lobby. HellForge raises it
  * once an order, however it arrives (this machine's wheel, the game's own message, HellForge's). */
@@ -47,6 +48,9 @@ typedef struct HfAiObey
      * resource within 8 m gets the same moves. Some walkers are steered by their pilot's agent too. */
     uint64_t rider;
     uint32_t start_order;   /* the order a new unit starts with: HF_ORDER_NONE, or HF_ORDER_FOLLOW (its caller's Helldiver) */
+    /* A unit with no path agent: the size its routes are found for, HF_NAV_TROOPER (the default), HF_NAV_VEHICLE or
+     * HF_NAV_VEHICLE_WIDE. The mod walks it to ai_state's point; HellForge only routes it. */
+    uint32_t nav_preset;
 } HfAiObey;
 
 /* What ai_state answers. */
@@ -61,6 +65,10 @@ typedef struct HfAiState
     float distance;       /* metres from its position to the order's own point (the followed entity's, for FOLLOW) */
     uint32_t moving;      /* 1 while it walks: it moved since the last step (a quarter second) */
     uint32_t behaviour;   /* its brain (behaviour id) */
+    /* 1: it has no path agent, so the mod walks it: to point (its route's next corner) while status is MOVING or
+     * DETOUR, and it stands while THERE, UNREACHABLE or IDLE. */
+    uint32_t steered;
+    float goal[3];        /* where its route ends: the order's point less the follow distance, or a detour's point */
 } HfAiState;
 
 /* ---- SDK 32: navmesh routes (nav_route_open .. nav_route_close) ---- */

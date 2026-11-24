@@ -27,6 +27,8 @@
 #define AI_LOG_S 5.0
 #define AI_TRAIL 24                 /* points where a followed entity stood */
 #define AI_TRAIL_STEP_M 4.0f        /* a new trail point after it moved this far */
+#define AI_CORNERS 16
+#define AI_REASK_S 2.0              /* a steered unit's failed route is asked again after this */
 #define AI_FAR_M 16.0f              /* this far past the follow distance, a unit walks the trail */
 
 typedef struct AiRule { HfMod* mod; HfAiObey def; } AiRule;
@@ -39,6 +41,9 @@ typedef struct AiUnit
     float follow, hold;
     float trail[AI_TRAIL][3];
     uint32_t trailCount, onTrail;
+    uint32_t route, corners;     /* a unit with no path agent: its route (nav_routes.c) and the corners read */
+    float corner[AI_CORNERS][3];
+    double sinceAsk;
     double sinceSent, sinceHeadway, retryIn, sinceLog;
 } AiUnit;
 typedef struct AiHeard { uint32_t speaker, order; ULONGLONG at; } AiHeard;
@@ -148,9 +153,10 @@ static int AiNativeObeys(uint32_t behaviour)
 
 static void AiSend(AiUnit* u, AiCtx* c, const float point[3])
 {
-    g_aiMove(c, point);
+    if (u->route) { ApiNavRouteAsk(&g_aiMod, u->route, u->lastPos, point); u->corners = 0; u->sinceAsk = 0; }
+    else g_aiMove(c, point);
     AiCtx rc;
-    if (u->rider && AiCtxOf(u->rider, &rc)) g_aiMove(&rc, point);
+    if (!u->route && u->rider && AiCtxOf(u->rider, &rc)) g_aiMove(&rc, point);
     memcpy(u->sent, point, 12);
     u->issued = 1;
     u->sinceSent = 0;
@@ -159,6 +165,8 @@ static void AiSend(AiUnit* u, AiCtx* c, const float point[3])
 static void AiHalt(AiUnit* u, AiCtx* c)
 {
     if (!u->issued) return;
+    u->corners = 0;
+    if (u->route) { u->issued = 0; return; } /* the mod stands it while THERE or UNREACHABLE */
     g_aiStop(c);
     AiCtx rc;
     if (u->rider && AiCtxOf(u->rider, &rc)) g_aiStop(&rc);
@@ -300,9 +308,28 @@ static void AiStatusLog(AiUnit* u, const float pos[3])
     float goal[3] = {0, 0, 0};
     AiAgentGoal(u->entity, goal);
     AiLog(u, "%s %s, at %.1f %.1f %.1f, %.1f m from the order's point, sent to %.1f %.1f %.1f (path agent's goal %.1f %.1f %.1f),"
-        " moving %d, trail %s (%u points)", orders[u->order & 3], AiStatusName(u->status), (double)pos[0], (double)pos[1],
+        " moving %d, trail %s (%u points), route corners %u", orders[u->order & 3], AiStatusName(u->status), (double)pos[0], (double)pos[1],
         (double)pos[2], (double)AiFlat(pos, u->point), (double)u->sent[0], (double)u->sent[1], (double)u->sent[2], (double)goal[0],
-        (double)goal[1], (double)goal[2], u->moved, u->onTrail ? "on" : "off", u->trailCount);
+        (double)goal[1], (double)goal[2], u->moved, u->onTrail ? "on" : "off", u->trailCount, u->corners);
+}
+
+/* A steered unit's route: its corners once found, asked again when it failed or the mission's agents went. */
+static void AiRouteStep(AiUnit* u, const float pos[3])
+{
+    if (!u->issued) return;
+    HfNavRoute r = {sizeof r};
+    uint32_t status = ApiNavRouteRead(&g_aiMod, u->route, pos, &r, &u->corner[0][0], AI_CORNERS);
+    if (status == HF_ROUTE_READY || status == HF_ROUTE_PARTIAL) u->corners = r.count < AI_CORNERS ? r.count : AI_CORNERS;
+    else if (status == HF_ROUTE_NONE || (status == HF_ROUTE_FAILED && (u->sinceAsk += AI_STEP_S) >= AI_REASK_S))
+    { ApiNavRouteAsk(&g_aiMod, u->route, pos, u->sent); u->sinceAsk = 0; }
+}
+
+/* Where a steered unit walks now: its route's first corner over a metre away, else straight to the point sent. */
+static void AiNextPoint(const AiUnit* u, float out[3])
+{
+    memcpy(out, u->sent, 12);
+    for (uint32_t i = 1; i < u->corners; i++)
+        if (AiFlat(u->lastPos, u->corner[i]) > 1.0f) { memcpy(out, u->corner[i], 12); return; }
 }
 
 /* One unit, every AI_STEP_S; 0 when it is gone. */
@@ -311,7 +338,7 @@ static int AiUnitStep(AiUnit* u)
     if (!EvpAlive(u->entity)) return 0;
     AiCtx c;
     float pos[3], at[3];
-    if (!AiCtxOf(u->entity, &c) || !AiAuthority(&c) || !AiAgentOf(u->entity) || !AiOwnPos(&c, pos))
+    if (!AiCtxOf(u->entity, &c) || !AiAuthority(&c) || (!u->route && !AiAgentOf(u->entity)) || !AiOwnPos(&c, pos))
     { u->status = u->order ? HF_AI_NO_AGENT : HF_AI_IDLE; return 1; }
     u->moved = AiDist(pos, u->lastPos) > 0.05f;
     memcpy(u->lastPos, pos, 12);
@@ -325,8 +352,15 @@ static int AiUnitStep(AiUnit* u)
     if (u->order == HF_ORDER_FOLLOW) AiFollowStep(u, &c, pos, at);
     else if (AiFlat(pos, u->point) <= u->hold) AiArrived(u, &c);
     else AiSteer(u, &c, pos, u->point);
+    if (u->route) AiRouteStep(u, pos);
     if ((u->sinceLog += AI_STEP_S) >= AI_LOG_S) AiStatusLog(u, pos);
     return 1;
+}
+
+static void AiForget(AiUnit* u)
+{
+    if (u->route) ApiNavRouteClose(&g_aiMod, u->route);
+    memset(u, 0, sizeof *u);
 }
 
 static AiUnit* AiUnitOf(uint32_t entity, int create)
@@ -536,20 +570,31 @@ static uint32_t AiRiderOf(uint32_t entity, uint64_t rider, const float pos[3])
 }
 
 /* A unit of a rule, its parts set up a second after its spawn (under g_aiLock). */
+/* A route of HellForge's own for a unit with no path agent; 0 when routes are refused. */
+static uint32_t AiOpenRoute(uint32_t preset)
+{
+    HfNavProfile profile = {sizeof profile, preset ? preset : HF_NAV_TROOPER, 0, 0, 0, 0};
+    return ApiNavRouteOpen(&g_aiMod, &profile);
+}
+
 static void AiSettled(uint32_t entity, uint64_t resource)
 {
     LONG r = 0;
     while (r < g_aiRuleCount && g_aiRules[r].def.entity != resource) r++;
     AiCtx c;
     float pos[3];
-    if (r == g_aiRuleCount || !AiCtxOf(entity, &c) || !AiOwnPos(&c, pos)) return;
+    if (r == g_aiRuleCount) return;
     const AiRule* rule = &g_aiRules[r];
+    if (!AiCtxOf(entity, &c) || !AiOwnPos(&c, pos)) { ApiLog(rule->mod, "ai: unit %u not taken: it has no brain record here", entity); return; }
     if (AiNativeObeys(AiBehaviour(&c))) { ApiLog(rule->mod, "ai: unit %u runs a S.E.A.F. brain, which obeys the wheel itself", entity); return; }
     AiUnit* u = AiUnitOf(entity, 1);
     if (u == NULL) { ApiLog(rule->mod, "ai: unit %u not taken: %d units already obey", entity, AI_UNITS); return; }
     u->mod = rule->mod; u->rule = (uint32_t)r + 1; u->follow = rule->def.follow_distance; u->hold = rule->def.hold_radius;
     u->rider = AiRiderOf(entity, rule->def.rider, pos);
-    AiLog(u, "obeys the comms wheel (behaviour %u, path agent %s, rider %u)", AiBehaviour(&c), AiAgentOf(entity) ? "yes" : "NONE", u->rider);
+    memcpy(u->lastPos, pos, 12);
+    if (!AiAgentOf(entity) && !u->route) u->route = AiOpenRoute(rule->def.nav_preset);
+    AiLog(u, "obeys the comms wheel (behaviour %u, %s, rider %u)", AiBehaviour(&c),
+        AiAgentOf(entity) ? "its path agent" : u->route ? "no path agent: routed, the mod walks it" : "no path agent and no route", u->rider);
     uint32_t player = rule->def.start_order == HF_ORDER_FOLLOW ? AiNearestPlayer(pos) : 0;
     if (player) AiSetOrder(u, HF_ORDER_FOLLOW, player, NULL, "its start order");
     else if (rule->def.start_order == HF_ORDER_FOLLOW) AiLog(u, "no standing Helldiver to follow: it waits for an order");
@@ -687,7 +732,7 @@ static void AiTick(HfMod* mod, float dt, void* user)
     for (int i = 0; i < AI_PENDING; i++)
         if (g_aiPending[i].entity && g_aiClock >= g_aiPending[i].at) { AiSettled(g_aiPending[i].entity, g_aiPending[i].resource); g_aiPending[i].entity = 0; }
     for (int i = 0; i < AI_UNITS; i++)
-        if (g_aiUnits[i].entity && !AiUnitStep(&g_aiUnits[i])) memset(&g_aiUnits[i], 0, sizeof g_aiUnits[i]);
+        if (g_aiUnits[i].entity && !AiUnitStep(&g_aiUnits[i])) AiForget(&g_aiUnits[i]);
     ReleaseSRWLockExclusive(&g_aiLock);
 }
 
@@ -709,13 +754,15 @@ static void AiStartTick(void)
 /* The rule with its defaults filled in, or why it is refused. */
 static const char* AiObeyRefusal(const HfAiObey* obey, HfAiObey* d)
 {
-    if (obey == NULL || obey->size < sizeof *obey || obey->entity == 0) return "no HfAiObey, its size or its entity";
-    *d = *obey;
+    if (obey == NULL || obey->size < offsetof(HfAiObey, nav_preset) || obey->entity == 0) return "no HfAiObey, its size or its entity";
+    memset(d, 0, sizeof *d);
+    memcpy(d, obey, obey->size < sizeof *d ? obey->size : sizeof *d);
     if (d->range == 0) d->range = 60.0f;
     if (d->follow_distance == 0) d->follow_distance = 6.0f;
     if (d->hold_radius == 0) d->hold_radius = 3.0f;
-    if (!AiIn(d->range, 1, 500) || !AiIn(d->follow_distance, 1, 50) || !AiIn(d->hold_radius, 0.5f, 50) || d->start_order > HF_ORDER_FOLLOW)
-        return "range 1 .. 500, follow_distance 1 .. 50, hold_radius 0.5 .. 50, start_order NONE or FOLLOW";
+    if (!AiIn(d->range, 1, 500) || !AiIn(d->follow_distance, 1, 50) || !AiIn(d->hold_radius, 0.5f, 50) || d->start_order > HF_ORDER_FOLLOW ||
+        d->nav_preset > HF_NAV_VEHICLE_WIDE)
+        return "range 1 .. 500, follow_distance 1 .. 50, hold_radius 0.5 .. 50, start_order NONE or FOLLOW, nav_preset 0 .. 3";
     return NULL;
 }
 
@@ -776,13 +823,18 @@ static int ApiAiOrder(HfMod* mod, uint32_t entity, uint32_t order, uint32_t targ
 static uint32_t ApiAiState(HfMod* mod, uint32_t entity, HfAiState* state)
 {
     (void)mod;
-    HfAiState s = {sizeof s, 0, HF_AI_IDLE, 0, {0, 0, 0}, {0, 0, 0}, 0, 0, 0};
+    HfAiState s;
+    memset(&s, 0, sizeof s);
+    s.size = sizeof s;
     AcquireSRWLockShared(&g_aiLock); /* no mod code runs while the update holds it */
     AiUnit* u = AiUnitOf(entity, 0);
     if (u != NULL)
     {
         s.order = u->order; s.status = u->status; s.target = u->target;
         memcpy(s.point, u->detour ? u->detourAt : u->goal, 12);
+        memcpy(s.goal, s.point, 12);
+        s.steered = u->route != 0;
+        if (u->route) AiNextPoint(u, s.point);
         memcpy(s.position, u->lastPos, 12);
         s.distance = AiFlat(u->lastPos, u->point);
         s.moving = (uint32_t)u->moved;
@@ -793,6 +845,11 @@ static uint32_t ApiAiState(HfMod* mod, uint32_t entity, HfAiState* state)
         AiCtx c;
         if (AiCtxOf(entity, &c)) s.behaviour = AiBehaviour(&c);
     }
-    if (state != NULL && state->size >= sizeof *state) *state = s;
+    if (state != NULL && state->size >= offsetof(HfAiState, steered))
+    {
+        uint32_t size = state->size < sizeof s ? state->size : (uint32_t)sizeof s;
+        memcpy(state, &s, size);
+        state->size = size;
+    }
     return s.status;
 }
