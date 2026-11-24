@@ -6,7 +6,8 @@
 
 #define HV_ENGAGE 2.0f      /* hover heights: it takes hold once the surface is this close (never under the Pelican, ~10 m) */
 #define HV_REACH 30.0f      /* metres: the ray down, and the gap beyond which a reading is no good */
-#define HV_LOST_S 0.5f      /* no good reading this long and it lets go: it settles on the share its data carries */
+#define HV_LOST_S 30.0f     /* no good reading this long and it lets go; until then it holds over the last surface it saw */
+#define HV_DROP_MAX 4.0f    /* m/s: the fastest it lets itself sink toward a surface far below (off a ledge) */
 #define HV_CLIMB_MAX 2.0f   /* m/s: it never pushes up while climbing faster (a seated crew once read as ground) */
 #define HV_SKIP 0.5f        /* metres: ray hits nearer its root are its own parts or crew */
 #define HV_EXE_ACTORS 0x27CD910u /* helldivers2.exe: the actor table, whose +0xC0 must hold ActorAddImpulse */
@@ -48,7 +49,8 @@ static int HvReady(void)
     uintptr_t slot = 0;
     const int table = EvpPtr(exe + HV_EXE_ACTORS + 0xC0, &slot) && slot == (uintptr_t)g_hvImpulse;
     g_hvState = g_hvImpulse && g_hvAngular && g_hvVelocity && g_hvActors && g_hvResolves && g_hvUnit && g_hvRecord && table ? 1 : -1;
-    Note(g_hvState > 0 ? "movers: hover on" : "movers: hover off; the physics calls are not the reviewed ones");
+    Note(g_hvState <= 0 ? "movers: hover off; the physics calls are not the reviewed ones" : g_mvWater ? "movers: hover on, over water too"
+        : "movers: hover on, but blind to water (WaterHeight is not the reviewed code)");
     return g_hvState > 0;
 }
 
@@ -98,7 +100,7 @@ static float HvSurface(MvUnit* m, const float p[3])
         if (k < 4) how.ignore[k] = hit.unit;
     }
     const float w = MvWaterAt(p[0], p[1], p[2]);
-    const int wet = w > -499.0f && w < p[2] && w > ground;
+    const int wet = w > -499.0f && w < p[2] + 3.0f && w > ground; /* a craft sunk under the surface still floats up */
     m->waterDepth = wet ? (ground > -1e8f ? w - ground : HV_REACH) : 0;
     return wet ? w : ground;
 }
@@ -110,7 +112,7 @@ static void HvDrive(MvUnit* m, const MvDef* def, const float fl[2], const float 
     const float vf = v[0] * fl[0] + v[1] * fl[1], side = -fl[1] * v[0] + fl[0] * v[1], vh = sqrtf(v[0] * v[0] + v[1] * v[1]);
     float push = 0, sidePush = 0;
     a[0] = a[1] = 0;
-    if (d->drivetrain == HF_DRIVETRAIN_NONE)
+    if (d->drive != NULL)
     {
         const HfMoverPush p = MvPush(m, def, dt);
         push = p.forward; sidePush = p.side;
@@ -118,14 +120,15 @@ static void HvDrive(MvUnit* m, const MvDef* def, const float fl[2], const float 
     }
     else
     {
-        const float t = m->throttle;
+        const float t = m->throttle, top = MvTop(m, d, dt);
         *yawRate = m->steer * MvRate(d, vf);
-        if ((t * vf < 0 && fabsf(vf) > 0.3f) || (fabsf(t) < 0.05f && vh < 1.5f))
+        sidePush = m->strafe * d->side_drag * d->strafe_speed; /* the side drag tops a full strafe out at strafe_speed */
+        if ((t * vf < 0 && fabsf(vf) > 0.3f) || (fabsf(t) < 0.05f && fabsf(m->strafe) < 0.05f && vh < 1.5f) || m->lost > 0)
         {   /* braking (or holding still): against the whole horizontal speed, no further than to a stop */
             const float b = vh > 1e-3f ? fminf(d->brake, vh / dt) / vh : 0;
             a[0] = -b * v[0]; a[1] = -b * v[1];
         }
-        else if (t > 0) push = t * d->acceleration;
+        else if (t > 0) push = t * d->acceleration * (top * top) / (d->speed * d->speed); /* a boost: the fans push harder */
         else push = t * d->acceleration * (d->reverse_speed * d->reverse_speed) / (d->speed * d->speed); /* top speed backward is reverse_speed */
     }
     const float cd = d->acceleration / (d->speed * d->speed); /* quadratic air drag: full thrust tops out at speed */
@@ -136,17 +139,64 @@ static void HvDrive(MvUnit* m, const MvDef* def, const float fl[2], const float 
 /* Its gap over the surface, and whether it hovers: it takes hold once the surface is close, lets go when it is lost. */
 static float HvGap(MvUnit* m, const MvDef* def, const float p[3], float dt)
 {
-    const float surface = HvSurface(m, p), gap = p[2] - surface;
-    const int good = surface > -1e8f && gap > 0 && gap < HV_REACH;
+    const float surface = HvSurface(m, p);
+    const int good = surface > -1e8f && p[2] - surface > -3.0f && p[2] - surface < HV_REACH;
+    if (good) m->lastSurface = surface;
+    /* deep water it can't read, or a drop: it holds over the last surface it saw rather than falling in */
+    const float gap = p[2] - (good || !m->engaged ? surface : m->lastSurface);
     m->height = good ? gap : 0;
     m->lost = good ? 0 : m->lost + dt;
     if (!m->engaged && good && gap < HV_ENGAGE * def->def.hover_height)
     {
+        m->targetHeight = def->def.hover_height;
         m->engaged = 1;
         ApiLog(def->mod, "mover: unit %u: %s %.2f m under it: it hovers", m->entity, m->waterDepth > 0 ? "water" : "ground", (double)gap);
     }
-    if (m->engaged && m->lost > HV_LOST_S) { m->engaged = 0; ApiLog(def->mod, "mover: unit %u: no surface in reach: it lets go", m->entity); }
+    m->targetHeight = MvClamp(m->targetHeight + m->lift * def->def.climb_rate * dt, def->def.fly_height_min, def->def.fly_height_max);
+    if (m->engaged && m->lost > 0 && m->lost <= dt) ApiLog(def->mod, "mover: unit %u: no surface in reach: it holds its height and stops", m->entity);
+    if (m->engaged && m->lost > HV_LOST_S) { m->engaged = 0; ApiLog(def->mod, "mover: unit %u: no surface in reach for %.0f s: it lets go", m->entity, (double)HV_LOST_S); }
     return gap;
+}
+
+/* The ground's height under (x, y), or `fallback`. */
+static float HvGroundAt(const MvUnit* m, float x, float y, float z, float fallback)
+{
+    HfSight how = {sizeof how, {m->unit, 0, 0, 0}, HV_SKIP, 0};
+    const float from[3] = {x, y, z}, to[3] = {x, y, z - HV_REACH};
+    HfSightHit hit;
+    memset(&hit, 0, sizeof hit);
+    return ApiLineOfSight(&g_mvMod, from, to, &how, &hit) == HF_SIGHT_BLOCKED && hit.unit == 0 && isfinite(hit.position[2]) ? hit.position[2] : fallback;
+}
+
+/* The up it rights itself to: the world's, or with align_to_ground the ground's under it (water is level), at most
+ * tilt_limit from the world's. */
+static void HvTargetUp(const MvUnit* m, const HfMoverDef* d, const float* w, float n[3])
+{
+    n[0] = n[1] = 0; n[2] = 1;
+    if (!d->align_to_ground || m->waterDepth > 0) return;
+    const float* r = w, * f = w + 4, * p = w + 12, here = p[2] - m->height;
+    const float zf = HvGroundAt(m, p[0] + f[0] * 1.5f, p[1] + f[1] * 1.5f, p[2], here), zr = HvGroundAt(m, p[0] + r[0], p[1] + r[1], p[2], here);
+    const float sf = (zf - here) / 1.5f, sr = zr - here; /* rise per metre ahead and to the right */
+    const float lim = tanf(d->tilt_limit * 0.0174533f), gf = MvClamp(sf, -lim, lim), gr = MvClamp(sr, -lim, lim);
+    /* the normal of a plane rising gf along f and gr along r (both level-projected) */
+    n[0] = -(gf * f[0] + gr * r[0]); n[1] = -(gf * f[1] + gr * r[1]);
+    const float l = sqrtf(n[0] * n[0] + n[1] * n[1] + 1);
+    n[0] /= l; n[1] /= l; n[2] = 1 / l;
+}
+
+/* Righting toward `n` about roll and pitch (up x n), harder past tilt_limit; yaw toward the wanted rate. Inertia scales
+ * as an FRV's. */
+static void HvAttitude(MvUnit* m, const HfMoverDef* d, const float* w, const float om[3], const float n[3], float yawRate, float dt)
+{
+    const float* up = w + 8;
+    const float wn = 6.2831853f * d->hover_hz, zeta = fminf(d->hover_damping + 0.1f, 2.0f);
+    const float past = up[2] < cosf(d->tilt_limit * 0.0174533f) ? 3.0f : 1.0f, k = 0.9f * d->mass * wn * wn * past;
+    const float ex = up[1] * n[2] - up[2] * n[1], ey = up[2] * n[0] - up[0] * n[2];
+    const float c = 0.9f * d->mass * 2 * zeta * wn;
+    const float t[3] = {(k * ex - c * om[0]) * dt, (k * ey - c * om[1]) * dt, d->mass * (yawRate - om[2]) / 0.4f * dt};
+    g_hvAngular(m->body, t);
+    m->pitch = asinf(MvClamp(w[6], -1, 1));
+    m->roll = asinf(MvClamp(-w[2], -1, 1));
 }
 
 /* One update of a hover on the machine that simulates it. */
@@ -155,7 +205,7 @@ static void HvControl(MvUnit* m, const MvDef* def, float dt)
     const HfMoverDef* d = &def->def;
     float w[16], v[3] = {0}, om[3] = {0};
     if (!ApiJointPose(&g_mvMod, m->unit, 0, HF_POSE_WORLD, w) || !isfinite(w[12])) return;
-    const float* f = w + 4, * up = w + 8, * p = w + 12;
+    const float* f = w + 4, * p = w + 12;
     g_hvVelocity(m->body, v, om);
     memcpy(m->pos, p, 12);
     m->yaw = atan2f(-f[0], f[1]);
@@ -167,23 +217,33 @@ static void HvControl(MvUnit* m, const MvDef* def, float dt)
         return;
     }
     m->status = HF_MOVER_MOVING;
-    /* heave: the weight its data leaves, plus a spring-damper toward hover_height */
+    /* heave: the weight its data leaves, plus a spring-damper toward its height (hover_height, moved by lift) */
     const float wn = 6.2831853f * d->hover_hz;
-    float lift = MvClamp(wn * wn * (d->hover_height - gap) - 2 * d->hover_damping * wn * v[2], -0.55f * MV_G, 0.95f * MV_G);
-    if (v[2] > HV_CLIMB_MAX) lift = fminf(lift, fmaxf(-2.0f * (v[2] - HV_CLIMB_MAX), -0.55f * MV_G));
+    const float low = gap > m->targetHeight + 1.0f ? -0.15f * MV_G : -0.55f * MV_G; /* far above: it sinks, it doesn't dive */
+    float lift = MvClamp(wn * wn * (m->targetHeight - gap) - 2 * d->hover_damping * wn * v[2], low, 0.95f * MV_G);
+    if (v[2] > HV_CLIMB_MAX) lift = fminf(lift, fmaxf(-2.0f * (v[2] - HV_CLIMB_MAX), low));
+    if (v[2] < -HV_DROP_MAX) lift = fmaxf(lift, fminf(2.0f * (-HV_DROP_MAX - v[2]), 0.95f * MV_G));
     const float az = (1.0f - d->carried) * MV_G + lift;
     float fl[2] = {f[0], f[1]}, a[2] = {0, 0}, yawRate = 0;
     const float len = sqrtf(fl[0] * fl[0] + fl[1] * fl[1]);
     if (len > 1e-3f) { fl[0] /= len; fl[1] /= len; HvDrive(m, def, fl, v, dt, a, &yawRate); }
     const float j[3] = {a[0] * mass * dt, a[1] * mass * dt, az * mass * dt};
     g_hvImpulse(m->body, j, NULL);
-    /* attitude: roll and pitch back to level (up x world up), yaw toward the wanted rate. Inertia scales as an FRV's. */
-    const float tilt = 0.9f * mass, yawI = mass, zeta = fminf(d->hover_damping + 0.1f, 2.0f);
-    const float t[3] = {tilt * (wn * wn * up[1] - 2 * zeta * wn * om[0]) * dt, tilt * (wn * wn * -up[0] - 2 * zeta * wn * om[1]) * dt,
-                        yawI * (yawRate - om[2]) / 0.4f * dt};
-    g_hvAngular(m->body, t);
+    float n[3];
+    HvTargetUp(m, d, w, n);
+    HvAttitude(m, d, w, om, n, yawRate, dt);
     m->speed = len > 1e-3f ? v[0] * fl[0] + v[1] * fl[1] : 0;
     m->turning = om[2];
+}
+
+/* Every 2 s for its first minute, and while it is lost or over water. */
+static void HvLog(MvUnit* m, const MvDef* def, float dt)
+{
+    if ((m->sinceLog += dt) < 2.0 || (m->age > def->def.start_delay + 60 && m->lost <= 0 && m->waterDepth <= 0)) return;
+    m->sinceLog = 0;
+    ApiLog(def->mod, "mover: unit %u hover %s, %.2f m over %s (water query %.2f), speed %.1f, throttle %.2f, steer %.2f, driver %u", m->entity,
+        m->engaged ? "on" : "off", (double)m->height, m->waterDepth > 0 ? "water" : "ground", (double)MvWaterAt(m->pos[0], m->pos[1], m->pos[2]),
+        (double)m->speed, (double)m->throttle, (double)m->steer, m->driver);
 }
 
 static void HvUnitTick(MvUnit* m, const MvDef* def, float dt)
@@ -204,10 +264,8 @@ static void HvUnitTick(MvUnit* m, const MvDef* def, float dt)
     }
     MvDriver(m, def);
     HvControl(m, def, dt);
-    if ((m->sinceLog += dt) < 2.0 || m->age > def->def.start_delay + 60) return;
-    m->sinceLog = 0;
-    ApiLog(def->mod, "mover: unit %u hover %s, %.2f m over %s, speed %.1f, throttle %.2f, steer %.2f, driver %u", m->entity, m->engaged ? "on" : "off",
-        (double)m->height, m->waterDepth > 0 ? "water" : "ground", (double)m->speed, (double)m->throttle, (double)m->steer, m->driver);
+    MvSounds(m, &def->def.sounds);
+    HvLog(m, def, dt);
 }
 
 /* The seated drivers' inputs, read where the game reads them (VehicleMotionManager +0x60 steer, throttle, brake; the

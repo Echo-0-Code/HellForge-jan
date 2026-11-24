@@ -17,9 +17,15 @@ On `dev`, since 0.4.0-beta.
 - **Turrets (SDK 37).** `add_turret` sets a turret's turn speeds, traverse limits, sight ranges, aim, fire rate and
   magazine, and can put it on a mover's or object's mount slot. The game's turret AI aims it, or the AI is off for a
   seat or the mod ([Turrets](docs/modding/turrets.md)).
+- **Fighting movers (SDK 37).** `ai_drive` takes an engage range, a distance to keep, a leash and a reaction time. It
+  retreats below a health share, running or backing off while firing, and takes whose orders and a spacing from other
+  units ([Movers](docs/modding/movers.md#let-it-fight)).
+- **Mover slopes, tilt, flying heights, boost, strafe and sounds (SDK 37).** `add_mover` takes `max_slope`,
+  `tilt_limit`, `align_to_ground`, hover fly heights and `climb_rate`, `boost_speed`, `strafe_speed` and six sound
+  slots. `mover_input` gives `strafe`, `lift` and `boost` ([Movers](docs/modding/movers.md)).
 - **Hover movers, brakes, water and drivetrains (SDK 36).** `add_mover` takes `HF_MOVE_HOVER` for a physics vehicle
   that holds a height over ground and water, driven from its seat. Every mover gets `brake`, water wading or crossing,
-  and drivetrains FWD, RWD, 4WD or a mod's own push ([Movers](docs/modding/movers.md)).
+  drive modes FWD, RWD and 4WD with tyre grip, and a mod's own push in any mode ([Movers](docs/modding/movers.md)).
 - **Movers (SDK 35).** `add_mover` makes HellForge move an entity's units itself: walk or drive, speed, turning on the
   spot or like a vehicle, step heights. `mover_input` drives one from code, and `ai_drive` hands it to the custom AI
   ([Movers](docs/modding/movers.md)).

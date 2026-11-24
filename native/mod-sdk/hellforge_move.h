@@ -14,6 +14,10 @@
 #define HF_MOVE_WALK 1u  /* feet: may step to either side of a block to get round it */
 #define HF_MOVE_DRIVE 2u /* wheels or tracks: goes only where it faces; a block stops it */
 #define HF_MOVE_HOVER 3u /* SDK 36: a vehicle with a physics body, held hover_height over ground or water by pushes */
+/* SDK 36: drivers whose tyres' grip caps how hard they speed up and brake, and which axles push (HF_MOVE_DRIVE: neither) */
+#define HF_MOVE_DRIVE_FWD 4u /* front-wheel drive: its grip falls going uphill, as the load moves back */
+#define HF_MOVE_DRIVE_RWD 5u /* rear-wheel drive: its grip grows going uphill */
+#define HF_MOVE_DRIVE_4WD 6u /* four-wheel drive: all of its weight gives grip */
 
 /* HfMoverDef.turn */
 #define HF_TURN_SPOT 1u    /* turns at turn_rate standing still too (legs, tracks) */
@@ -25,18 +29,16 @@
 #define HF_WATER_CROSS 3u  /* it floats across deep water, at most wade_depth under the surface */
 #define HF_WATER_IGNORE 4u /* water is not looked at: it goes along the bottom (SDK 35's way) */
 
-/* HfMoverDef.drivetrain (SDK 36): which axles push a driver. FWD, RWD and 4WD are also HfMoverState.driven's bits. */
-#define HF_DRIVETRAIN_FWD 1u  /* the front axle: its grip falls going uphill, as the load moves back */
-#define HF_DRIVETRAIN_RWD 2u  /* the rear axle: its grip grows going uphill */
-#define HF_DRIVETRAIN_4WD 3u  /* both: all of its weight gives grip */
-#define HF_DRIVETRAIN_NONE 4u /* HellForge pushes nothing: HfMoverDef.drive gives the push, or it only coasts */
+/* HfMoverState.driven (SDK 36): the axles pushing now, for wheel animation */
+#define HF_AXLE_FRONT 1u
+#define HF_AXLE_REAR 2u
 
-/* HF_DRIVETRAIN_NONE's push, for one update (a mod's own drive code). */
+/* HfMoverDef.drive's push, for one update: a mod's own movement in any mode, in place of HellForge's from the inputs. */
 typedef struct HfMoverPush
 {
     uint32_t size;   /* sizeof(HfMoverPush) */
     float forward;   /* m/s2 along its heading (negative backward) */
-    float side;      /* m/s2 to its left: a hover only */
+    float side;      /* m/s2 to its left: a walker or hover */
     float turn;      /* the turn it wants, radians a second (positive left) */
 } HfMoverPush;
 
@@ -44,12 +46,24 @@ struct HfMoverState;
 /* Called on the host's game thread each update, before HellForge moves the unit. Don't call mover_* from it. */
 typedef void (*HfMoverDriveFn)(HfMod* mod, uint32_t entity, const struct HfMoverState* state, float dt, HfMoverPush* push, void* user);
 
+/* SDK 37: sounds a mover posts on its unit as its state changes: Wwise event ids (hf_wwise_id), 0 none. A loop the
+ * moving or idle event starts is the mod's bank's to end, on the next start or stop event. */
+typedef struct HfMoverSounds
+{
+    uint32_t idle;        /* it comes to rest (with stop), and at its start: an idle loop */
+    uint32_t moving;      /* it sets off (with start): a moving loop */
+    uint32_t start;       /* it sets off */
+    uint32_t stop;        /* it comes to rest */
+    uint32_t boost;       /* a boost begins */
+    uint32_t blocked;     /* a step, wall, slope or water stops it */
+} HfMoverSounds;
+
 /* One entity's way of moving (add_mover). Zero-initialize it and set size and entity; zero fields take the defaults,
  * which hang on the mode (docs/modding/movers.md). A mod built against SDK 35 passes the shorter SDK 35 size. */
 typedef struct HfMoverDef
 {
     uint32_t size;        /* sizeof(HfMoverDef) */
-    uint32_t mode;        /* HF_MOVE_WALK (default), HF_MOVE_DRIVE or HF_MOVE_HOVER */
+    uint32_t mode;        /* HF_MOVE_WALK (default), HF_MOVE_DRIVE, _DRIVE_FWD, _RWD, _4WD or HF_MOVE_HOVER */
     uint64_t entity;      /* the entity resource its units are */
     float speed;          /* top speed forward, m/s (default 4, at most 40) */
     float reverse_speed;  /* top speed backward, m/s (default half of speed; 0 is the default, so give 0.01 for none) */
@@ -65,9 +79,8 @@ typedef struct HfMoverDef
     float brake;          /* m/s2 when it slows down or turns about (default: acceleration) */
     uint32_t water;       /* HF_WATER_WADE (default), _BLOCK, _CROSS or _IGNORE; a hover always crosses */
     float wade_depth;     /* the deepest water it wades, or its draft afloat, metres (default walk 0.8, drive 0.5) */
-    uint32_t drivetrain;  /* HF_MOVE_DRIVE: HF_DRIVETRAIN_...; 0 is SDK 35's way, grip never limits it. Hover: 0 or NONE */
-    float grip;           /* FWD, RWD, 4WD: tyre friction on the ground (default 0.7, dirt and gravel) */
-    HfMoverDriveFn drive; /* HF_DRIVETRAIN_NONE: the mod's own push (NULL: none, it coasts) */
+    float grip;           /* HF_MOVE_DRIVE_FWD, _RWD, _4WD: tyre friction on the ground (default 0.7, dirt and gravel) */
+    HfMoverDriveFn drive; /* any mode: the mod's own push each update instead of HellForge's (NULL: HellForge's) */
     void* drive_user;     /* passed to drive */
     float hover_height;   /* HF_MOVE_HOVER: its root over the ground or water, metres (default 1.5) */
     float carried;        /* hover: the share of its weight its physics data carries already (VRA extraGravity), 0 .. 1 */
@@ -75,9 +88,21 @@ typedef struct HfMoverDef
     float hover_hz;       /* hover: how stiffly it holds its height, Hz (default 1.2) */
     float hover_damping;  /* hover: share of critical damping on its height and tilt (default 0.7) */
     float side_drag;      /* hover: how fast a sideways slide dies, 1/s (default 0.5: it drifts) */
+    /* SDK 37 */
+    float max_slope;      /* the steepest incline it climbs, degrees (default: rising step_up in 1 m, 27 for 0.5 m steps) */
+    float tilt_limit;     /* the most it tilts, degrees: align_to_ground follows slopes to this, a hover is righted past it (default 30) */
+    uint32_t align_to_ground; /* 1: it pitches and rolls with the ground under it; 0 (default): it stays upright, a hover level */
+    float fly_height_min; /* hover: the lowest height lift takes it to, metres (default hover_height) */
+    float fly_height_max; /* hover: the highest, at most 25 (default hover_height: lift does nothing) */
+    float climb_rate;     /* hover: metres a second at full lift (default 2) */
+    float boost_speed;    /* top speed while boosting, m/s (default 0: no boost) */
+    float boost_time;     /* seconds a full boost lasts; it refills in twice that (default 3) */
+    float strafe_speed;   /* walk or hover: top speed sideways at full strafe, m/s (default reverse_speed, hover 5) */
+    HfMoverSounds sounds;
 } HfMoverDef;
 
 #define HF_MOVER_DEF_SIZE_35 ((uint32_t)offsetof(HfMoverDef, brake))
+#define HF_MOVER_DEF_SIZE_36 ((uint32_t)offsetof(HfMoverDef, max_slope))
 
 /* mover_input: what a driver asks of it now. It holds for half a second; call it every update while driving. */
 typedef struct HfMoverInput
@@ -85,7 +110,13 @@ typedef struct HfMoverInput
     uint32_t size;        /* sizeof(HfMoverInput) */
     float throttle;       /* -1 full reverse .. 1 full ahead */
     float steer;          /* -1 full right .. 1 full left */
+    /* SDK 37 (an SDK 35 size drives with the two above) */
+    float strafe;         /* -1 full right .. 1 full left: a walker or hover slides sideways at strafe_speed */
+    float lift;           /* -1 down .. 1 up: a hover's height moves at climb_rate between fly_height_min and _max */
+    float boost;          /* 1 boosts, while its boost lasts (boost_speed); 0 not */
 } HfMoverInput;
+
+#define HF_MOVER_INPUT_SIZE_35 ((uint32_t)offsetof(HfMoverInput, strafe))
 
 /* HfMoverState.status (mover_state's answer) */
 #define HF_MOVER_NONE 0u     /* not a mover's unit, or gone */
@@ -114,8 +145,15 @@ typedef struct HfMoverState
     float height;         /* hover: its root over the ground or water, metres; walkers and drivers 0 */
     float water_depth;    /* water over the ground where it is, metres (0: dry) */
     float grade;          /* the slope it climbs, rise per metre along its heading (negative downhill) */
-    uint32_t driven;      /* HF_DRIVETRAIN_FWD / _RWD bits of the axles pushing now, for wheel animation */
+    uint32_t driven;      /* HF_AXLE_FRONT / _REAR bits of the axles pushing now, for wheel animation */
+    /* SDK 37 */
+    float pitch, roll;    /* radians, nose up and right side down (align_to_ground, or a hover's body) */
+    float boost_left;     /* seconds of boost left */
+    uint32_t boosting;    /* 1 while it boosts */
+    float strafe, lift;   /* the inputs it moves by now */
 } HfMoverState;
+
+#define HF_MOVER_STATE_SIZE_36 ((uint32_t)offsetof(HfMoverState, pitch))
 
 #define HF_MOVER_STATE_SIZE_35 ((uint32_t)offsetof(HfMoverState, height))
 
@@ -130,6 +168,24 @@ typedef struct HfAiDrive
     float hold_radius;        /* it may stray this far from its hold point (default 3) */
     uint32_t nav_preset;      /* the size its routes are found for: HF_NAV_TROOPER (default), HF_NAV_VEHICLE, HF_NAV_VEHICLE_WIDE */
     float arrive_distance;    /* it slows down within this many metres of where it goes (default 3) */
+    /* SDK 37, fighting. An SDK 35 HfAiDrive ends before these and keeps SDK 35's behaviour: it never moves to fight. */
+    float engage_range;       /* it moves onto enemies within this many metres (0: it fires only from where it goes) */
+    float keep_distance;      /* engaging: it stands this far from its target (default 12) */
+    float leash;              /* fighting: it strays at most this far from whom it follows or its hold point (default 25) */
+    float react_time;         /* seconds an enemy stays in range before it moves to engage (default 0.5) */
+    float retreat_health;     /* below this share of its health, 0 .. 1, it retreats from enemies near it (0: never) */
+    uint32_t retreat_style;   /* HF_RETREAT_RUN (default) or HF_RETREAT_FIGHT */
+    uint32_t owner;           /* whose wheel orders it takes: HF_OWNER_ANY (default), HF_OWNER_CALLER or HF_OWNER_CODE */
+    float spacing;            /* it keeps this far from other friendly units, Helldivers aside (0: none) */
 } HfAiDrive;
+
+/* HfAiDrive.retreat_style */
+#define HF_RETREAT_RUN 0u   /* turns away and drives back to whom it follows (or its hold point) */
+#define HF_RETREAT_FIGHT 1u /* backs off the same way facing the enemy, so its turret keeps firing */
+
+/* HfAiDrive.owner: `range` is how near a speaker must be */
+#define HF_OWNER_ANY 0u     /* any Helldiver's Follow me and Hold position */
+#define HF_OWNER_CALLER 1u  /* only its caller's: the Helldiver nearest it when it lands */
+#define HF_OWNER_CODE 2u    /* no wheel orders: only ai_order from the mod */
 
 #endif

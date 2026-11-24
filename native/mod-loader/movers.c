@@ -16,7 +16,7 @@ typedef void (*MvPosFn)(uint32_t unit, int32_t node, const float* position);
 typedef void* (*MvLevelFn)(uint32_t unit);
 typedef float (*MvWaterFn)(void* state, const float* position, void* level);
 
-typedef struct MvDef { HfMod* mod; HfMoverDef def; int ai; float arrive; } MvDef;
+typedef struct MvDef { HfMod* mod; HfMoverDef def; int ai; float arrive, slopeTan; uint32_t axles, asked; } MvDef; /* axles: HF_AXLE_ bits; asked: its mode */
 typedef struct MvUnit
 {
     uint32_t entity, unit, def, started, status, driver;
@@ -24,11 +24,11 @@ typedef struct MvUnit
     uint32_t written, reframed;
     double age, inputAge, sinceSolid, sinceTrace;
     uint32_t mobile[32], mobileCount, blockedLogged;
-    float height, waterDepth, grade;
-    uint32_t driven;
+    float height, waterDepth, grade, climb, pitch, roll, side, strafe, lift, boost, boostLeft, targetHeight;
+    uint32_t driven, boosting, wasMoving, wasBlocked, sounded;
     /* hover (movers_hover.c) */
     uint32_t body, engaged, told;
-    float lost, seatThrottle, seatSteer;
+    float lost, lastSurface, seatThrottle, seatSteer;
     double seatAge, sinceLog;
 } MvUnit;
 
@@ -45,6 +45,7 @@ static DWORD g_mvPushThread; /* the game thread while a mod's drive function run
 
 static float MvWrap(float a) { while (a > 3.14159265f) a -= 6.2831853f; while (a < -3.14159265f) a += 6.2831853f; return a; }
 static float MvClamp(float v, float lo, float hi) { return v < lo ? lo : v > hi ? hi : v; }
+static float MvToward(float v, float want, float dv) { return want > v + dv ? v + dv : want < v - dv ? v - dv : want; }
 
 static MvUnit* MvUnitOf(uint32_t entity)
 {
@@ -95,6 +96,30 @@ static int MvGround(const MvUnit* m, const HfMoverDef* d, float x, float y, floa
     if (MvRay(m, sky, here, &g) && g > z + 0.5f) { *out = g; return 1; }
     *out = z;
     return 1;
+}
+
+/* A sound on the unit, as abilities post theirs (abilities.c: its game.dll base is set once anything posts). */
+static void MvSound(uint32_t entity, uint32_t event)
+{
+    if (event == 0) return;
+    if (!g_ablGame) g_ablGame = ApiModuleBase("game.dll", NULL);
+    if (!g_bhvGame) g_bhvGame = g_ablGame;
+    if (g_ablGame) AbilitySound(entity, event);
+}
+
+/* Start, stop and blocked sounds on its state's changes; the idle sound once at its start. */
+static void MvSounds(MvUnit* m, const HfMoverSounds* s)
+{
+    const uint32_t moving = fabsf(m->speed) > 0.3f || fabsf(m->side) > 0.3f, blocked = m->status == HF_MOVER_BLOCKED;
+    if (!m->sounded) { m->sounded = 1; m->wasMoving = moving; MvSound(m->entity, moving ? s->moving : s->idle); }
+    else if (moving != m->wasMoving)
+    {
+        m->wasMoving = moving;
+        MvSound(m->entity, moving ? s->start : s->stop);
+        MvSound(m->entity, moving ? s->moving : s->idle);
+    }
+    if (blocked && !m->wasBlocked) MvSound(m->entity, s->blocked);
+    m->wasBlocked = blocked;
 }
 
 /* The water surface over (x, y), or -500 for none (or no reviewed water query). */
@@ -150,8 +175,9 @@ static int MvWall(const MvUnit* m, const HfMoverDef* d, float ux, float uy, floa
 
 /* One step of `step` metres (negative: backward) along its heading; a walker also tries 35, 70 and 105 degrees to either
  * side. 1 moved. */
-static int MvStep(MvUnit* m, const HfMoverDef* d, float step)
+static int MvStep(MvUnit* m, const MvDef* def, float step)
 {
+    const HfMoverDef* d = &def->def;
     static const float kTry[] = {0.0f, 0.61f, -0.61f, 1.22f, -1.22f, 1.83f, -1.83f};
     const unsigned tries = d->mode == HF_MOVE_WALK && step > 0 ? 7u : 1u;
     const float fx = -sinf(m->yaw), fy = cosf(m->yaw), sign = step < 0 ? -1.0f : 1.0f, len = fabsf(step);
@@ -161,11 +187,42 @@ static int MvStep(MvUnit* m, const HfMoverDef* d, float step)
         const float ux = (fx * c - fy * s) * sign, uy = (fx * s + fy * c) * sign;
         float g;
         if (MvWall(m, d, ux, uy, len) || !MvSurface(m, d, m->pos[0] + ux * len, m->pos[1] + uy * len, m->pos[2], &g)) continue;
-        m->grade = 0.8f * m->grade + 0.2f * MvClamp((g - m->pos[2]) / step, -3, 3); /* smoothed: steps are uneven */
+        /* a slope is a long incline, a step a sudden rise: the incline is smoothed over steps, so a step passes */
+        const float climb = 0.8f * m->climb + 0.2f * MvClamp((g - m->pos[2]) / len, -3, 3);
+        if (climb > def->slopeTan) continue;
+        m->climb = climb;
+        m->grade = 0.8f * m->grade + 0.2f * MvClamp((g - m->pos[2]) / step, -3, 3);
         m->pos[0] += ux * len; m->pos[1] += uy * len; m->pos[2] = g;
         return 1;
     }
     return 0;
+}
+
+/* A sideways slide of `dist` metres (positive: left), for strafing: no side tries, no slope beyond max_slope. */
+static void MvSlide(MvUnit* m, const MvDef* def, float dist)
+{
+    const float ux = -cosf(m->yaw) * (dist < 0 ? -1.0f : 1.0f), uy = -sinf(m->yaw) * (dist < 0 ? -1.0f : 1.0f), len = fabsf(dist);
+    float g;
+    if (len < 0.0005f || MvWall(m, &def->def, ux, uy, len) || !MvSurface(m, &def->def, m->pos[0] + ux * len, m->pos[1] + uy * len, m->pos[2], &g) ||
+        (g - m->pos[2]) / len > def->slopeTan)
+    { m->side = 0; return; }
+    m->pos[0] += ux * len; m->pos[1] += uy * len; m->pos[2] = g;
+}
+
+/* align_to_ground: pitch and roll from the ground half a metre ahead, behind and to either side, within tilt_limit. */
+static void MvAlign(MvUnit* m, const HfMoverDef* d)
+{
+    const float fx = -sinf(m->yaw), fy = cosf(m->yaw), lim = d->tilt_limit * 0.0174533f;
+    float z[4];
+    static const float kAt[4][2] = {{0.5f, 0}, {-0.5f, 0}, {0, 0.5f}, {0, -0.5f}}; /* ahead, behind, left, right */
+    for (int i = 0; i < 4; i++)
+    {
+        const float x = m->pos[0] + fx * kAt[i][0] - fy * kAt[i][1], y = m->pos[1] + fy * kAt[i][0] + fx * kAt[i][1];
+        const float top[3] = {x, y, m->pos[2] + 1.2f}, low[3] = {x, y, m->pos[2] - 2.0f};
+        if (!MvRay(m, top, low, &z[i])) z[i] = m->pos[2];
+    }
+    m->pitch += (MvClamp(atanf(z[0] - z[1]), -lim, lim) - m->pitch) * 0.3f;
+    m->roll += (MvClamp(atanf(z[2] - z[3]), -lim, lim) - m->roll) * 0.3f;
 }
 
 /* The moving units around it (Helldivers, enemies, other movers), which its rays pass. */
@@ -228,12 +285,17 @@ static int MvKeepFrame(MvUnit* m, const MvDef* def)
 /* Written only when it moved or turned: a root held still is left to its parent, as the game holds it. */
 static void MvSetRoot(MvUnit* m)
 {
-    if (m->written && m->put[0] == m->pos[0] && m->put[1] == m->pos[1] && m->put[2] == m->pos[2] && m->put[3] == m->yaw) return;
-    memcpy(m->put, m->pos, 12); m->put[3] = m->yaw; m->written = 1;
+    const float tilt = m->pitch * 3.0f + m->roll; /* any change of either */
+    if (m->written && m->put[0] == m->pos[0] && m->put[1] == m->pos[1] && m->put[2] == m->pos[2] && m->put[3] == m->yaw + tilt) return;
+    memcpy(m->put, m->pos, 12); m->put[3] = m->yaw + tilt; m->written = 1;
     const float d[3] = {m->pos[0] - m->par[3][0], m->pos[1] - m->par[3][1], m->pos[2] - m->par[3][2]};
     float local[3];
     for (int i = 0; i < 3; i++) local[i] = d[0] * m->par[i][0] + d[1] * m->par[i][1] + d[2] * m->par[i][2];
-    const float h = (m->yaw - m->parYaw) * 0.5f, q[4] = {0.0f, 0.0f, sinf(h), cosf(h)};
+    /* heading, then pitch about its right axis, then roll about its forward axis (x, y, z, w) */
+    const float h = (m->yaw - m->parYaw) * 0.5f, p = m->pitch * 0.5f, r = m->roll * 0.5f;
+    const float zw = cosf(h), zz = sinf(h), px = sinf(p), pw = cosf(p), ry = sinf(r), rw = cosf(r);
+    const float a[4] = {zw * px, zz * px, zz * pw, zw * pw}; /* yaw x pitch */
+    const float q[4] = {a[0] * rw - a[2] * ry, a[3] * ry + a[1] * rw, a[2] * rw + a[0] * ry, a[3] * rw - a[1] * ry};
     g_mvPos(m->unit, 0, local);
     g_mvRot(m->unit, 0, q);
 }
@@ -249,21 +311,23 @@ static void MvAiInputs(MvUnit* m, const MvDef* def)
     if (!AiDrivePoint(m->entity, point, &status) || (status != HF_AI_MOVING && status != HF_AI_DETOUR)) return;
     const float dx = point[0] - m->pos[0], dy = point[1] - m->pos[1], dist = sqrtf(dx * dx + dy * dy);
     if (dist < 0.3f) return;
-    const float err = MvWrap(atan2f(-dx, dy) - m->yaw), spot = 0.6f;
-    const float close = MvClamp(dist / def->arrive, 0.25f, 1.0f);
+    /* backing off: it faces away from the point (toward the enemy) and drives in reverse */
+    const float back = AcReversing(m->entity) ? -1.0f : 1.0f;
+    const float err = MvWrap(atan2f(-dx * back, dy * back) - m->yaw), spot = 0.6f;
+    const float close = MvClamp(dist / def->arrive, 0.25f, 1.0f) * back;
     if (def->def.turn == HF_TURN_SPOT)
     {
         m->steer = MvClamp(err / spot, -1.0f, 1.0f);
         m->throttle = fabsf(err) > spot ? 0.0f : close * (1.0f - fabsf(err) / (spot * 2.0f));
         return;
     }
-    m->steer = MvClamp(err / 0.5f, -1.0f, 1.0f);
-    m->throttle = fabsf(err) > 1.7f ? 0.35f : close; /* behind it: a slow wide turn */
+    m->steer = MvClamp(err / 0.5f * back, -1.0f, 1.0f); /* in reverse a wheeled steer turns the nose the other way */
+    m->throttle = fabsf(err) > 1.7f ? 0.35f * back : close; /* behind it: a slow wide turn */
 }
 
 static void MvSnapshot(const MvUnit* m, HfMoverState* s);
 
-/* HF_DRIVETRAIN_NONE: the mod's push for this update (zero without a drive function). */
+/* HfMoverDef.drive's push for this update. */
 static HfMoverPush MvPush(MvUnit* m, const MvDef* def, float dt)
 {
     HfMoverPush push = {sizeof push, 0, 0, 0};
@@ -286,57 +350,86 @@ static float MvRate(const HfMoverDef* d, float speed)
 
 /* A driven axle's share of the weight on a grade. The load moves to the rear by about (centre of mass height /
  * wheelbase) x (a/g + sin slope), 0.25 x for a car, so a rear drive climbs best and a front drive worst. */
-static float MvDrivenShare(uint32_t drivetrain, float grade, float accel)
+static float MvDrivenShare(uint32_t axles, float grade, float accel)
 {
     const float rear = MvClamp(0.5f + 0.25f * (accel / MV_G + grade / sqrtf(1 + grade * grade)), 0.1f, 0.9f);
-    return drivetrain == HF_DRIVETRAIN_4WD ? 1.0f : drivetrain == HF_DRIVETRAIN_RWD ? rear : 1.0f - rear;
+    return axles == (HF_AXLE_FRONT | HF_AXLE_REAR) ? 1.0f : axles == HF_AXLE_REAR ? rear : 1.0f - rear;
 }
 
 /* The speed after dt toward `want`: acceleration speeding up, brake slowing down or turning about. With a drivetrain,
  * the tyres' grip caps both, and a grade adds gravity's pull along it. */
-static float MvSpeedToward(const MvUnit* m, const HfMoverDef* d, float want, float dt)
+static float MvSpeedToward(const MvUnit* m, const MvDef* def, float want, float top, float dt)
 {
+    const HfMoverDef* d = &def->def;
     const float v = m->speed;
     const int slowing = fabsf(want) < fabsf(v) || want * v < 0;
     float a = slowing ? d->brake : d->acceleration;
-    if (d->mode == HF_MOVE_DRIVE && d->drivetrain >= HF_DRIVETRAIN_FWD && d->drivetrain <= HF_DRIVETRAIN_4WD)
+    if (def->axles)
     {
         const float c = 1.0f / sqrtf(1 + m->grade * m->grade), dir = want > v ? 1.0f : -1.0f;
         const float grip = d->grip * MV_G * c; /* every wheel brakes; only the driven ones push */
-        a = slowing ? fminf(a, grip) : fminf(a, grip * MvDrivenShare(d->drivetrain, m->grade * dir, a * dir));
+        a = slowing ? fminf(a, grip) : fminf(a, grip * MvDrivenShare(def->axles, m->grade * dir, a * dir));
         a -= MV_G * m->grade * c * dir; /* uphill takes some of it, downhill adds */
         if (a < 0 && fabsf(v) < 0.05f) return 0; /* too steep for its grip: it holds where it is */
     }
     const float dv = a * dt; /* negative when a grade beats its grip or brakes: it loses ground or runs away downhill */
-    return MvClamp(want > v + dv ? v + dv : want < v - dv ? v - dv : want, -d->reverse_speed, d->speed);
+    return MvClamp(MvToward(v, want, dv), -d->reverse_speed, top);
 }
 
-/* Speed and heading from the inputs (or a mod's push), then the step over the ground. */
-static void MvDrive(MvUnit* m, const MvDef* def, float dt)
+/* Boost: boost_speed while the input holds and some is left; it refills at half the rate it is used. */
+static float MvTop(MvUnit* m, const HfMoverDef* d, float dt)
 {
-    const HfMoverDef* d = &def->def;
-    if (d->drivetrain == HF_DRIVETRAIN_NONE)
-    {
-        const HfMoverPush push = MvPush(m, def, dt);
-        const float rate = fabsf(MvRate(d, m->speed));
-        m->speed = MvClamp(m->speed + push.forward * dt, -d->reverse_speed, d->speed);
-        m->turning = MvClamp(push.turn, -rate, rate);
-    }
-    else
-    {
-        m->speed = MvSpeedToward(m, d, m->throttle >= 0 ? m->throttle * d->speed : m->throttle * d->reverse_speed, dt);
-        m->turning = m->steer * MvRate(d, m->speed);
-    }
-    m->driven = d->mode == HF_MOVE_DRIVE && d->drivetrain <= HF_DRIVETRAIN_4WD && fabsf(m->throttle) > 0.02f ? d->drivetrain : 0;
-    m->yaw = MvWrap(m->yaw + m->turning * dt);
-    m->status = HF_MOVER_MOVING;
-    if (fabsf(m->speed * dt) < 0.0005f) return;
-    if (MvStep(m, d, m->speed * dt)) { m->blockedLogged = 0; return; }
+    const int was = m->boosting;
+    m->boosting = d->boost_speed > 0 && m->boost > 0.5f && m->boostLeft > 0 && m->throttle > 0.05f;
+    m->boostLeft = m->boosting ? m->boostLeft - dt : fminf(d->boost_time, m->boostLeft + dt * 0.5f);
+    if (m->boosting && !was) MvSound(m->entity, d->sounds.boost);
+    return m->boosting ? d->boost_speed : d->speed;
+}
+
+static void MvBlocked(MvUnit* m, const MvDef* def)
+{
     m->speed = 0;
     m->status = HF_MOVER_BLOCKED;
     if (m->blockedLogged++ == 0)
-        ApiLog(def->mod, "mover: unit %u blocked at %.1f %.1f %.1f (a step it can't take, a wall, or water too deep)", m->entity,
+        ApiLog(def->mod, "mover: unit %u blocked at %.1f %.1f %.1f (a step it can't take, a wall, a slope or water too deep)", m->entity,
             (double)m->pos[0], (double)m->pos[1], (double)m->pos[2]);
+}
+
+/* A walker's sideways speed toward strafe x strafe_speed, then its slide. */
+static void MvStrafe(MvUnit* m, const MvDef* def, float dt)
+{
+    const HfMoverDef* d = &def->def;
+    const float want = m->strafe * d->strafe_speed, dv = (fabsf(want) > fabsf(m->side) ? d->acceleration : d->brake) * dt;
+    m->side = MvToward(m->side, want, dv);
+    MvSlide(m, def, m->side * dt);
+}
+
+/* Speed and heading from the inputs (or a mod's push), then the step over the ground and a walker's sideways slide. */
+static void MvDrive(MvUnit* m, const MvDef* def, float dt)
+{
+    const HfMoverDef* d = &def->def;
+    const float top = MvTop(m, d, dt);
+    if (d->drive != NULL)
+    {
+        const HfMoverPush push = MvPush(m, def, dt);
+        const float rate = fabsf(MvRate(d, m->speed));
+        m->speed = MvClamp(m->speed + push.forward * dt, -d->reverse_speed, top);
+        m->turning = MvClamp(push.turn, -rate, rate);
+        if (d->mode == HF_MOVE_WALK) m->side = MvClamp(m->side + push.side * dt, -d->strafe_speed, d->strafe_speed);
+    }
+    else
+    {
+        m->speed = MvSpeedToward(m, def, m->throttle >= 0 ? m->throttle * top : m->throttle * d->reverse_speed, top, dt);
+        m->turning = m->steer * MvRate(d, m->speed);
+    }
+    m->driven = fabsf(m->throttle) > 0.02f ? def->axles : 0;
+    m->yaw = MvWrap(m->yaw + m->turning * dt);
+    m->status = HF_MOVER_MOVING;
+    if (d->mode == HF_MOVE_WALK && d->drive == NULL) MvStrafe(m, def, dt);
+    else if (d->mode == HF_MOVE_WALK) MvSlide(m, def, m->side * dt);
+    if (fabsf(m->speed * dt) >= 0.0005f && !MvStep(m, def, m->speed * dt)) MvBlocked(m, def);
+    else m->blockedLogged = 0;
+    if (d->align_to_ground) MvAlign(m, d);
 }
 
 /* Its first half minute every 2 s: where HellForge puts its root against where the game shows it, to see a move go wrong. */
@@ -357,8 +450,9 @@ static void MvTrace(MvUnit* m, const MvDef* def, float dt)
 /* Who drives it now: a mod's input while it holds, a hover's seated driver, the custom AI, or nobody. */
 static void MvDriver(MvUnit* m, const MvDef* def)
 {
-    if (m->inputAge < MV_INPUT_S) m->driver = HF_DRIVER_MOD;
-    else if (def->def.mode == HF_MOVE_HOVER && m->seatAge < HV_SEAT_S) { m->driver = HF_DRIVER_SEAT; m->throttle = m->seatThrottle; m->steer = m->seatSteer; }
+    if (m->inputAge < MV_INPUT_S) { m->driver = HF_DRIVER_MOD; return; }
+    m->strafe = m->lift = m->boost = 0; /* only a mod's input has them (a seat's keys come with seat driving) */
+    if (def->def.mode == HF_MOVE_HOVER && m->seatAge < HV_SEAT_S) { m->driver = HF_DRIVER_SEAT; m->throttle = m->seatThrottle; m->steer = m->seatSteer; }
     else if (def->ai) { m->driver = HF_DRIVER_AI; MvAiInputs(m, def); }
     else { m->driver = HF_DRIVER_NONE; m->throttle = 0; m->steer = 0; }
 }
@@ -394,6 +488,7 @@ static void MvUnitTick(MvUnit* m, float dt)
     }
     MvDriver(m, def);
     MvDrive(m, def, dt);
+    MvSounds(m, &def->def.sounds);
     MvSetRoot(m);
     MvTrace(m, def, dt);
 }
@@ -445,7 +540,14 @@ static void MvSpawned(HfMod* mod, const HfSpawnEvent* e, void* user)
         if (g_mvDefs[d].def.entity != e->resource || (!e->authority && g_mvDefs[d].def.mode != HF_MOVE_HOVER)) continue;
         AcquireSRWLockExclusive(&g_mvLock);
         for (int i = 0; i < MV_UNITS; i++)
-            if (!g_mvUnits[i].entity) { memset(&g_mvUnits[i], 0, sizeof g_mvUnits[i]); g_mvUnits[i].entity = e->entity; g_mvUnits[i].def = (uint32_t)d + 1; break; }
+            if (!g_mvUnits[i].entity)
+            {
+                MvUnit* m = &g_mvUnits[i];
+                memset(m, 0, sizeof *m);
+                m->entity = e->entity; m->def = (uint32_t)d + 1;
+                m->boostLeft = g_mvDefs[d].def.boost_time; m->targetHeight = g_mvDefs[d].def.hover_height;
+                break;
+            }
         ReleaseSRWLockExclusive(&g_mvLock);
         return;
     }
@@ -509,7 +611,7 @@ static void MvDefaults(HfMoverDef* d)
     MvOr(&d->reverse_speed, d->speed * (hover ? 0.7f : 0.5f));
     MvOr(&d->acceleration, hover ? 3.0f : 8.0f);
     MvOr(&d->brake, d->acceleration);
-    MvOr(&d->wade_depth, d->mode == HF_MOVE_DRIVE ? 0.5f : 0.8f); /* an SUV's wading depth; a person's mid-thigh */
+    MvOr(&d->wade_depth, d->mode == HF_MOVE_WALK || hover ? 0.8f : 0.5f); /* an SUV's wading depth; a person's mid-thigh */
     MvOr(&d->grip, 0.7f);
     MvOr(&d->hover_height, 1.5f);
     MvOr(&d->mass, 3000.0f);
@@ -521,6 +623,13 @@ static void MvDefaults(HfMoverDef* d)
     MvOr(&d->step_up, 0.5f);
     MvOr(&d->step_down, 1.0f);
     MvOr(&d->reach, 0.6f);
+    MvOr(&d->max_slope, atanf(d->step_up) * 57.29578f); /* step_up risen over 1 m */
+    MvOr(&d->tilt_limit, 30.0f);
+    MvOr(&d->fly_height_min, d->hover_height);
+    MvOr(&d->fly_height_max, d->hover_height);
+    MvOr(&d->climb_rate, 2.0f);
+    MvOr(&d->boost_time, 3.0f);
+    MvOr(&d->strafe_speed, hover ? 5.0f : d->reverse_speed);
 }
 
 static const char* MvRefusal(const HfMoverDef* in, HfMoverDef* d)
@@ -528,15 +637,19 @@ static const char* MvRefusal(const HfMoverDef* in, HfMoverDef* d)
     if (in == NULL || in->size < HF_MOVER_DEF_SIZE_35 || in->entity == 0) return "no HfMoverDef, its size or its entity";
     memset(d, 0, sizeof *d);
     memcpy(d, in, in->size < sizeof *d ? in->size : sizeof *d);
-    if (in->size < sizeof *d) d->water = HF_WATER_IGNORE; /* an SDK 35 mover keeps walking along the bottom */
+    if (in->size < HF_MOVER_DEF_SIZE_36) d->water = HF_WATER_IGNORE; /* an SDK 35 mover keeps walking along the bottom */
+    if (in->size < sizeof *d) d->max_slope = 90.0f;                  /* and an older one climbs any slope its steps allow */
     MvDefaults(d);
-    if (d->mode > HF_MOVE_HOVER || d->turn > HF_TURN_VEHICLE || d->water > HF_WATER_IGNORE || d->drivetrain > HF_DRIVETRAIN_NONE)
-        return "mode WALK, DRIVE or HOVER, turn SPOT or VEHICLE, water WADE .. IGNORE, drivetrain 0 .. NONE";
-    if (d->mode == HF_MOVE_HOVER && d->drivetrain && d->drivetrain != HF_DRIVETRAIN_NONE) return "a hover has no driven wheels: drivetrain 0 or NONE";
+    if (d->mode > HF_MOVE_DRIVE_4WD || d->turn > HF_TURN_VEHICLE || d->water > HF_WATER_IGNORE)
+        return "mode WALK, DRIVE (_FWD, _RWD, _4WD) or HOVER, turn SPOT or VEHICLE, water WADE .. IGNORE";
     if (!AiIn(d->brake, 0.1f, 200) || !AiIn(d->wade_depth, 0, 20) || !AiIn(d->grip, 0.05f, 2) || !AiIn(d->hover_height, 0.2f, 20) ||
         !AiIn(d->carried, 0, 1) || !AiIn(d->mass, 50, 200000) || !AiIn(d->hover_hz, 0.2f, 5) || !AiIn(d->hover_damping, 0.1f, 2) ||
         !AiIn(d->side_drag, 0, 20))
         return "brake 0.1 .. 200, wade_depth 0 .. 20, grip 0.05 .. 2, hover_height 0.2 .. 20, carried 0 .. 1, mass 50 .. 200000, hover_hz 0.2 .. 5, hover_damping 0.1 .. 2, side_drag 0 .. 20";
+    if (!AiIn(d->max_slope, 1, 90) || !AiIn(d->tilt_limit, 1, 90) || d->align_to_ground > 1 || !AiIn(d->fly_height_min, 0.2f, 25) ||
+        !AiIn(d->fly_height_max, d->fly_height_min, 25) || !AiIn(d->hover_height, d->fly_height_min, d->fly_height_max) ||
+        !AiIn(d->climb_rate, 0.1f, 50) || !AiIn(d->boost_speed, 0, 60) || !AiIn(d->boost_time, 0.1f, 600) || !AiIn(d->strafe_speed, 0, 40))
+        return "max_slope 1 .. 90, tilt_limit 1 .. 90, align_to_ground 0 or 1, fly heights 0.2 .. 25 round hover_height, climb_rate 0.1 .. 50, boost_speed 0 .. 60, boost_time 0.1 .. 600, strafe_speed 0 .. 40";
     if (!AiIn(d->speed, 0.1f, 40) || !AiIn(d->reverse_speed, 0, 40) || !AiIn(d->acceleration, 0.1f, 200) || !AiIn(d->turn_rate, 1, 1440) ||
         !AiIn(d->turn_radius, 0.1f, 100) || !AiIn(d->step_up, 0, 10) || !AiIn(d->step_down, 0, 50) || !AiIn(d->reach, 0, 20) ||
         !AiIn(d->start_delay, 0, 120))
@@ -555,11 +668,14 @@ static int ApiAddMover(HfMod* mod, const HfMoverDef* in)
         if (g_mvDefs[i].def.entity == d.entity) { ApiLog(mod, "add_mover(%016llx): refused: it has a mover already", (unsigned long long)d.entity); return 1; }
     LONG at = InterlockedIncrement(&g_mvDefCount) - 1;
     if (at >= MV_DEFS) { InterlockedDecrement(&g_mvDefCount); ApiLog(mod, "add_mover: refused: %d movers already", MV_DEFS); return 1; }
-    g_mvDefs[at] = (MvDef){mod, d, 0, 3.0f};
-    static const char* const kMode[] = {"", "walks", "drives", "hovers"}, * const kWater[] = {"", "wades", "stays dry", "floats", "ignores water"};
-    ApiLog(mod, "add_mover(%016llx): %s, %.1f m/s (%.1f back), %s at %.0f deg/s, brakes %.1f m/s2, %s (%.2f m), drivetrain %u", (unsigned long long)d.entity,
-        kMode[d.mode], (double)d.speed, (double)d.reverse_speed, d.turn == HF_TURN_VEHICLE ? "turns like a vehicle" : "turns on the spot",
-        (double)d.turn_rate, (double)d.brake, d.mode == HF_MOVE_HOVER ? "crosses water" : kWater[d.water], (double)d.wade_depth, d.drivetrain);
+    static const uint32_t kAxles[] = {0, 0, 0, 0, HF_AXLE_FRONT, HF_AXLE_REAR, HF_AXLE_FRONT | HF_AXLE_REAR};
+    const uint32_t asked = d.mode;
+    if (d.mode >= HF_MOVE_DRIVE_FWD) d.mode = HF_MOVE_DRIVE; /* one driver from here on, with its axles */
+    g_mvDefs[at] = (MvDef){mod, d, 0, 3.0f, d.max_slope >= 89.9f ? 1e9f : tanf(d.max_slope * 0.0174533f), kAxles[asked], asked};
+    static const char* const kMode[] = {"", "walks", "drives", "hovers", "drives (FWD)", "drives (RWD)", "drives (4WD)"}, * const kWater[] = {"", "wades", "stays dry", "floats", "ignores water"};
+    ApiLog(mod, "add_mover(%016llx): %s, %.1f m/s (%.1f back), %s at %.0f deg/s, brakes %.1f m/s2, %s (%.2f m)%s", (unsigned long long)d.entity,
+        kMode[asked], (double)d.speed, (double)d.reverse_speed, d.turn == HF_TURN_VEHICLE ? "turns like a vehicle" : "turns on the spot",
+        (double)d.turn_rate, (double)d.brake, d.mode == HF_MOVE_HOVER ? "crosses water" : kWater[d.water], (double)d.wade_depth, d.drive ? ", its own push" : "");
     if (d.mode == HF_MOVE_HOVER)
         ApiLog(mod, "add_mover(%016llx): hovers %.2f m up, %.0f kg (%.0f%% carried by its data), %.1f Hz", (unsigned long long)d.entity,
             (double)d.hover_height, (double)d.mass, (double)(d.carried * 100), (double)d.hover_hz);
@@ -571,10 +687,18 @@ static int ApiAddMover(HfMod* mod, const HfMoverDef* in)
 /* SDK 35, mover_input: a driver's throttle and steer for the next half second. Game thread, on the host. 0 taken. */
 static int ApiMoverInput(HfMod* mod, uint32_t entity, const HfMoverInput* in)
 {
-    if (!WcGameThread(mod, "mover_input") || in == NULL || in->size < sizeof *in || g_mvPushThread == GetCurrentThreadId()) return 1;
+    if (!WcGameThread(mod, "mover_input") || in == NULL || in->size < HF_MOVER_INPUT_SIZE_35 || g_mvPushThread == GetCurrentThreadId()) return 1;
+    HfMoverInput all;
+    memset(&all, 0, sizeof all);
+    memcpy(&all, in, in->size < sizeof all ? in->size : sizeof all);
+    in = &all;
     AcquireSRWLockExclusive(&g_mvLock);
     MvUnit* m = MvUnitOf(entity);
-    if (m != NULL) { m->throttle = MvClamp(in->throttle, -1, 1); m->steer = MvClamp(in->steer, -1, 1); m->inputAge = 0; }
+    if (m != NULL)
+    {
+        m->throttle = MvClamp(in->throttle, -1, 1); m->steer = MvClamp(in->steer, -1, 1); m->inputAge = 0;
+        m->strafe = MvClamp(in->strafe, -1, 1); m->lift = MvClamp(in->lift, -1, 1); m->boost = MvClamp(in->boost, 0, 1);
+    }
     ReleaseSRWLockExclusive(&g_mvLock);
     return m == NULL;
 }
@@ -589,6 +713,7 @@ static void MvSnapshot(const MvUnit* m, HfMoverState* s)
     memcpy(s->position, m->pos, 12);
     s->yaw = m->yaw; s->speed = m->speed; s->turning = m->turning; s->throttle = m->throttle; s->steer = m->steer;
     s->height = m->height; s->water_depth = m->waterDepth; s->grade = m->grade; s->driven = m->driven;
+    s->pitch = m->pitch; s->roll = m->roll; s->boost_left = m->boostLeft; s->boosting = m->boosting; s->strafe = m->strafe; s->lift = m->lift;
 }
 
 /* SDK 35, mover_state: how a mover's unit moves (HF_MOVER_...). Any thread; an SDK 35 size gets SDK 35's fields. */
@@ -600,7 +725,8 @@ static uint32_t ApiMoverState(HfMod* mod, uint32_t entity, HfMoverState* state)
     AcquireSRWLockShared(&g_mvLock);
     MvSnapshot(MvUnitOf(entity), &s);
     ReleaseSRWLockShared(&g_mvLock);
-    const uint32_t n = state == NULL ? 0 : state->size >= sizeof s ? (uint32_t)sizeof s : state->size >= HF_MOVER_STATE_SIZE_35 ? HF_MOVER_STATE_SIZE_35 : 0;
+    const uint32_t n = state == NULL ? 0 : state->size >= sizeof s ? (uint32_t)sizeof s : state->size >= HF_MOVER_STATE_SIZE_36 ? HF_MOVER_STATE_SIZE_36
+        : state->size >= HF_MOVER_STATE_SIZE_35 ? HF_MOVER_STATE_SIZE_35 : 0;
     s.size = n;
     if (n) memcpy(state, &s, n);
     return s.status;
@@ -609,7 +735,9 @@ static uint32_t ApiMoverState(HfMod* mod, uint32_t entity, HfMoverState* state)
 /* SDK 35, ai_drive: the custom AI drives the mover of `entity` (add_mover first). Any time. 0 done, 1 refused. */
 static int ApiAiDrive(HfMod* mod, uint64_t entity, const HfAiDrive* in)
 {
-    if (in == NULL || in->size < sizeof *in) { ApiLog(mod, "ai_drive: refused: no HfAiDrive or its size"); return 1; }
+    if (in == NULL || in->size < offsetof(HfAiDrive, engage_range)) { ApiLog(mod, "ai_drive: refused: no HfAiDrive or its size"); return 1; }
+    const char* fight = AcSet(entity, in);
+    if (fight) { ApiLog(mod, "ai_drive(%016llx): refused: %s", (unsigned long long)entity, fight); return 1; }
     LONG d = 0;
     while (d < g_mvDefCount && g_mvDefs[d].def.entity != entity) d++;
     if (d == g_mvDefCount) { ApiLog(mod, "ai_drive(%016llx): refused: add_mover it first", (unsigned long long)entity); return 1; }
