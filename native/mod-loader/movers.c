@@ -29,7 +29,8 @@ typedef struct MvUnit
     /* hover (movers_hover.c) */
     uint32_t body, engaged, told;
     float lost, lastSurface, seatThrottle, seatSteer;
-    double seatAge, sinceLog;
+    uint32_t loggedDriver;
+    double seatAge, sinceLog, logUntil;
 } MvUnit;
 
 static MvDef g_mvDefs[MV_DEFS];
