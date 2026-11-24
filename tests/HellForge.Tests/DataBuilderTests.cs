@@ -122,7 +122,14 @@ static class DataBuilderTests
             check(Sha(raw[new(ResourceTypes.Material, name)].Main) == "45202ECCE7AAF6F05F15806F796B822A101554FE8D2D2BA263ABFEC4E3831526", "The icon material differs from icon_material.");
             check(Sha(IconImage.Family(png, name, "auto")[new(ResourceTypes.Texture, name)].Gpu) == "23274C266E4B87E5006E1D88717706839AB4A26F495B95B0C35099DFAB1970C6",
                 "The converted icon masks differ from icon_masks.");
-            reject(() => IconImage.Family(Png(new byte[64 * 64 * 4], 64), name));
+            reject(() => IconImage.Family(Png(new byte[48 * 48 * 4], 48), name));
+            reject(() => IconImage.Family(Png(new byte[16 * 16 * 4], 16), name));
+            reject(() => IconImage.Family(Png(new byte[300 * 64 * 4], 300, 64), name));
+            // An item silhouette: a wide power-of-two icon, its full chain down to 1 x 1 (10 levels for 512 x 128).
+            var wide = IconImage.Family(Png(new byte[512 * 128 * 4], 512, 128), name)[new(ResourceTypes.Texture, name)];
+            var wideBytes = Enumerable.Range(0, 10).Sum(level => Math.Max(1, Math.Max(1, 512 >> level) / 4) * Math.Max(1, Math.Max(1, 128 >> level) / 4) * 8);
+            check(BitConverter.ToInt32(wide.Main, 0xC4 + 12) == 512 && BitConverter.ToInt32(wide.Main, 0xC4 + 8) == 128 &&
+                BitConverter.ToInt32(wide.Main, 0xC4 + 24) == 10 && wide.Gpu.Length == wideBytes, "A 512 x 128 icon is not that size with its 10 mips.");
             // "image": BC3 (DXGI 77, as the UI atlas pages) with the full mip chain; transparency kept.
             var image = IconImage.Family(png, name, "image")[new(ResourceTypes.Texture, name)];
             var mipBytes = Enumerable.Range(0, 9).Sum(level => Math.Max(1, (256 >> level) / 4) * Math.Max(1, (256 >> level) / 4) * 16);
@@ -1110,6 +1117,12 @@ static class DataBuilderTests
             var patchedPlan = ModLoaderPlan.Text([patched with { Packages = [new("test/mod/pkg", 1, true)] }], Path.Combine(root, "package-archives"), EntityProfile.Current, "25480438");
             check(patchedPlan.Contains("archive\ttest.package\t49fd919a67a5db66\n") && patchedPlan.Contains("archive\ttest.package\tdbd9381f9ea9788f\n"),
                 "The plan does not name the patched archives: " + patchedPlan);
+            // a loader mod's built icons are named to the loader, the only ones an EncyclopediaEntry.icon edit may name
+            Directory.CreateDirectory(Path.Combine(folder, "icons"));
+            File.WriteAllBytes(Path.Combine(folder, "icons/rifle.png"), [1]);
+            Spec("""{"archives":["007e093ca718ca1a"],"resources":[{"icon":"icons/rifle.png","name":"test/mod/icons/rifle"}]}""");
+            var iconPlan = ModLoaderPlan.Text([ModCatalog.Load(mods).Mods.Single() with { Packages = [new("test/mod/pkg", 1, true)] }], Path.Combine(root, "package-icons"), EntityProfile.Current, "25480438");
+            check(iconPlan.Contains($"icon\ttest.package\t{EngineHash.Murmur64A("test/mod/icons/rifle"u8):x16}\n"), "The plan does not name the built icon: " + iconPlan);
             Spec("""{"package":"test/mod/pkg","resources":[""" + material + """]},{"package":"test/mod/later","load":"request","resources":[{"type":"texture","include":["0x2222"]}]}""");
             var id = EngineHash.Murmur64A("test/mod/pkg"u8).ToString("x16");
             var later = EngineHash.Murmur64A("test/mod/later"u8).ToString("x16");
@@ -1484,12 +1497,13 @@ static class DataBuilderTests
     }
 
     // An RGBA PNG whose rows use every filter type in turn (the Python reference used filter 0 only: same pixels).
-    static byte[] Png(byte[] rgba, int size = 256)
+    static byte[] Png(byte[] rgba, int size = 256, int height = 0)
     {
+        if (height == 0) height = size;
         var stride = size * 4;
         var raw = new MemoryStream();
         var previous = new byte[stride];
-        for (var y = 0; y < size; y++)
+        for (var y = 0; y < height; y++)
         {
             var line = rgba.AsSpan(y * stride, stride).ToArray();
             var filter = (byte)(y % 5);
@@ -1513,7 +1527,7 @@ static class DataBuilderTests
             png.Write(bytes);
             png.Write(BigEndian(IconImage.Crc32(bytes)));
         }
-        Chunk("IHDR", [.. BigEndian((uint)size), .. BigEndian((uint)size), 8, 6, 0, 0, 0]);
+        Chunk("IHDR", [.. BigEndian((uint)size), .. BigEndian((uint)height), 8, 6, 0, 0, 0]);
         Chunk("IDAT", compressed.ToArray());
         Chunk("IEND", []);
         return png.ToArray();

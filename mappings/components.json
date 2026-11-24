@@ -10755,6 +10755,26 @@
       "applies": "respawn",
       "appliesVerified": false,
       "appliesSource": "a component record: read when the entity is made"
+    },
+    "EncyclopediaEntry": {
+      "component": "EncyclopediaEntryComponentData",
+      "index": 76,
+      "stride": 56,
+      "layout": "25480438",
+      "meaning": "what the game calls an entity and the flat icon (silhouette) it shows for it",
+      "fields": {
+        "icon": {
+          "offset": 48,
+          "type": "u64",
+          "meaning": "its icon: a GUI material resource (name hash) the HUD draws as the item's silhouette. A mod sets an icon its data spec builds (\"icon\"), or another entity's; anything else is refused, since a missing icon crashes the game",
+          "verified": true,
+          "source": "filediver datalibrary/encyclopedia_entry_component.go (Icon after 11 text ids and 4 bytes); generated_entities.dl_bin: the 113 weapon and 23 throwable sprites of mappings/hud-icons.json at +0x30; game.dll 0x181A89B reads it into the HUD image (engine material lookup, slot 0x3AA8B87E), as 0x17EF954 does a stratagem's +0xB0",
+          "ref": "icon"
+        }
+      },
+      "applies": "mission",
+      "appliesVerified": false,
+      "appliesSource": "the HUD reads the record when it shows the item"
     }
   }
 }

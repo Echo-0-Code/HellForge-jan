@@ -23,7 +23,7 @@
  * base. */
 
 /* A field naming another table's row (mappings "ref"): its value must be such a row (refs.c). */
-enum { REF_NONE, REF_PROJECTILE, REF_EXPLOSION, REF_STATUS, REF_DAMAGE, REF_MOUNT, REF_PICKUP };
+enum { REF_NONE, REF_PROJECTILE, REF_EXPLOSION, REF_STATUS, REF_DAMAGE, REF_MOUNT, REF_PICKUP, REF_ICON };
 enum { REF_OK, REF_WAIT, REF_REFUSED };
 typedef struct SdkField { const char* name; uint16_t offset, size; uint32_t type; uint32_t applies; uint32_t ref; } SdkField;
 typedef struct SdkComponent { const char* name; const char* component; uint32_t layout, stride; const SdkField* fields; int count; int table; int index; } SdkComponent;

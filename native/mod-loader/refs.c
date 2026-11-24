@@ -11,6 +11,8 @@
  * it is set on is refused (a shot that spawns itself); a status in a slot after an empty one is written but logged (the
  * game stops at the first empty slot, so it has no effect). */
 
+#include "item_icons.c" /* the icons an EncyclopediaEntry.icon edit may name */
+
 #define REF_SHRAPNEL_COUNT 80u      /* ExplosionSettings */
 #define REF_SHRAPNEL_PROJECTILE 84u
 #define REF_IMPACT 144u             /* ProjectileSettings */
@@ -18,7 +20,7 @@
 #define REF_STATUS_FIRST 44u        /* DamageInfo: four slots of {type, strength} */
 #define REF_STATUS_SLOTS 4u
 
-static const char* const kRefNames[] = {"", "projectile", "explosion", "status effect", "damage", "mounted weapon", "pickup"};
+static const char* const kRefNames[] = {"", "projectile", "explosion", "status effect", "damage", "mounted weapon", "pickup", "icon"};
 
 static const RefMountSlot* RefMountSlotOf(uint64_t vehicle, uint32_t slot)
 {
@@ -356,6 +358,15 @@ static int RefStatusGap(uintptr_t row, uint32_t offset, uint32_t value)
     return 0;
 }
 
+/* EncyclopediaEntry.icon edits (mappings ref "icon"; item_icons.c): 0 (no icon), the field's original, a built icon or a game one. */
+static int RefIconCheck(uint64_t value, uint64_t original, char* why, size_t whySize)
+{
+    if (value == 0 || value == original || IconBuilt(value) || IconOfGame(value)) return REF_OK;
+    snprintf(why, whySize, "%016llx is no icon a data spec builds or a game entity shows (a missing icon crashes the game)",
+        (unsigned long long)value);
+    return REF_REFUSED;
+}
+
 /* A field edit's 8-byte value, and the field's original (the edit's, else what the field holds). */
 static void RefWide(const FieldEdit* e, const uint8_t* at, uint64_t* wide, uint64_t* was)
 {
@@ -382,6 +393,11 @@ static int RefEdit(FieldEdit* e, const uint8_t* at)
     {
         RefWide(e, at, &wide, &was);
         state = RefPickupCheck(e->entity, e->field->offset / 64, wide, was, why, sizeof why);
+    }
+    else if (e->field->ref == REF_ICON)
+    {
+        RefWide(e, at, &wide, &was);
+        state = RefIconCheck(wide, was, why, sizeof why);
     }
     else state = RefCheck(e->field->ref, value, original, self, why, sizeof why);
     if (state == REF_WAIT)
@@ -419,7 +435,7 @@ static int StatRefKind(const StatEdit* e)
     for (int i = 0; c != NULL && i < c->count; i++) /* (a mount slot is never a stats edit: they write 4 bytes) */
     {
         const SdkField* f = &c->fields[i]; /* a single u32, or an element of an array of them (a magazine's pattern) */
-        if (f->ref != REF_NONE && f->ref != REF_MOUNT && f->ref != REF_PICKUP && f->type == HF_TYPE_U32 && offset >= f->offset &&
+        if (f->ref != REF_NONE && f->ref != REF_MOUNT && f->ref != REF_PICKUP && f->ref != REF_ICON && f->type == HF_TYPE_U32 && offset >= f->offset &&
             offset + 4 <= (uint32_t)f->offset + f->size && (offset - f->offset) % 4 == 0) return (int)f->ref;
     }
     return REF_NONE;

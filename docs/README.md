@@ -79,6 +79,7 @@ Reference and related pages:
   brakes, water and drivetrains), driven by code, a seat or the custom AI.
 - [Turrets](modding/turrets.md): for code mod authors; SDK 37 turret settings (turning, limits, sight, fire rate,
   who aims it) and turrets on movers and objects.
+- [Item icons](modding/icons.md): for code mod authors; the grey HUD silhouette of a weapon, tool or backpack.
 - [Item lists](modding/lists.md): for code mod authors; SDK 38 rules and name filters for the Armory's weapon
   grids and the stratagem picker, without hooking their builders.
 - [Building a lobby browser](lobby-browser.md): for front-end developers drawing their own lobby browser on the ship's
