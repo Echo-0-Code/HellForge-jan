@@ -22,6 +22,7 @@
 #define LF_PICKER_STATE 0x2818u   /* the picker's screen: 10 while the picker is up */
 #define LF_POS 0x14476A0u        /* (widget, packed x, y): a widget's position, +y up */
 #define LF_SIZE 0x1447160u       /* (widget, packed w, h): a widget's size */
+#define LF_SCROLL_MAX 0xF90u    /* the grid's scroll range in units: the scroll offset (+0x93030) stays in 0 .. it */
 #define LF_BAND_MAX 200.0f       /* units: the list keeps at least two rows of cards below the band */
 #define LF_ROWS_MAX 1024u
 #define LF_TYPES_MAX 4096u
@@ -244,6 +245,9 @@ static void LfBandApply(uint32_t list, uintptr_t root)
     {
         LfShift(heading, dy, 1), LfShift(column, dy, 1);
         LfShift(column, dy, 0), LfShift(track, dy, 0), LfShift(LfChild(track, 0), dy, 0), LfShift(LfChild(column, 1), dy, 0);
+        /* the builder sets the scroll range for the full height, so the band's rows would stay below the bottom */
+        float range = 0;
+        if (!SafeRead(root + LF_SCROLL_MAX, &range, 4) && range > 0) *(volatile float*)(root + LF_SCROLL_MAX) = range + dy > 0 ? range + dy : 0;
         at->applied += dy;
         SafeRead(heading + 4, h, 16);
     }
