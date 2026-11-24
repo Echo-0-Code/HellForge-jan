@@ -35,6 +35,9 @@ On `dev`, since 0.4.0-beta.
 - **Fighting movers (SDK 37).** `ai_drive` takes an engage range, a distance to keep, a leash and a reaction time. It
   retreats below a health share, running or backing off while firing, and takes whose orders and a spacing from other
   units ([Movers](docs/modding/movers.md#let-it-fight)).
+- **Helicopters and planes (SDK 43).** `add_mover` takes `HF_MOVE_HELI` and `HF_MOVE_PLANE`. They take off once
+  driven, land when nobody drives them, and fly up to 500 m over the ground. A plane needs `stall_speed` and banks to
+  turn ([Movers](docs/modding/movers.md#helicopters-and-planes)).
 - **Mover slopes read over distance.** A walker or driver standing a little off the ground no longer reads a steep
   slope from its first millimetre of movement and stays stuck ([Movers](docs/modding/movers.md)).
 - **Simpler mover options (SDK 39).** `HfMoverDef` is reordered. Hover fields move into a `hover` block and the drive

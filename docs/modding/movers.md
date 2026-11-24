@@ -4,7 +4,7 @@
 
 SDK 35 lets HellForge move a unit itself: a sentry that walks, a cart that drives, any object your mod spawns. SDK 36
 adds hover vehicles, brakes, water and drivetrains. SDK 37 adds slopes, tilting, flying heights, boost, strafing and
-sounds. You describe how it moves once with `add_mover`. A driver then
+sounds. SDK 43 adds helicopters and planes. You describe how it moves once with `add_mover`. A driver then
 gives it a throttle and a steer: your code with `mover_input`, the custom AI with `ai_drive`, or a hover's seated
 player. The types are in `hellforge_move.h`, which `hellforge_mod.h` includes.
 
@@ -15,6 +15,7 @@ player. The types are in `hellforge_move.h`, which `hellforge_mod.h` includes.
 - [Water](#water)
 - [Drivetrains and your own drive code](#drivetrains-and-your-own-drive-code)
 - [Hover vehicles](#hover-vehicles)
+- [Helicopters and planes](#helicopters-and-planes)
 - [Slopes, tilt, boost and sounds](#slopes-tilt-boost-and-sounds)
 - [Drive it from code](#drive-it-from-code)
 - [Let the custom AI drive it](#let-the-custom-ai-drive-it)
@@ -24,11 +25,11 @@ player. The types are in `hellforge_move.h`, which `hellforge_mod.h` includes.
 
 ## Before you call
 
-- Check `hf->size >= offsetof(HfApi, ai_drive) + sizeof(void*)` and set `"sdk": 39` in `hellforge-mod.json`.
+- Check `hf->size >= offsetof(HfApi, ai_drive) + sizeof(void*)` and set `"sdk": 39` in `hellforge-mod.json`. Fliers need `"sdk": 43`.
 - Call `add_mover` and `ai_drive` from `hellforge_mod_init`.
 - Walkers and drivers run on the host. Their moves reach the other players as their root's moves do.
 - The game's own physics no longer move a walker or driver. Leave out any movement code of your own for it.
-- SDK 39 reordered `HfMoverDef`. Build movers against SDK 39's header; an older one is refused.
+- SDK 39 reordered `HfMoverDef`. Build movers against SDK 39's header or later; an older one is refused.
 
 ## Describe how it moves
 
@@ -43,8 +44,8 @@ api->add_mover(mod, &walker);
 
 | Field | Default | What it does |
 |---|---|---|
-| `mode` | `HF_MOVE_WALK` | `HF_MOVE_WALK` steps to either side of a block. `HF_MOVE_DRIVE` (and its `_FWD`, `_RWD`, `_4WD`) goes only where it faces. `HF_MOVE_HOVER`: [Hover vehicles](#hover-vehicles) |
-| `speed` | 4 m/s, hover 22 | Top speed forward |
+| `mode` | `HF_MOVE_WALK` | `HF_MOVE_WALK` steps to either side of a block. `HF_MOVE_DRIVE` (and its `_FWD`, `_RWD`, `_4WD`) goes only where it faces. `HF_MOVE_HOVER`: [Hover vehicles](#hover-vehicles). `HF_MOVE_HELI`, `HF_MOVE_PLANE`: [Helicopters and planes](#helicopters-and-planes) |
+| `speed` | 4 m/s, hover 22, helicopter 40, plane 60 | Top speed forward, at most 40 m/s (a flier 120) |
 | `reverse_speed` | 0: no reverse | Top speed backward in m/s. A negative value is a share of `speed`: -0.5 is half |
 | `acceleration` | 8 m/s², hover 3 | How fast it speeds up |
 | `brake` | `acceleration` | How fast it slows down, stops or turns about |
@@ -59,8 +60,7 @@ api->add_mover(mod, &walker);
 | `max_slope`, `tilt_limit` | from `step_up`, 0 (upright) | [Slopes, tilt, boost and sounds](#slopes-tilt-boost-and-sounds) |
 | `boost_speed`, `boost_time`, `strafe_speed`, `sounds` | none, 3 s, half of `speed`, none | The same section |
 | `hover` | | [Hover vehicles](#hover-vehicles) |
-
-Fly mode comes in a later SDK.
+| `stall_speed`, `bank_max` | 0.45 × `speed`, 40° | [Helicopters and planes](#helicopters-and-planes) |
 
 ## Water
 
@@ -140,6 +140,48 @@ Make the physics data match:
 
 The seated driver's W, S, A and D drive it, and the lever's reverse and neutral count. `mover_input` wins over the seat,
 and the seat over `ai_drive` while its driver gave input in the last 2 s. `mover_state` gives `height` over the surface.
+
+## Helicopters and planes
+
+`HF_MOVE_HELI` and `HF_MOVE_PLANE` are fliers. Like a hover, a flier is the game's physics body with seats, and HellForge
+pushes its chassis. It uses the same `hover` block, with heights up to 500 m over the ground.
+
+```c
+HfMoverDef heli = {sizeof heli};
+heli.entity = MY_GUNSHIP;
+heli.mode = HF_MOVE_HELI;
+heli.reverse_speed = -0.3f;
+heli.hover.height = 12.0f;
+heli.hover.height_max = 60.0f;
+api->add_mover(mod, &heli);
+```
+
+How a flier takes off and lands:
+
+- It waits until it sits on the ground, such as after a Pelican drop. Then it holds `hover.height_min` there.
+- Once anyone drives it, it climbs to `hover.height` at `hover.climb_rate`. The `lift` input moves it between the heights.
+- When nobody has driven it for 3 s, it lands: it sinks to `height_min`.
+- With no ground in reach, it holds its height over the last ground it saw.
+
+A helicopter hovers in place and turns on the spot. Its thrust tilts toward the way it speeds up, up to 30° or
+`tilt_limit`. `strafe` slides it sideways.
+
+A plane needs airspeed:
+
+- Below `stall_speed` it can't climb, and its wings carry less as it slows: lift grows with speed squared.
+- On its gear it rolls and steers like a car, with an 8 m `turn_radius`. It takes off once it passes `stall_speed`.
+- Aloft, steer banks it up to `bank_max`, and the bank sets the turn: g × tan(bank) / speed.
+- Throttle below 0 brakes: air brakes aloft, wheel brakes on the ground. Rolling slower than 1.5 m/s, it parks.
+
+| Field | Helicopter | Plane |
+|---|---|---|
+| `speed`, `acceleration` | 40 m/s, 5 m/s² | 60 m/s, 4 m/s² |
+| `turn_rate`, `strafe_speed` | 45 °/s, 10 m/s | 30 °/s |
+| `hover.height`, `height_min`, `height_max` | 10 m, 1 m, 4 × `height` | 40 m, 1 m, 4 × `height` |
+| `hover.climb_rate`, `hover.mass`, `hover.side_drag` | 5 m/s, 2500 kg, 0.8 /s | 8 m/s, 1100 kg, 3 /s |
+
+Set its physics data as for a hover: `VRA` extraGravity at `hover.carried`, wheels at low friction, and `VRD` word 11 at 0.
+A seated driver gives throttle and steer. The `lift` input comes only from `mover_input`.
 
 ## Slopes, tilt, boost and sounds
 

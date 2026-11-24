@@ -1,5 +1,5 @@
 /* HellForge mod SDK 35: movers, units HellForge moves itself (docs/modding/movers.md). Included by hellforge_mod.h.
- * add_mover gives every unit of an entity a way to move: walk, drive or hover, a top speed, a turning style, the steps
+ * add_mover gives every unit of an entity a way to move: walk, drive, hover or fly, a top speed, a turning style, the steps
  * it takes. HellForge moves it from two inputs, throttle and steer: a mod gives them with mover_input, ai_drive hands
  * them to the custom AI (hellforge_ai.h), and a hover vehicle's seated driver gives them too. Walkers and drivers are
  * moved by their root (the game's physics no longer move them); a hover vehicle stays a physics body HellForge pushes. */
@@ -18,6 +18,9 @@
 #define HF_MOVE_DRIVE_FWD 4u /* front-wheel drive: its grip falls going uphill, as the load moves back */
 #define HF_MOVE_DRIVE_RWD 5u /* rear-wheel drive: its grip grows going uphill */
 #define HF_MOVE_DRIVE_4WD 6u /* four-wheel drive: all of its weight gives grip */
+/* SDK 43: fliers, physics bodies like a hover, held hover.height over the ground; they take off from the ground */
+#define HF_MOVE_HELI 7u  /* rotor or VTOL: hovers in place, tilts toward the way it speeds up, turns on the spot */
+#define HF_MOVE_PLANE 8u /* fixed wing: needs stall_speed to climb, banks to turn, rolls along the ground below it */
 
 
 /* HfMoverDef.water (SDK 36): what a walker or driver does in water. A hover always crosses over it. */
@@ -26,12 +29,13 @@
 #define HF_WATER_FLOAT 3u /* it floats across deep water, wade_depth (its draft) under the surface */
 #define HF_WATER_SINK 4u  /* it goes along the bottom, however deep */
 
-/* HfMoverDef.hover (SDK 39): a hover vehicle's lift and body. Zero fields take the defaults. */
+/* HfMoverDef.hover (SDK 39): a hover vehicle's or flier's lift and body. Zero fields take the defaults, which hang on
+ * the mode; a flier's heights go up to 500 m and its height_min is its height sitting on the ground. */
 typedef struct HfMoverHover
 {
     float height;         /* its root over the ground or water, metres (default 1.5) */
     float height_min;     /* the lowest the lift input takes it, metres (default height) */
-    float height_max;     /* the highest, at most 25 (default height: lift does nothing) */
+    float height_max;     /* the highest, at most 25, a flier 500 (default height: lift does nothing; a flier 4 x height) */
     float climb_rate;     /* metres a second at full lift (default 2) */
     float carried;        /* the share of its weight its physics data carries already (VRA extraGravity), 0 .. 1 */
     float mass;           /* its physics body's mass, kg (default 3000, the M-102 FRV's) */
@@ -74,9 +78,9 @@ typedef struct HfMoverSounds
 typedef struct HfMoverDef
 {
     uint32_t size;        /* sizeof(HfMoverDef) */
-    uint32_t mode;        /* HF_MOVE_WALK (default), HF_MOVE_DRIVE, _DRIVE_FWD, _RWD, _4WD or HF_MOVE_HOVER */
+    uint32_t mode;        /* HF_MOVE_WALK (default), HF_MOVE_DRIVE, _DRIVE_FWD, _RWD, _4WD, HF_MOVE_HOVER, _HELI or _PLANE */
     uint64_t entity;      /* the entity resource its units are */
-    float speed;          /* top speed forward, m/s (default 4, at most 40) */
+    float speed;          /* top speed forward, m/s (default 4, at most 40; a flier 120) */
     float reverse_speed;  /* top speed backward, m/s; negative: a share of speed (-0.5 half, -1 as fast); 0: it can't reverse */
     float acceleration;   /* m/s per second speeding up (default 8; hover 3) */
     float turn_rate;      /* its fastest turn, degrees a second (default 120; hover 57) */
@@ -87,7 +91,7 @@ typedef struct HfMoverDef
     float start_delay;    /* seconds after its spawn before HellForge moves it (a hellpod's landing; default 0) */
     /* SDK 36 */
     float brake;          /* m/s2 when it slows down or turns about (default: acceleration) */
-    uint32_t water;       /* HF_WATER_WADE (default), _BLOCK, _CROSS or _IGNORE; a hover always crosses */
+    uint32_t water;       /* HF_WATER_WADE (default), _DRY, _FLOAT or _SINK; a hover or flier always crosses */
     float wade_depth;     /* the deepest water it wades, or its draft afloat, metres (default walk 0.8, drive 0.5) */
     float grip;           /* HF_MOVE_DRIVE_FWD, _RWD, _4WD: tyre friction on the ground (default 0.7, dirt and gravel) */
     HfMoverDriveFn drive; /* any mode: the mod's own push each update instead of HellForge's (NULL: HellForge's) */
@@ -99,9 +103,14 @@ typedef struct HfMoverDef
     float boost_time;     /* seconds a full boost lasts; it refills in twice that (default 3) */
     float strafe_speed;   /* walk or hover: top speed sideways at full strafe, m/s (default half of speed, hover 5) */
     HfMoverSounds sounds;
-    HfMoverHover hover;   /* HF_MOVE_HOVER */
+    HfMoverHover hover;   /* HF_MOVE_HOVER, _HELI and _PLANE */
     uint32_t reserved[4]; /* 0; keeps this larger than SDK 37's layout, so that one is refused */
+    /* SDK 43 (an SDK 39 size moves with the fields above) */
+    float stall_speed;    /* HF_MOVE_PLANE: below this its wings carry it less (lift grows with speed squared), m/s (default 0.45 x speed) */
+    float bank_max;       /* HF_MOVE_PLANE: its steepest bank at full steer, degrees; the bank sets its turn (default 40) */
 } HfMoverDef;
+
+#define HF_MOVER_DEF_SIZE_39 ((uint32_t)offsetof(HfMoverDef, stall_speed))
 
 
 /* mover_input: what a driver asks of it now. It holds for half a second; call it every update while driving. */
@@ -112,7 +121,7 @@ typedef struct HfMoverInput
     float steer;          /* -1 full right .. 1 full left */
     /* SDK 37 (an SDK 35 size drives with the two above) */
     float strafe;         /* -1 full right .. 1 full left: a walker or hover slides sideways at strafe_speed */
-    float lift;           /* -1 down .. 1 up: a hover's height moves at hover.climb_rate between hover.height_min and _max */
+    float lift;           /* -1 down .. 1 up: a hover's or flier's height moves at hover.climb_rate between hover.height_min and _max */
     float boost;          /* 1 boosts, while its boost lasts (boost_speed); 0 not */
 } HfMoverInput;
 
@@ -129,7 +138,7 @@ typedef struct HfMoverInput
 #define HF_DRIVER_NONE 0u
 #define HF_DRIVER_MOD 1u     /* mover_input in the last half second */
 #define HF_DRIVER_AI 2u      /* ai_drive */
-#define HF_DRIVER_SEAT 3u    /* SDK 36, hover: the player in its driver seat (throttle or steer in the last 2 s) */
+#define HF_DRIVER_SEAT 3u    /* SDK 36, hover or flier: the player in its driver seat (throttle or steer in the last 2 s) */
 
 typedef struct HfMoverState
 {
@@ -142,7 +151,7 @@ typedef struct HfMoverState
     float turning;        /* radians a second (positive left) */
     float throttle, steer; /* the inputs it moves by now */
     /* SDK 36 (an SDK 35 size gets the fields above) */
-    float height;         /* hover: its root over the ground or water, metres; walkers and drivers 0 */
+    float height;         /* hover or flier: its root over the ground or water, metres; walkers and drivers 0 */
     float water_depth;    /* water over the ground where it is, metres (0: dry) */
     float grade;          /* the slope it climbs, rise per metre along its heading (negative downhill) */
     uint32_t driven;      /* HF_AXLE_FRONT / _REAR bits of the axles pushing now, for wheel animation */

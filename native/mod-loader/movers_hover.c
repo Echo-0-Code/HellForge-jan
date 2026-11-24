@@ -86,10 +86,10 @@ static uint32_t HvChassis(const MvUnit* m)
 }
 
 /* The surface under p: the ground (rays pass units, its crew among them) or the water over it, the higher. -1e9 none. */
-static float HvSurface(MvUnit* m, const float p[3])
+static float HvSurface(MvUnit* m, const float p[3], float reach)
 {
     HfSight how = {sizeof how, {m->unit, 0, 0, 0}, HV_SKIP, 0};
-    const float to[3] = {p[0], p[1], p[2] - HV_REACH};
+    const float to[3] = {p[0], p[1], p[2] - reach};
     float ground = -1e9f;
     for (int k = 1; k <= 4; k++)
     {
@@ -101,7 +101,7 @@ static float HvSurface(MvUnit* m, const float p[3])
     }
     const float w = MvWaterAt(p[0], p[1], p[2]);
     const int wet = w > -499.0f && w < p[2] + 3.0f && w > ground; /* a craft sunk under the surface still floats up */
-    m->waterDepth = wet ? (ground > -1e8f ? w - ground : HV_REACH) : 0;
+    m->waterDepth = wet ? (ground > -1e8f ? w - ground : reach) : 0;
     return wet ? w : ground;
 }
 
@@ -123,7 +123,7 @@ static void HvDrive(MvUnit* m, const MvDef* def, const float fl[2], const float 
         const float t = m->throttle, top = MvTop(m, d, dt);
         *yawRate = m->steer * MvRate(d, vf);
         sidePush = m->strafe * d->hover.side_drag * d->strafe_speed; /* the side drag tops a full strafe out at strafe_speed */
-        if ((t * vf < 0 && fabsf(vf) > 0.3f) || (fabsf(t) < 0.05f && fabsf(m->strafe) < 0.05f && vh < 1.5f) || m->lost > 0)
+        if ((t * vf < 0 && fabsf(vf) > 0.3f) || (fabsf(t) < 0.05f && fabsf(m->strafe) < 0.05f && vh < 1.5f) || (m->lost > 0 && !MvFlier(d->mode)))
         {   /* braking (or holding still): against the whole horizontal speed, no further than to a stop */
             const float b = vh > 1e-3f ? fminf(d->brake, vh / dt) / vh : 0;
             a[0] = -b * v[0]; a[1] = -b * v[1];
@@ -139,7 +139,7 @@ static void HvDrive(MvUnit* m, const MvDef* def, const float fl[2], const float 
 /* Its gap over the surface, and whether it hovers: it takes hold once the surface is close, lets go when it is lost. */
 static float HvGap(MvUnit* m, const MvDef* def, const float p[3], float dt)
 {
-    const float surface = HvSurface(m, p);
+    const float surface = HvSurface(m, p, HV_REACH);
     const int good = surface > -1e8f && p[2] - surface > -3.0f && p[2] - surface < HV_REACH;
     if (good) m->lastSurface = surface;
     /* deep water it can't read, or a drop: it holds over the last surface it saw rather than falling in */
@@ -199,16 +199,23 @@ static void HvAttitude(MvUnit* m, const HfMoverDef* d, const float* w, const flo
     m->roll = asinf(MvClamp(-w[2], -1, 1));
 }
 
+/* Its root's world pose (w), its body's speeds, and m's position and heading from them: 0 when the pose can't be read. */
+static int HvRead(MvUnit* m, float w[16], float v[3], float om[3])
+{
+    if (!ApiJointPose(&g_mvMod, m->unit, 0, HF_POSE_WORLD, w) || !isfinite(w[12])) return 0;
+    g_hvVelocity(m->body, v, om);
+    memcpy(m->pos, w + 12, 12);
+    m->yaw = atan2f(-w[4], w[5]);
+    return 1;
+}
+
 /* One update of a hover on the machine that simulates it. */
 static void HvControl(MvUnit* m, const MvDef* def, float dt)
 {
     const HfMoverDef* d = &def->def;
     float w[16], v[3] = {0}, om[3] = {0};
-    if (!ApiJointPose(&g_mvMod, m->unit, 0, HF_POSE_WORLD, w) || !isfinite(w[12])) return;
+    if (!HvRead(m, w, v, om)) return;
     const float* f = w + 4, * p = w + 12;
-    g_hvVelocity(m->body, v, om);
-    memcpy(m->pos, p, 12);
-    m->yaw = atan2f(-f[0], f[1]);
     const float gap = HvGap(m, def, p, dt), mass = d->hover.mass;
     if (!m->engaged)
     {
@@ -236,13 +243,15 @@ static void HvControl(MvUnit* m, const MvDef* def, float dt)
     m->turning = om[2];
 }
 
+#include "movers_fly.c" /* SDK 43: helicopters and planes (HvSurface, HvDrive, HvTargetUp, HvAttitude) */
+
 /* Every 2 s for a minute from its start and from each change of driver, and while it is lost or over water. */
 static void HvLog(MvUnit* m, const MvDef* def, float dt)
 {
     if (m->logUntil <= 0 || m->driver != m->loggedDriver) { m->logUntil = (m->logUntil <= 0 ? def->def.start_delay : m->age) + 60; m->loggedDriver = m->driver; m->sinceLog = 2.0; }
     if ((m->sinceLog += dt) < 2.0 || (m->age > m->logUntil && m->lost <= 0 && m->waterDepth <= 0)) return;
     m->sinceLog = 0;
-    ApiLog(def->mod, "mover: unit %u hover %s, %.2f m over %s (target %.2f, water query %.2f), speed %.1f, throttle %.2f, steer %.2f, driver %u", m->entity,
+    ApiLog(def->mod, "mover: unit %u %s %s, %.2f m over %s (target %.2f, water query %.2f), speed %.1f, throttle %.2f, steer %.2f, driver %u", m->entity, MvFlier(def->def.mode) ? "flight" : "hover",
         m->engaged ? "on" : "off", (double)m->height, m->waterDepth > 0 ? "water" : "ground", (double)m->targetHeight, (double)MvWaterAt(m->pos[0], m->pos[1], m->pos[2]),
         (double)m->speed, (double)m->throttle, (double)m->steer, m->driver);
 }
@@ -264,7 +273,8 @@ static void HvUnitTick(MvUnit* m, const MvDef* def, float dt)
         m->started = 1;
     }
     MvDriver(m, def);
-    HvControl(m, def, dt);
+    if (MvFlier(def->def.mode)) FlControl(m, def, dt);
+    else HvControl(m, def, dt);
     MvSounds(m, &def->def.sounds);
     HvLog(m, def, dt);
 }
@@ -279,7 +289,7 @@ static void HvSeat(uintptr_t record, uintptr_t input, uintptr_t leverAt)
     float in[3];
     if (!EvpPtr(record, &r) || SafeRead(r + 8, &entity, 4)) return;
     MvUnit* m = MvUnitOf(entity);
-    if (m == NULL || g_mvDefs[m->def - 1].def.mode != HF_MOVE_HOVER || SafeRead(input, in, 12) || SafeRead(leverAt, &lever, 4) ||
+    if (m == NULL || !MvPhysical(g_mvDefs[m->def - 1].def.mode) || SafeRead(input, in, 12) || SafeRead(leverAt, &lever, 4) ||
         !AiIn(in[0], -1.01f, 1.01f) || !AiIn(in[1], -0.01f, 1.01f) || !AiIn(in[2], -0.01f, 1.01f))
         return;
     const float throttle = lever == 0 ? -fmaxf(in[1], in[2]) : lever == 1 ? 0.0f : in[1] - in[2];

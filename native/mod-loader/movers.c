@@ -19,6 +19,10 @@ typedef void* (*MvLevelFn)(uint32_t unit);
 typedef float (*MvWaterFn)(void* state, const float* position, void* level);
 
 typedef struct MvDef { HfMod* mod; HfMoverDef def; int ai; float arrive, slopeTan; uint32_t axles, asked; } MvDef; /* axles: HF_AXLE_ bits; asked: its mode */
+/* A hover or flier: a physics body HellForge pushes (movers_hover.c, movers_fly.c), followed on every machine. */
+static int MvPhysical(uint32_t mode) { return mode == HF_MOVE_HOVER || mode == HF_MOVE_HELI || mode == HF_MOVE_PLANE; }
+static int MvFlier(uint32_t mode) { return mode == HF_MOVE_HELI || mode == HF_MOVE_PLANE; }
+
 typedef struct MvUnit
 {
     uint32_t entity, unit, def, started, status, driver;
@@ -31,6 +35,7 @@ typedef struct MvUnit
     /* hover (movers_hover.c) */
     uint32_t body, engaged, told;
     float lost, lastSurface, seatThrottle, seatSteer;
+    float flWant, flIdle; /* a flier: the height it climbs toward, and how long nobody has flown it (movers_fly.c) */
     uint32_t loggedDriver;
     double seatAge, sinceLog, logUntil;
 } MvUnit;
@@ -488,7 +493,7 @@ static void MvDriver(MvUnit* m, const MvDef* def)
 {
     if (m->inputAge < MV_INPUT_S) { m->driver = HF_DRIVER_MOD; return; }
     m->strafe = m->lift = m->boost = 0; /* only a mod's input has them (a seat's keys come with seat driving) */
-    if (def->def.mode == HF_MOVE_HOVER && m->seatAge < HV_SEAT_S) { m->driver = HF_DRIVER_SEAT; m->throttle = m->seatThrottle; m->steer = m->seatSteer; }
+    if (MvPhysical(def->def.mode) && m->seatAge < HV_SEAT_S) { m->driver = HF_DRIVER_SEAT; m->throttle = m->seatThrottle; m->steer = m->seatSteer; }
     else if (def->ai) { m->driver = HF_DRIVER_AI; MvAiInputs(m, def); }
     else { m->driver = HF_DRIVER_NONE; m->throttle = 0; m->steer = 0; }
 }
@@ -526,7 +531,7 @@ static void MvBodyTick(MvUnit* m, const MvDef* def, float dt)
 /* A hover, or a walker or driver its body drives: 1 when it had its update here. */
 static int MvBodyModes(MvUnit* m, const MvDef* def, float dt)
 {
-    if (def->def.mode == HF_MOVE_HOVER) { HvUnitTick(m, def, dt); return 1; }
+    if (MvPhysical(def->def.mode)) { HvUnitTick(m, def, dt); return 1; }
     if (!m->physics || !m->started) return 0;
     MvBodyTick(m, def, dt);
     return 1;
@@ -611,7 +616,7 @@ static void MvSpawned(HfMod* mod, const HfSpawnEvent* e, void* user)
     for (LONG d = 0; d < g_mvDefCount; d++)
     {
         /* a hover is followed everywhere: the machine that simulates it can change (a client drives it) */
-        if (g_mvDefs[d].def.entity != e->resource || (!e->authority && g_mvDefs[d].def.mode != HF_MOVE_HOVER)) continue;
+        if (g_mvDefs[d].def.entity != e->resource || (!e->authority && !MvPhysical(g_mvDefs[d].def.mode))) continue;
         AcquireSRWLockExclusive(&g_mvLock);
         for (int i = 0; i < MV_UNITS; i++)
             if (!g_mvUnits[i].entity)
@@ -687,50 +692,75 @@ static void MvHoverDefaults(HfMoverHover* h)
     MvOr(&h->side_drag, 0.5f);
 }
 
+/* A flier sits height_min up on its gear and flies height over the ground: 10 m for a helicopter, a plane's 40 m
+ * circuit; heavier than the hover, a light helicopter's or plane's mass. */
+static void MvFlierDefaults(HfMoverHover* h, int plane)
+{
+    MvOr(&h->height, plane ? 40.0f : 10.0f);
+    MvOr(&h->height_min, 1.0f);
+    MvOr(&h->height_max, 4.0f * h->height);
+    MvOr(&h->climb_rate, plane ? 8.0f : 5.0f);
+    MvOr(&h->mass, plane ? 1100.0f : 2500.0f);
+    MvOr(&h->side_drag, plane ? 3.0f : 0.8f);
+}
+
+/* Per kind (walker or driver, hover, helicopter, plane): top speed, acceleration, turn rate, strafe (0: half of speed).
+ * A walker's pace; HV-1's hovercraft; a utility helicopter's 40 m/s and a light plane's 60 m/s cruise. */
+static const float kMvKind[4][4] = {{4.0f, 8.0f, 120.0f, 0}, {22.0f, 3.0f, 57.0f, 5.0f}, {40.0f, 5.0f, 45.0f, 10.0f}, {60.0f, 4.0f, 30.0f, 0}};
+
 static void MvDefaults(HfMoverDef* d)
 {
-    const int hover = d->mode == HF_MOVE_HOVER;
+    const int plane = d->mode == HF_MOVE_PLANE, kind = d->mode == HF_MOVE_HOVER ? 1 : d->mode == HF_MOVE_HELI ? 2 : plane ? 3 : 0;
+    const float* k = kMvKind[kind];
     if (!d->mode) d->mode = HF_MOVE_WALK;
     if (!d->water) d->water = HF_WATER_WADE;
-    MvOr(&d->speed, hover ? 22.0f : 4.0f);
+    MvOr(&d->speed, k[0]);
     if (d->reverse_speed < 0) d->reverse_speed *= -d->speed; /* a share of its forward speed */
-    MvOr(&d->acceleration, hover ? 3.0f : 8.0f);
+    MvOr(&d->acceleration, k[1]);
     MvOr(&d->brake, d->acceleration);
-    MvOr(&d->wade_depth, d->mode == HF_MOVE_WALK || hover ? 0.8f : 0.5f); /* an SUV's wading depth; a person's mid-thigh */
+    MvOr(&d->wade_depth, d->mode == HF_MOVE_WALK || kind == 1 ? 0.8f : 0.5f); /* an SUV's wading depth; a person's mid-thigh */
     MvOr(&d->grip, 0.7f);
-    MvOr(&d->turn_rate, hover ? 57.0f : 120.0f);
+    MvOr(&d->turn_rate, k[2]);
     MvOr(&d->step_up, 0.5f);
     MvOr(&d->step_down, 1.0f);
     MvOr(&d->reach, 0.6f);
     MvOr(&d->max_slope, atanf(d->step_up) * 57.29578f); /* step_up risen over 1 m */
     MvOr(&d->boost_time, 3.0f);
-    MvOr(&d->strafe_speed, hover ? 5.0f : d->speed * 0.5f);
+    MvOr(&d->strafe_speed, k[3] > 0 ? k[3] : d->speed * 0.5f);
+    MvOr(&d->stall_speed, 0.45f * d->speed);
+    if (plane) MvOr(&d->turn_radius, 8.0f); /* it taxis on its nose wheel */
+    MvOr(&d->bank_max, 40.0f);
+    if (kind >= 2) MvFlierDefaults(&d->hover, plane);
     MvHoverDefaults(&d->hover);
 }
 
-static const char* MvHoverRefusal(const HfMoverHover* h)
+static const char* MvHoverRefusal(const HfMoverHover* h, int flier)
 {
-    if (!AiIn(h->height_min, 0.2f, 25) || !AiIn(h->height_max, h->height_min, 25) || !AiIn(h->height, h->height_min, h->height_max) ||
+    const float top = flier ? 500.0f : 25.0f;
+    if (!AiIn(h->height_min, 0.2f, top) || !AiIn(h->height_max, h->height_min, top) || !AiIn(h->height, h->height_min, h->height_max) ||
         !AiIn(h->climb_rate, 0.1f, 50) || !AiIn(h->carried, 0, 1) || !AiIn(h->mass, 50, 200000) || !AiIn(h->stiffness, 0.2f, 5) ||
         !AiIn(h->damping, 0.1f, 2) || !AiIn(h->side_drag, 0, 20))
-        return "hover: heights 0.2 .. 25 with height between min and max, climb_rate 0.1 .. 50, carried 0 .. 1, mass 50 .. 200000, stiffness 0.2 .. 5, damping 0.1 .. 2, side_drag 0 .. 20";
+        return "hover: heights 0.2 .. 25 (a flier 500) with height between min and max, climb_rate 0.1 .. 50, carried 0 .. 1, mass 50 .. 200000, stiffness 0.2 .. 5, damping 0.1 .. 2, side_drag 0 .. 20";
     return NULL;
 }
 
 static const char* MvRefusal(const HfMoverDef* in, HfMoverDef* d)
 {
-    if (in == NULL || in->size < sizeof *in || in->entity == 0) return "no HfMoverDef, its size (build against SDK 39's header) or its entity";
-    *d = *in;
+    if (in == NULL || in->size < HF_MOVER_DEF_SIZE_39 || in->entity == 0) return "no HfMoverDef, its size (build against SDK 39's header or later) or its entity";
+    memset(d, 0, sizeof *d);
+    memcpy(d, in, in->size < sizeof *d ? in->size : sizeof *d);
     MvDefaults(d);
-    if (d->mode > HF_MOVE_DRIVE_4WD || d->water > HF_WATER_SINK) return "mode WALK, DRIVE (_FWD, _RWD, _4WD) or HOVER, water WADE, DRY, FLOAT or SINK";
-    if (!AiIn(d->speed, 0.1f, 40) || !AiIn(d->reverse_speed, 0, 40) || !AiIn(d->acceleration, 0.1f, 200) || !AiIn(d->brake, 0.1f, 200) ||
+    if (d->mode > HF_MOVE_PLANE || d->water > HF_WATER_SINK) return "mode WALK, DRIVE (_FWD, _RWD, _4WD), HOVER, HELI or PLANE, water WADE, DRY, FLOAT or SINK";
+    if (!AiIn(d->speed, 0.1f, MvFlier(d->mode) ? 120.0f : 40.0f) || !AiIn(d->stall_speed, 1, d->speed) || !AiIn(d->bank_max, 5, 80))
+        return "speed 0.1 .. 40 (a flier 120), stall_speed 1 .. speed, bank_max 5 .. 80";
+    if (!AiIn(d->reverse_speed, 0, 40) || !AiIn(d->acceleration, 0.1f, 200) || !AiIn(d->brake, 0.1f, 200) ||
         !AiIn(d->turn_rate, 1, 1440) || !AiIn(d->turn_radius, 0, 100) || !AiIn(d->step_up, 0, 10) || !AiIn(d->step_down, 0, 50) ||
         !AiIn(d->reach, 0, 20) || !AiIn(d->start_delay, 0, 120))
-        return "speed 0.1 .. 40, reverse 0 .. 40 (or -1 .. 0 of speed), acceleration and brake 0.1 .. 200, turn_rate 1 .. 1440, turn_radius 0 .. 100, steps 0 .. 10 up and 50 down, reach 0 .. 20, start_delay 0 .. 120";
+        return "reverse 0 .. 40 (or -1 .. 0 of speed), acceleration and brake 0.1 .. 200, turn_rate 1 .. 1440, turn_radius 0 .. 100, steps 0 .. 10 up and 50 down, reach 0 .. 20, start_delay 0 .. 120";
     if (!AiIn(d->wade_depth, 0, 20) || !AiIn(d->grip, 0.05f, 2) || !AiIn(d->max_slope, 1, 90) || !AiIn(d->tilt_limit, 0, 90) ||
         !AiIn(d->boost_speed, 0, 60) || !AiIn(d->boost_time, 0.1f, 600) || !AiIn(d->strafe_speed, 0, 40))
         return "wade_depth 0 .. 20, grip 0.05 .. 2, max_slope 1 .. 90, tilt_limit 0 .. 90, boost_speed 0 .. 60, boost_time 0.1 .. 600, strafe_speed 0 .. 40";
-    return MvHoverRefusal(&d->hover);
+    return MvHoverRefusal(&d->hover, MvFlier(d->mode));
 }
 
 /* SDK 35, add_mover: HellForge moves the entity's units (hellforge_move.h). Any time, best from hellforge_mod_init.
@@ -744,19 +774,19 @@ static int ApiAddMover(HfMod* mod, const HfMoverDef* in)
         if (g_mvDefs[i].def.entity == d.entity) { ApiLog(mod, "add_mover(%016llx): refused: it has a mover already", (unsigned long long)d.entity); return 1; }
     LONG at = InterlockedIncrement(&g_mvDefCount) - 1;
     if (at >= MV_DEFS) { InterlockedDecrement(&g_mvDefCount); ApiLog(mod, "add_mover: refused: %d movers already", MV_DEFS); return 1; }
-    static const uint32_t kAxles[] = {0, 0, 0, 0, HF_AXLE_FRONT, HF_AXLE_REAR, HF_AXLE_FRONT | HF_AXLE_REAR};
+    static const uint32_t kAxles[] = {0, 0, 0, 0, HF_AXLE_FRONT, HF_AXLE_REAR, HF_AXLE_FRONT | HF_AXLE_REAR, 0, 0};
     const uint32_t asked = d.mode;
-    if (d.mode >= HF_MOVE_DRIVE_FWD) d.mode = HF_MOVE_DRIVE; /* one driver from here on, with its axles */
+    if (kAxles[d.mode]) d.mode = HF_MOVE_DRIVE; /* one driver from here on, with its axles */
     g_mvDefs[at] = (MvDef){mod, d, 0, 3.0f, d.max_slope >= 89.9f ? 1e9f : tanf(d.max_slope * 0.0174533f), kAxles[asked], asked};
-    static const char* const kMode[] = {"", "walks", "drives", "hovers", "drives (FWD)", "drives (RWD)", "drives (4WD)"}, * const kWater[] = {"", "wades", "stays dry", "floats", "sinks"};
+    static const char* const kMode[] = {"", "walks", "drives", "hovers", "drives (FWD)", "drives (RWD)", "drives (4WD)", "flies (helicopter)", "flies (plane)"}, * const kWater[] = {"", "wades", "stays dry", "floats", "sinks"};
     ApiLog(mod, "add_mover(%016llx): %s, %.1f m/s (%.1f back), %s at %.0f deg/s, brakes %.1f m/s2, %s (%.2f m)%s", (unsigned long long)d.entity,
         kMode[asked], (double)d.speed, (double)d.reverse_speed, d.turn_radius > 0 ? "turns like a vehicle" : "turns on the spot",
-        (double)d.turn_rate, (double)d.brake, d.mode == HF_MOVE_HOVER ? "crosses water" : kWater[d.water], (double)d.wade_depth, d.drive ? ", its own push" : "");
-    if (d.mode == HF_MOVE_HOVER)
-        ApiLog(mod, "add_mover(%016llx): hovers %.2f m up, %.0f kg (%.0f%% carried by its data), %.1f Hz", (unsigned long long)d.entity,
+        (double)d.turn_rate, (double)d.brake, MvPhysical(d.mode) ? "crosses water" : kWater[d.water], (double)d.wade_depth, d.drive ? ", its own push" : "");
+    if (MvPhysical(d.mode))
+        ApiLog(mod, "add_mover(%016llx): holds %.2f m up, %.0f kg (%.0f%% carried by its data), %.1f Hz", (unsigned long long)d.entity,
             (double)d.hover.height, (double)d.hover.mass, (double)(d.hover.carried * 100), (double)d.hover.stiffness);
     MvStart();
-    if (d.mode == HF_MOVE_HOVER) HvStart();
+    if (MvPhysical(d.mode)) HvStart();
     return 0;
 }
 
