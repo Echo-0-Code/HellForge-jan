@@ -2247,6 +2247,29 @@ static void LuaBridgeFixture(void)
     assert(hellforge_lua_owner("WeaponMagazineComponentData", 3, &owners) == 0 && owners == 0);
     g_region = savedRegion;
 
+    /* load_package takes a package a vanilla LoadoutPackage record names (+8), not any other id */
+    {
+        static uint8_t lp[256];
+        assert(g_componentCount < MAX_COMPONENTS);
+        Component* l = &g_components[g_componentCount++];
+        memset(l, 0, sizeof *l);
+        strcpy(l->name, "LoadoutPackageComponentData");
+        l->offset = 64; l->index = 28; l->indices = 2; l->recordOffset = 32; l->records = 2; l->stride = 32;
+        memset(lp, 0, sizeof lp);
+        uint32_t lpIndex = 28, extent = 96;
+        memcpy(lp + 60, &lpIndex, 4);
+        memcpy(lp + 80, &extent, 4);
+        memcpy(l->header, lp + 64, sizeof l->header);
+        const uint64_t melee = 0x1234567890ABCDEFull, other = 0x0BADC0DE0BADC0DEull;
+        memcpy(lp + 64 + 28 + 32 + 32 + 8, &melee, 8); /* the second record's package */
+        g_region = (uintptr_t)lp;
+        assert(LoadoutPackageNamed(melee) && !LoadoutPackageNamed(other) && !LoadoutPackageNamed(0));
+        const RefPackage* named = CataloguePackage(melee);
+        assert(named != NULL && named->id == melee && CataloguePackage(melee) == named && CataloguePackage(other) == NULL);
+        g_componentCount--;
+        g_region = savedRegion;
+    }
+
     /* code HellForge may rewrite: the projectile list's instructions, a hooked function; not the rest */
     assert(hellforge_lua_rewrites(0x13A9715u, 7) && hellforge_lua_rewrites(0x13A9718u, 1) && !hellforge_lua_rewrites(0x13A971Cu, 4));
     assert(hellforge_lua_rewrites(REG_ENTITY_LOADER, 1) && !hellforge_lua_rewrites(0x10u, 4));
