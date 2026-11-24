@@ -16,9 +16,9 @@ public static class ResourceTypes
 {
     public static readonly ulong Unit = Hash("unit"), Material = Hash("material"), Texture = Hash("texture"), Particles = Hash("particles"),
         Physics = Hash("physics"), Lua = Hash("lua"), Bones = Hash("bones"), StateMachine = Hash("state_machine"), Animation = Hash("animation"),
-        WwiseBank = Hash("wwise_bank"), WwiseDependency = Hash("wwise_dep"), RagdollProfile = Hash("ragdoll_profile");
+        WwiseBank = Hash("wwise_bank"), WwiseDependency = Hash("wwise_dep"), RagdollProfile = Hash("ragdoll_profile"), Xaml = Hash("xaml");
     static readonly string[] Known = ["unit", "material", "texture", "particles", "wwise_bank", "wwise_dep", "wwise_stream", "animation",
-        "state_machine", "bones", "physics", "ragdoll_profile", "lua", "package", "font", "strings", "entity", "geometry_group", "prefab", "level"];
+        "state_machine", "bones", "physics", "ragdoll_profile", "lua", "package", "font", "strings", "entity", "geometry_group", "prefab", "level", "xaml"];
     static readonly Dictionary<ulong, string> names = Known.ToDictionary(Hash);
 
     public static ulong Hash(string name) => EngineHash.Murmur64A(Encoding.UTF8.GetBytes(name));

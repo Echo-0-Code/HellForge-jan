@@ -318,7 +318,7 @@ for changing and adding content; [Hooks and game memory](modding/hooks.md) for `
 
 ### SDK 40: a band at the top of a list (docs/modding/lists.md; check hf->size)
 
-- `set_list_band`: `int (HfMod* mod, uint32_t list, float height)`. Room of height units (0 .. 200; 0 none) above the list's heading for the mod to draw in. Any thread. 0 done
+- `set_list_band`: `int (HfMod* mod, uint32_t list, float height)`
 
 ## Functions
 
