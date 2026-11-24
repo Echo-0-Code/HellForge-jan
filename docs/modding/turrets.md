@@ -17,7 +17,8 @@ types are in `hellforge_turret.h`, which `hellforge_mod.h` includes.
 ## Before you call
 
 - Check `hf->size >= offsetof(HfApi, add_turret) + sizeof(void*)` and set `"sdk": 39` in `hellforge-mod.json`.
-- Build with the SDK 39 header. An SDK 37 `HfTurretDef` is refused.
+- Build with the SDK 39 header or later. An SDK 37 `HfTurretDef` is refused.
+- `face` needs `"sdk": 41`; an SDK 39 or 40 `HfTurretDef` keeps the game's facing.
 - Call `add_turret` from `hellforge_mod_init`, so your own entities get records of their own to change.
 - Give it your own entity (`register_entity`). A vanilla entity's record is often shared, and a shared record is
   refused when the data loads.
@@ -55,6 +56,10 @@ Every field left at 0 keeps the game's value.
 | `projectile` | What it fires: a vanilla `HF_PROJECTILE_` type or one from `add_projectile`. 0 keeps its own |
 | `fire_rate` | Rounds or beam pulses a minute |
 | `rounds` | Rounds a magazine, at most 2047 |
+| `face` | SDK 41: `HF_FACE_AWAY` turns it away from the Helldiver who called it in, once it lands. Not with a `host` |
+
+A thrown sentry lands facing the world's +Y, whichever way it was thrown. With yaw limits that guards the same compass
+direction every time, so set `face` to `HF_FACE_AWAY`. A turret on a host turns with its host.
 
 A projectile needs a gun with a projectile weapon; a beam gun keeps its beam. The mod's log names a setting the gun
 can't take.
@@ -101,6 +106,9 @@ and firing.
 | `ProjectileWeapon` or `BeamWeapon` | `fire_rate`, and `projectile` on a projectile weapon, on `gun` |
 | `WeaponMagazine` | `rounds`, on `gun` |
 | the host's `Mount` | the slot and its node |
+
+In a mission, the mod's log has a line for each spawn of the turret and, with `HF_FACE_AWAY`, where it landed and
+which way it faces.
 
 A setting whose record the entity lacks is refused when the data loads, and the mod's log names it. The other
 settings still apply.

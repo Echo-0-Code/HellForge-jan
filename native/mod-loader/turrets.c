@@ -1,4 +1,4 @@
-/* SDK 37 and 39: turrets (docs/modding/turrets.md, hellforge_turret.h). add_turret is a set of deferred field edits on
+/* SDK 37, 39 and 41: turrets (docs/modding/turrets.md, hellforge_turret.h). add_turret is a set of deferred field edits on
  * the game's own records, so the game's turret AI keeps doing the aiming and firing: HellForge never aims a turret
  * itself. The edits go through set_field and mount, so a vanilla entity's shared record is refused there, as for any
  * mod. Included by world_calls.c after movers.c (AiIn). */
@@ -8,6 +8,7 @@
 typedef struct TrDef { HfMod* mod; HfTurretDef def; int gunDone; } TrDef;
 static TrDef g_trDefs[TR_DEFS];
 static volatile LONG g_trDefCount;
+static void TrLiveStart(void); /* turrets_live.c */
 
 /* One field edit by the mappings' names: 0 queued, 1 refused (set_field logs why). */
 static int TrSet(HfMod* mod, uint64_t entity, const char* component, const char* name, uint16_t element, uint32_t type, double value)
@@ -45,8 +46,9 @@ static int TrSpans(const HfTurretDef* d)
 
 static int TrHostFits(const HfTurretDef* d)
 {
+    if (d->face > HF_FACE_AWAY) return 0;
     if (d->host == 0) return !d->mount_slot && !d->attach_node && !d->seat;
-    return d->mount_slot <= 4 && d->host != d->entity;
+    return d->mount_slot <= 4 && d->host != d->entity && d->face == HF_FACE_GAME;
 }
 
 /* A seat for PLAYER and BOTH, none for AI and CUSTOM; side and rear sight only shorter than range. */
@@ -60,9 +62,11 @@ static int TrAimerFits(const HfTurretDef* d)
 
 static const char* TrRefusal(const HfTurretDef* in, HfTurretDef* d)
 {
-    if (in == NULL || in->size < sizeof *in || in->entity == 0) return "no HfTurretDef, its entity, or an SDK 37 one (rebuild the mod with SDK 39)";
-    *d = *in;
-    if (!TrHostFits(d)) return "mount_slot 0 .. 4 on a host that is not the turret; mount_slot, attach_node and seat need a host";
+    if (in == NULL || in->size < offsetof(HfTurretDef, face) || in->entity == 0)
+        return "no HfTurretDef, its entity, or an SDK 37 one (rebuild the mod with SDK 39 or later)";
+    memset(d, 0, sizeof *d);
+    memcpy(d, in, in->size < sizeof *d ? in->size : sizeof *d);
+    if (!TrHostFits(d)) return "mount_slot 0 .. 4 on a host that is not the turret; mount_slot, attach_node and seat need a host; face GAME or AWAY, AWAY without a host";
     if (!TrAimerFits(d))
         return "aimer AI, PLAYER, BOTH or CUSTOM; a seat with PLAYER and BOTH only; ranges only for AI and BOTH, side and rear no longer than range";
     if (!TrSpans(d) || d->rounds > 2047)
@@ -158,12 +162,13 @@ static int ApiAddTurret(HfMod* mod, const HfTurretDef* in)
     LONG at = InterlockedIncrement(&g_trDefCount) - 1;
     if (at >= TR_DEFS) { InterlockedDecrement(&g_trDefCount); ApiLog(mod, "add_turret: refused: %d turrets already", TR_DEFS); return 1; }
     g_trDefs[at] = (TrDef){mod, d, 0};
+    TrLiveStart();
     if (g_fired[HF_EVENT_ENTITIES_READY]) TrGunEdits(&g_trDefs[at]);
     const int failed = TrMount(mod, &d) | TrAim(mod, &d) | TrSight(mod, &d) | TrGun(mod, &d);
     static const char* aimers[] = {"the game's AI", "the seated player", "the seated player, else the AI", "the mod's code"};
     ApiLog(mod, "add_turret(%016llx): aimed by %s, turns %.0f / %.0f deg/s, sees %.0f m (0 = the game's), %.0f a minute%s%s",
         (unsigned long long)d.entity, aimers[d.aimer], (double)d.yaw_speed, (double)d.pitch_speed, (double)d.range, (double)d.fire_rate,
-        d.host ? ", on a host's mount slot" : "", failed ? "; some settings were refused (lines above)" : "");
+        d.host ? ", on a host's mount slot" : d.face == HF_FACE_AWAY ? ", facing away from its caller" : "", failed ? "; some settings were refused (lines above)" : "");
     if (d.seat) ApiLog(mod, "add_turret(%016llx): seat %u kept; seats aim turrets from a later SDK", (unsigned long long)d.entity, d.seat);
     return 0;
 }

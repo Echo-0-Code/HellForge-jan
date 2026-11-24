@@ -457,5 +457,6 @@ static void WorldCallsStart(void)
 #include "movers.c"        /* SDK 35: after ai_orders.c (AiDrivePoint, ApiAiObey) and world_sight.c (ApiLineOfSight) */
 #include "ai_combat.c"     /* SDK 37: after movers.c; ai_orders.c calls it (AcStep) */
 #include "turrets.c"       /* SDK 37: after movers.c (AiIn via ai_orders.c); fields.c (its edits) comes first */
+#include "turrets_live.c"  /* SDK 41: after turrets.c and movers.c (MvFrame, MvSetRoot) */
 #include "item_traits.c"   /* SDK 34: after this file; fields.c (its deferred edits) and registry.c (the mods' texts) come first */
 #include "list_filter.c"   /* SDK 38: after item_traits.c (ItStub, ItPoint, ItCallsTo); stratagems.c (its table) comes first */
