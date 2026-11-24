@@ -38,6 +38,7 @@ extern "C" {
 #endif
 
 #define HF_MOD_SDK_VERSION 40
+#define HF_WEAPON_PAINTS 1 /* HfWeapon.paints exists */
 #define HF_MOD_EXPORT __declspec(dllexport)
 
 typedef struct HfMod HfMod; /* Identifies the calling mod in logs and status. Opaque, but for SDK 6's HF_API(mod). */
@@ -137,7 +138,7 @@ typedef struct HfWeapon
      * none (a weapon with a projectile of its own then has no ammunition). */
     uint32_t ammunition;
     /* SDK 40: 1 gives a grenade copy the game's paints, the patterns and CUSTOMIZE; the mod paints its units from the
-     * pick (docs/modding/patterns.md). Ignored where the base has a customization record. */
+     * pick (docs/modding/patterns.md). Ignored where the base has a customization record. Test HF_WEAPON_PAINTS. */
     uint32_t paints;
 } HfWeapon;
 
@@ -754,8 +755,7 @@ typedef struct HfContent
     uint64_t entity;
     uint64_t base_entity;
     /* SDK 17, a weapon: the beam and arc it fires of a mod's (0: its base's) */
-    uint32_t beam;
-    uint32_t arc;
+    uint32_t beam, arc;
     /* SDK 20, a weapon: the damage its spray deals of a mod's (0: its base's) */
     uint32_t spray_damage;
     /* HellForge 2026-11-20, a weapon pattern: its swatch (HfPattern.colours, linear RGB), or NULL */
