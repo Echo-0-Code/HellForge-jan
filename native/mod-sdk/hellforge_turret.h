@@ -1,4 +1,4 @@
-/* HellForge mod SDK 37 and 39: turrets on movers and objects (docs/modding/turrets.md). Included by hellforge_move.h.
+/* HellForge mod SDK 37, 39 and 41: turrets on movers and objects (docs/modding/turrets.md). Included by hellforge_move.h.
  * add_turret sets up a turret entity once: how fast it turns, how far it may turn, how far it sees, what and how fast
  * it fires, and who aims it. It may also put the turret on another entity's mount slot, such as a mover's back.
  * HellForge writes the game's own records (Turret, Rotation, Targeting, SensorEye, the weapon's), so the game's turret
@@ -13,6 +13,10 @@
 #define HF_AIM_PLAYER 1u /* only the player in `seat`; its own sight is shut */
 #define HF_AIM_BOTH 2u   /* the player in `seat`, and the AI while that seat is empty */
 #define HF_AIM_CUSTOM 3u /* only the mod's code; its own sight is shut */
+
+/* HfTurretDef.face (SDK 41): which way it rests once it lands */
+#define HF_FACE_GAME 0u /* as the game lands it: a thrown sentry rests facing the world's +Y, whoever threw it */
+#define HF_FACE_AWAY 1u /* away from the Helldiver who called it in (the nearest one when it spawns); not with a host */
 
 /* One turret entity (add_turret). Zero-initialize it and set size and entity; every other zero field keeps the game's
  * value. Angles are degrees from the turret's rest, as its TurretComponentData has them (yaw_min is its left limit). */
@@ -42,6 +46,7 @@ typedef struct HfTurretDef
     uint32_t projectile;    /* what its gun fires: a vanilla HF_PROJECTILE_ or add_projectile's type, or 0 for its own */
     float fire_rate;        /* rounds (or beam pulses) a minute */
     uint32_t rounds;        /* rounds a magazine, at most 2047 */
+    uint32_t face;          /* SDK 41: HF_FACE_GAME or HF_FACE_AWAY; an SDK 39 HfTurretDef ends before it */
 } HfTurretDef;
 
 #endif
