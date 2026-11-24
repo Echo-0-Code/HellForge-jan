@@ -10729,6 +10729,32 @@
       "applies": "respawn",
       "appliesVerified": true,
       "appliesSource": "custom-ai probe 0.3.2: a record set before spawn held all mission; a live change to the faction table reverted (the record is read at creation)"
+    },
+    "Targeting": {
+      "component": "TargetingComponentData",
+      "index": 234,
+      "stride": 64,
+      "layout": "25480438",
+      "meaning": "how a unit's aim follows its target: a spring pulling the aim on and a damper holding its swing",
+      "fields": {
+        "aim_damping": {
+          "offset": 8,
+          "type": "f32",
+          "meaning": "how much the aim's swing is held back (vanilla sentries and the Scout Strider 1)",
+          "verified": false,
+          "source": "Captain of the S.E.A.F. (third-party-mods review); custom-ai test 0.1.6: 1 -> 10 made the Scout Strider fire"
+        },
+        "aim_spring": {
+          "offset": 12,
+          "type": "f32",
+          "meaning": "how hard the aim pulls onto the target (vanilla 10)",
+          "verified": false,
+          "source": "Captain of the S.E.A.F.; custom-ai test 0.1.6: 10 -> 25"
+        }
+      },
+      "applies": "respawn",
+      "appliesVerified": false,
+      "appliesSource": "a component record: read when the entity is made"
     }
   }
 }

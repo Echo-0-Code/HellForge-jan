@@ -75,9 +75,11 @@ Reference and related pages:
   cards, for every kind of item.
 - [Orders for AI units](modding/ai.md): for code mod authors; SDK 31 friendly units, the comms wheel's Follow me and
   Hold position, and moving a unit through the game's own pathing.
-- [Movers](modding/movers.md): for code mod authors; SDK 35 units HellForge moves itself (walk or drive, turning on
-  the spot or like a vehicle), driven by code or by the custom AI.
-- [Item lists](modding/lists.md): for code mod authors; SDK 36 rules and name filters for the Armory's weapon
+- [Movers](modding/movers.md): for code mod authors; units HellForge moves itself (walk, drive or SDK 36 hover, with
+  brakes, water and drivetrains), driven by code, a seat or the custom AI.
+- [Turrets](modding/turrets.md): for code mod authors; SDK 37 turret settings (turning, limits, sight, fire rate,
+  who aims it) and turrets on movers and objects.
+- [Item lists](modding/lists.md): for code mod authors; SDK 38 rules and name filters for the Armory's weapon
   grids and the stratagem picker, without hooking their builders.
 - [Building a lobby browser](lobby-browser.md): for front-end developers drawing their own lobby browser on the ship's
   terminal; the SDK 16 calls, the terminal's visit, what each lobby says and the rules a browser keeps.

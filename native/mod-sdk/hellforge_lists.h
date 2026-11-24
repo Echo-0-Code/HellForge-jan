@@ -1,4 +1,4 @@
-/* HellForge mod SDK 36: the game's item lists (docs/modding/lists.md). Included by hellforge_mod.h.
+/* HellForge mod SDK 38: the game's item lists (docs/modding/lists.md). Included by hellforge_mod.h.
  * HellForge owns the code that builds the Armory's weapon grids and the stratagem picker's list. A mod narrows them
  * with a rule (its own test per row) or a filter (text the row's shown name must contain), instead of hooking that
  * code itself: two mods hiding rows in one build no longer fight. */

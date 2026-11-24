@@ -5023,6 +5023,16 @@ static inline int hf_hook_VehicleMotionUpdate(HfMod* mod, HfFn_VehicleMotionUpda
     return hf_hook_function_(mod, "VehicleMotionUpdate", (void*)detour, (void**)original, priority);
 }
 
+/* WaterHeight (game.dll+0x13D46E0; call only). The water surface's height at a point: the map's water heightmap inside
+ * the map, its flat height outside, -500 with no water.
+ *   state     the water state: [game.dll+0x347CE48] (+0x44, a byte: the map has water)
+ *   position  x, y, z in the world
+ *   level     the mission's level: hf_global_Game's level field
+ * From HellForge's hover movers (movers_hover.c); found in a static pass of helldivers2.exe (build 25480438), proven in
+ * game by the hover test mod. */
+typedef float (*HfFn_WaterHeight)(void* state, const float* position, void* level);
+static inline HfFn_WaterHeight hf_fn_WaterHeight(HfMod* mod) { return (HfFn_WaterHeight)hf_function_(mod, "WaterHeight"); }
+
 /* AvatarUpdate (game.dll+0x829E90; hook or call). The avatar system's frame, for the avatars simulated here (the
  * manager's first +0x70 indexes): movement speed from AvatarSettings and stamina regeneration. The world update
  * (0x571250) calls it every frame.
@@ -5408,6 +5418,66 @@ static inline int hf_hook_UnitTeleportLocalPosition(HfMod* mod, HfFn_UnitTelepor
 {
     return hf_hook_function_(mod, "UnitTeleportLocalPosition", (void*)detour, (void**)original, priority);
 }
+
+/* ActorAddImpulse (helldivers2.exe+0x797CF0; call only). Adds a linear impulse to a dynamic physics actor's body (the
+ * engine's Actor.add_impulse); the actor table +0xC0 holds it.
+ *   actor    the physics actor's handle (UnitActors)
+ *   impulse  x, y, z in the world, N s
+ *   point    where it acts in the world, or NULL for the centre of mass
+ * From HellForge's hover movers (movers_hover.c); found in a static pass of helldivers2.exe (build 25480438), proven in
+ * game by the hover test mod. */
+typedef void (*HfFn_ActorAddImpulse)(uint32_t actor, const float* impulse, const float* point);
+static inline HfFn_ActorAddImpulse hf_fn_ActorAddImpulse(HfMod* mod) { return (HfFn_ActorAddImpulse)hf_function_(mod, "ActorAddImpulse"); }
+
+/* ActorAddAngularImpulse (helldivers2.exe+0x797E40; call only). Adds an angular impulse to a dynamic physics actor's
+ * body.
+ *   actor    the physics actor's handle
+ *   impulse  x, y, z in the world, N m s
+ * From HellForge's hover movers (movers_hover.c); found in a static pass of helldivers2.exe (build 25480438), proven in
+ * game by the hover test mod. */
+typedef void (*HfFn_ActorAddAngularImpulse)(uint32_t actor, const float* impulse);
+static inline HfFn_ActorAddAngularImpulse hf_fn_ActorAddAngularImpulse(HfMod* mod) { return (HfFn_ActorAddAngularImpulse)hf_function_(mod, "ActorAddAngularImpulse"); }
+
+/* ActorVelocity (helldivers2.exe+0x799540; call only). A physics actor's linear and angular velocity in the world.
+ *   actor    the physics actor's handle
+ *   linear   out: x, y, z, m/s
+ *   angular  out: x, y, z, rad/s
+ * From HellForge's hover movers (movers_hover.c); found in a static pass of helldivers2.exe (build 25480438), proven in
+ * game by the hover test mod. */
+typedef void (*HfFn_ActorVelocity)(uint32_t actor, float* linear, float* angular);
+static inline HfFn_ActorVelocity hf_fn_ActorVelocity(HfMod* mod) { return (HfFn_ActorVelocity)hf_function_(mod, "ActorVelocity"); }
+
+/* UnitActors (helldivers2.exe+0x7E1C20; call only). A unit's physics actors; 0xFFFFFFFF when it has none.
+ *   unit  the unit's handle
+ *   mask  1: its physics actors
+ *   out   out, 12 words: out[0] points at the actor handles (u32), their count is the u32 at byte 0x38
+ * From HellForge's hover movers (movers_hover.c); found in a static pass of helldivers2.exe (build 25480438), proven in
+ * game by the hover test mod. */
+typedef uint64_t (*HfFn_UnitActors)(uint32_t unit, uint32_t mask, uint64_t* out);
+static inline HfFn_UnitActors hf_fn_UnitActors(HfMod* mod) { return (HfFn_UnitActors)hf_function_(mod, "UnitActors"); }
+
+/* ActorResolves (helldivers2.exe+0x7972F0; call only). Whether a physics actor's handle still names a live actor (a
+ * bool in al: 1 or 0).
+ *   actor  the physics actor's handle
+ * From HellForge's hover movers (movers_hover.c); found in a static pass of helldivers2.exe (build 25480438), proven in
+ * game by the hover test mod. */
+typedef uint8_t (*HfFn_ActorResolves)(uint32_t actor);
+static inline HfFn_ActorResolves hf_fn_ActorResolves(HfMod* mod) { return (HfFn_ActorResolves)hf_function_(mod, "ActorResolves"); }
+
+/* ActorUnit (helldivers2.exe+0x799980; call only). The unit a physics actor belongs to (its record +0xC).
+ *   actor  the physics actor's handle
+ * From HellForge's hover movers (movers_hover.c); found in a static pass of helldivers2.exe (build 25480438), proven in
+ * game by the hover test mod. */
+typedef uint32_t (*HfFn_ActorUnit)(uint32_t actor);
+static inline HfFn_ActorUnit hf_fn_ActorUnit(HfMod* mod) { return (HfFn_ActorUnit)hf_function_(mod, "ActorUnit"); }
+
+/* ActorRecord (helldivers2.exe+0x7951B0; call only). A physics actor's record: +0x14 its body id in its world (the
+ * handle's top two bits pick the world).
+ *   actor  the physics actor's handle
+ * From HellForge's hover movers (movers_hover.c); found in a static pass of helldivers2.exe (build 25480438), proven in
+ * game by the hover test mod. */
+typedef const uint8_t* (*HfFn_ActorRecord)(uint32_t actor);
+static inline HfFn_ActorRecord hf_fn_ActorRecord(HfMod* mod) { return (HfFn_ActorRecord)hf_function_(mod, "ActorRecord"); }
 
 /* UnitTeleportLocalPose (helldivers2.exe+0x1FD350; hook or call). Writes a unit node's whole local pose, marks the node
  * changed and the unit moving. Unit.teleport_local_pose calls it with the unit object..

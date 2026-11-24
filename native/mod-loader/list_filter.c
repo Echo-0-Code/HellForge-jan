@@ -1,4 +1,4 @@
-/* SDK 36: the game's item lists (hellforge_lists.h, docs/modding/lists.md), for game.dll build 25480438.
+/* SDK 38: the game's item lists (hellforge_lists.h, docs/modding/lists.md), for game.dll build 25480438.
  * Armory weapon grids: the builder skips a row whose item is 0, so HellForge zeroes the hidden rows' items while it
  * runs and puts them back after. Stratagem picker: its walk over the types asks "held?" per type at one call site;
  * that call points here and also answers no for a hidden type. Included by world_calls.c after item_traits.c. */
@@ -325,7 +325,7 @@ static int LfListOk(HfMod* mod, uint32_t list, const char* call)
     return 0;
 }
 
-/* SDK 36, add_list_rule: every build of the list asks rule of each row. 0 done, 1 refused (logged). */
+/* SDK 38, add_list_rule: every build of the list asks rule of each row. 0 done, 1 refused (logged). */
 static int ApiAddListRule(HfMod* mod, uint32_t list, HfListRule rule, void* user)
 {
     if (!LfListOk(mod, list, "add_list_rule")) return 1;
@@ -341,7 +341,7 @@ static int ApiAddListRule(HfMod* mod, uint32_t list, HfListRule rule, void* user
     return 0;
 }
 
-/* SDK 36, set_list_filter: text every listed row's name must contain, any case; NULL or "" takes the mod's away. */
+/* SDK 38, set_list_filter: text every listed row's name must contain, any case; NULL or "" takes the mod's away. */
 static int ApiSetListFilter(HfMod* mod, uint32_t list, const char* text)
 {
     if (!LfListOk(mod, list, "set_list_filter")) return 1;
@@ -361,7 +361,7 @@ static int ApiSetListFilter(HfMod* mod, uint32_t list, const char* text)
     return 0;
 }
 
-/* SDK 36, rebuild_list: the list built again on the next update, when it is up. 0 asked, 1 refused or not up. */
+/* SDK 38, rebuild_list: the list built again on the next update, when it is up. 0 asked, 1 refused or not up. */
 static int ApiRebuildList(HfMod* mod, uint32_t list)
 {
     if (!LfListOk(mod, list, "rebuild_list")) return 1;
@@ -370,7 +370,7 @@ static int ApiRebuildList(HfMod* mod, uint32_t list)
     return g_lfState[list - 1].open ? 0 : 1;
 }
 
-/* SDK 36, list_state: what the list showed at its last build. 1 filled, 0 not (no build seen, or a bad call). */
+/* SDK 38, list_state: what the list showed at its last build. 1 filled, 0 not (no build seen, or a bad call). */
 static uint32_t ApiListState(HfMod* mod, uint32_t list, HfListState* state)
 {
     if (state == NULL || state->size < sizeof(HfListState) || (list != HF_LIST_ARMORY_WEAPONS && list != HF_LIST_STRATAGEMS)) return 0;
@@ -380,5 +380,5 @@ static uint32_t ApiListState(HfMod* mod, uint32_t list, HfListState* state)
     return 1;
 }
 
-/* The table's entries from SDK 36 on (ApiInit). */
+/* The table's entries from SDK 38 on (ApiInit). */
 #define LF_API ApiAddListRule, ApiSetListFilter, ApiRebuildList, ApiListState

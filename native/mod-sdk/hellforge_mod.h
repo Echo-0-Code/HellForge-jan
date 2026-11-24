@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 36
+#define HF_MOD_SDK_VERSION 38
 #define HF_MOD_EXPORT __declspec(dllexport)
 
 typedef struct HfMod HfMod; /* Identifies the calling mod in logs and status. Opaque, but for SDK 6's HF_API(mod). */
@@ -769,8 +769,8 @@ typedef struct HfEventInfo
 } HfEventInfo;
 typedef void (*HfListener)(HfMod* mod, const HfEventInfo* event, void* user);
 #include "hellforge_ai.h" /* SDK 31: orders for AI units (HfOrderEvent needs HfEventInfo) */
-#include "hellforge_move.h" /* SDK 35: movers */
-#include "hellforge_lists.h" /* SDK 36: item lists */
+#include "hellforge_move.h" /* SDK 35: movers, and SDK 37 turrets (hellforge_turret.h) */
+#include "hellforge_lists.h" /* SDK 38: item lists */
 
 typedef struct HfStateEvent { HfEventInfo info; uint32_t from, to; } HfStateEvent;
 typedef struct HfPlayerEvent
@@ -1810,7 +1810,11 @@ typedef struct HfApi
     int (*mover_input)(HfMod* mod, uint32_t entity, const HfMoverInput* input);
     uint32_t (*mover_state)(HfMod* mod, uint32_t entity, HfMoverState* state); /* how it moves (HF_MOVER_...). Any thread */
     int (*ai_drive)(HfMod* mod, uint64_t entity, const HfAiDrive* ai); /* the custom AI drives its mover. 0 done, 1 refused */
-    /* ---- SDK 36: the game's item lists (hellforge_lists.h, docs/modding/lists.md; check hf->size) ------------------ */
+    /* ---- SDK 37: turrets on movers and objects (hellforge_turret.h, docs/modding/turrets.md; check hf->size) --------- */
+    /* A turret's turning, sight, fire rate and aimer, and optionally the host that carries it, as deferred edits of the
+     * game's records. From hellforge_mod_init. 0 done, 1 refused (the mod's log says why). */
+    int (*add_turret)(HfMod* mod, const HfTurretDef* def);
+    /* ---- SDK 38: the game's item lists (hellforge_lists.h, docs/modding/lists.md; check hf->size) ------------------ */
     int (*add_list_rule)(HfMod* mod, uint32_t list, HfListRule rule, void* user); /* asked of each row per build. 0 done, 1 refused */
     /* Text each listed row's name must contain, any case (NULL or "": none); the list rebuilds if up. Any thread. 0 done */
     int (*set_list_filter)(HfMod* mod, uint32_t list, const char* text);

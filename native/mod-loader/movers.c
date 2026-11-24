@@ -1,15 +1,20 @@
-/* SDK 35: movers (docs/modding/movers.md, hellforge_move.h). A mover's unit is moved by HellForge on the host: its
- * root node is teleported each update, inside the frame of the unit it is parented to (a hellpod), from a throttle and
- * a steer. The ground is found with rays (line_of_sight); the root's moves replicate as a sentry's do.
+/* SDK 35: movers (docs/modding/movers.md, hellforge_move.h). A walker's or driver's unit is moved by HellForge on the
+ * host: its root node is teleported each update, inside the frame of the unit it is parented to (a hellpod), from a
+ * throttle and a steer. The ground is found with rays (line_of_sight); the root's moves replicate as a sentry's do.
+ * SDK 36's hover vehicles stay physics bodies, pushed by movers_hover.c where they are simulated.
  * Included by world_calls.c after ai_orders.c (AiDrivePoint, ApiAiObey). */
 
 #define MV_DEFS 32
 #define MV_UNITS 64
 #define MV_INPUT_S 0.5     /* a mod's input holds this long */
 #define MV_SOLID_S 0.5     /* how often the moving units near a mover are listed */
+#define MV_G 9.81f
+#define MV_WATER_STATE 0x347CE48u /* game.dll: the water state WaterHeight takes (its +0x44 byte: the map has water) */
+#define MV_GAME_LEVEL 0xAE288u    /* the Game's mission level, WaterHeight's third argument (mappings/globals.json) */
 
 typedef void (*MvPosFn)(uint32_t unit, int32_t node, const float* position);
 typedef void* (*MvLevelFn)(uint32_t unit);
+typedef float (*MvWaterFn)(void* state, const float* position, void* level);
 
 typedef struct MvDef { HfMod* mod; HfMoverDef def; int ai; float arrive; } MvDef;
 typedef struct MvUnit
@@ -19,6 +24,12 @@ typedef struct MvUnit
     uint32_t written, reframed;
     double age, inputAge, sinceSolid, sinceTrace;
     uint32_t mobile[32], mobileCount, blockedLogged;
+    float height, waterDepth, grade;
+    uint32_t driven;
+    /* hover (movers_hover.c) */
+    uint32_t body, engaged, told;
+    float lost, seatThrottle, seatSteer;
+    double seatAge, sinceLog;
 } MvUnit;
 
 static MvDef g_mvDefs[MV_DEFS];
@@ -29,6 +40,8 @@ static HfMod g_mvMod;
 static volatile LONG g_mvTicking;
 static MvPosFn g_mvPos, g_mvRot;
 static MvLevelFn g_mvLevel;
+static MvWaterFn g_mvWater;
+static DWORD g_mvPushThread; /* the game thread while a mod's drive function runs: mover_* refuse rather than deadlock */
 
 static float MvWrap(float a) { while (a > 3.14159265f) a -= 6.2831853f; while (a < -3.14159265f) a += 6.2831853f; return a; }
 static float MvClamp(float v, float lo, float hi) { return v < lo ? lo : v > hi ? hi : v; }
@@ -84,6 +97,48 @@ static int MvGround(const MvUnit* m, const HfMoverDef* d, float x, float y, floa
     return 1;
 }
 
+/* The water surface over (x, y), or -500 for none (or no reviewed water query). */
+static float MvWaterAt(float x, float y, float z)
+{
+    uintptr_t game = ApiModuleBase("game.dll", NULL), state, g, level;
+    if (!g_mvWater || !game || !EvpPtr(game + MV_WATER_STATE, &state) || !EvpPtr(game + WC_GAME, &g) || !EvpPtr(g + MV_GAME_LEVEL, &level))
+        return -500.0f;
+    const float p[3] = {x, y, z}, w = g_mvWater((void*)state, p, (void*)level);
+    return isfinite(w) ? w : -500.0f;
+}
+
+/* A floater in deep water: no deeper than its draft under the surface, within its steps of where it was. */
+static int MvFloat(MvUnit* m, const HfMoverDef* d, float g, float w, float z, float* out)
+{
+    *out = fmaxf(g, w - d->wade_depth);
+    if (*out - z > d->step_up || z - *out > d->step_down) return 0;
+    m->waterDepth = w - g;
+    return 1;
+}
+
+/* Where it stands at (x, y): the ground, with the water there as its water setting takes it. 1 with the height. A
+ * floater's drop into deep water is no drop: the ground there is looked for straight down. */
+static int MvSurface(MvUnit* m, const HfMoverDef* d, float x, float y, float z, float* out)
+{
+    float g;
+    const int ok = MvGround(m, d, x, y, z, &g);
+    const float w = d->water == HF_WATER_IGNORE ? -500.0f : MvWaterAt(x, y, z);
+    m->waterDepth = 0;
+    if (w < -499.0f) { if (ok) *out = g; return ok; }
+    if (!ok)
+    {
+        const float top[3] = {x, y, z + 0.3f}, deep[3] = {x, y, z - 80.0f};
+        if (d->water != HF_WATER_CROSS) return 0;
+        if (!MvRay(m, top, deep, &g)) g = w - 80.0f;
+    }
+    if (w <= g) { *out = g; return 1; }
+    if (d->water == HF_WATER_CROSS) return MvFloat(m, d, g, w, z, out);
+    if (w - g > (d->water == HF_WATER_BLOCK ? 0.05f : d->wade_depth)) return 0;
+    m->waterDepth = w - g;
+    *out = g;
+    return 1;
+}
+
 /* A wall ahead: a ray just over its highest step, from its root to reach past the step. */
 static int MvWall(const MvUnit* m, const HfMoverDef* d, float ux, float uy, float step)
 {
@@ -105,7 +160,8 @@ static int MvStep(MvUnit* m, const HfMoverDef* d, float step)
         const float c = cosf(kTry[i]), s = sinf(kTry[i]);
         const float ux = (fx * c - fy * s) * sign, uy = (fx * s + fy * c) * sign;
         float g;
-        if (MvWall(m, d, ux, uy, len) || !MvGround(m, d, m->pos[0] + ux * len, m->pos[1] + uy * len, m->pos[2], &g)) continue;
+        if (MvWall(m, d, ux, uy, len) || !MvSurface(m, d, m->pos[0] + ux * len, m->pos[1] + uy * len, m->pos[2], &g)) continue;
+        m->grade = 0.8f * m->grade + 0.2f * MvClamp((g - m->pos[2]) / step, -3, 3); /* smoothed: steps are uneven */
         m->pos[0] += ux * len; m->pos[1] += uy * len; m->pos[2] = g;
         return 1;
     }
@@ -205,15 +261,73 @@ static void MvAiInputs(MvUnit* m, const MvDef* def)
     m->throttle = fabsf(err) > 1.7f ? 0.35f : close; /* behind it: a slow wide turn */
 }
 
-/* Speed and heading from the inputs, then the step over the ground. */
-static void MvDrive(MvUnit* m, const HfMoverDef* d, float dt)
+static void MvSnapshot(const MvUnit* m, HfMoverState* s);
+
+/* HF_DRIVETRAIN_NONE: the mod's push for this update (zero without a drive function). */
+static HfMoverPush MvPush(MvUnit* m, const MvDef* def, float dt)
 {
-    const float want = m->throttle >= 0 ? m->throttle * d->speed : m->throttle * d->reverse_speed;
-    const float dv = d->acceleration * dt;
-    m->speed = want > m->speed + dv ? m->speed + dv : want < m->speed - dv ? m->speed - dv : want;
-    float rate = d->turn_rate * 0.0174533f;
-    if (d->turn == HF_TURN_VEHICLE) rate = fminf(rate, fabsf(m->speed) / d->turn_radius) * (m->speed < 0 ? -1.0f : 1.0f);
-    m->turning = m->steer * rate;
+    HfMoverPush push = {sizeof push, 0, 0, 0};
+    if (def->def.drive == NULL) return push;
+    HfMoverState s;
+    MvSnapshot(m, &s);
+    g_mvPushThread = GetCurrentThreadId();
+    def->def.drive(def->mod, m->entity, &s, dt, &push, def->def.drive_user);
+    g_mvPushThread = 0;
+    if (!isfinite(push.forward) || !isfinite(push.side) || !isfinite(push.turn)) memset(&push.forward, 0, 12);
+    return push;
+}
+
+/* The fastest turn at this speed: turn_rate, or for a vehicle no tighter than turn_radius (backing up turns it back). */
+static float MvRate(const HfMoverDef* d, float speed)
+{
+    const float rate = d->turn_rate * 0.0174533f;
+    return d->turn == HF_TURN_VEHICLE ? fminf(rate, fabsf(speed) / d->turn_radius) * (speed < 0 ? -1.0f : 1.0f) : rate;
+}
+
+/* A driven axle's share of the weight on a grade. The load moves to the rear by about (centre of mass height /
+ * wheelbase) x (a/g + sin slope), 0.25 x for a car, so a rear drive climbs best and a front drive worst. */
+static float MvDrivenShare(uint32_t drivetrain, float grade, float accel)
+{
+    const float rear = MvClamp(0.5f + 0.25f * (accel / MV_G + grade / sqrtf(1 + grade * grade)), 0.1f, 0.9f);
+    return drivetrain == HF_DRIVETRAIN_4WD ? 1.0f : drivetrain == HF_DRIVETRAIN_RWD ? rear : 1.0f - rear;
+}
+
+/* The speed after dt toward `want`: acceleration speeding up, brake slowing down or turning about. With a drivetrain,
+ * the tyres' grip caps both, and a grade adds gravity's pull along it. */
+static float MvSpeedToward(const MvUnit* m, const HfMoverDef* d, float want, float dt)
+{
+    const float v = m->speed;
+    const int slowing = fabsf(want) < fabsf(v) || want * v < 0;
+    float a = slowing ? d->brake : d->acceleration;
+    if (d->mode == HF_MOVE_DRIVE && d->drivetrain >= HF_DRIVETRAIN_FWD && d->drivetrain <= HF_DRIVETRAIN_4WD)
+    {
+        const float c = 1.0f / sqrtf(1 + m->grade * m->grade), dir = want > v ? 1.0f : -1.0f;
+        const float grip = d->grip * MV_G * c; /* every wheel brakes; only the driven ones push */
+        a = slowing ? fminf(a, grip) : fminf(a, grip * MvDrivenShare(d->drivetrain, m->grade * dir, a * dir));
+        a -= MV_G * m->grade * c * dir; /* uphill takes some of it, downhill adds */
+        if (a < 0 && fabsf(v) < 0.05f) return 0; /* too steep for its grip: it holds where it is */
+    }
+    const float dv = a * dt; /* negative when a grade beats its grip or brakes: it loses ground or runs away downhill */
+    return MvClamp(want > v + dv ? v + dv : want < v - dv ? v - dv : want, -d->reverse_speed, d->speed);
+}
+
+/* Speed and heading from the inputs (or a mod's push), then the step over the ground. */
+static void MvDrive(MvUnit* m, const MvDef* def, float dt)
+{
+    const HfMoverDef* d = &def->def;
+    if (d->drivetrain == HF_DRIVETRAIN_NONE)
+    {
+        const HfMoverPush push = MvPush(m, def, dt);
+        const float rate = fabsf(MvRate(d, m->speed));
+        m->speed = MvClamp(m->speed + push.forward * dt, -d->reverse_speed, d->speed);
+        m->turning = MvClamp(push.turn, -rate, rate);
+    }
+    else
+    {
+        m->speed = MvSpeedToward(m, d, m->throttle >= 0 ? m->throttle * d->speed : m->throttle * d->reverse_speed, dt);
+        m->turning = m->steer * MvRate(d, m->speed);
+    }
+    m->driven = d->mode == HF_MOVE_DRIVE && d->drivetrain <= HF_DRIVETRAIN_4WD && fabsf(m->throttle) > 0.02f ? d->drivetrain : 0;
     m->yaw = MvWrap(m->yaw + m->turning * dt);
     m->status = HF_MOVER_MOVING;
     if (fabsf(m->speed * dt) < 0.0005f) return;
@@ -221,7 +335,7 @@ static void MvDrive(MvUnit* m, const HfMoverDef* d, float dt)
     m->speed = 0;
     m->status = HF_MOVER_BLOCKED;
     if (m->blockedLogged++ == 0)
-        ApiLog(g_mvDefs[m->def - 1].mod, "mover: unit %u blocked at %.1f %.1f %.1f (a step it can't take, or a wall)", m->entity,
+        ApiLog(def->mod, "mover: unit %u blocked at %.1f %.1f %.1f (a step it can't take, a wall, or water too deep)", m->entity,
             (double)m->pos[0], (double)m->pos[1], (double)m->pos[2]);
 }
 
@@ -238,11 +352,25 @@ static void MvTrace(MvUnit* m, const MvDef* def, float dt)
         (double)m->steer, m->status);
 }
 
+#define HV_SEAT_S 2.0 /* a hover's seated driver's last throttle or steer drives it this long */
+
+/* Who drives it now: a mod's input while it holds, a hover's seated driver, the custom AI, or nobody. */
+static void MvDriver(MvUnit* m, const MvDef* def)
+{
+    if (m->inputAge < MV_INPUT_S) m->driver = HF_DRIVER_MOD;
+    else if (def->def.mode == HF_MOVE_HOVER && m->seatAge < HV_SEAT_S) { m->driver = HF_DRIVER_SEAT; m->throttle = m->seatThrottle; m->steer = m->seatSteer; }
+    else if (def->ai) { m->driver = HF_DRIVER_AI; MvAiInputs(m, def); }
+    else { m->driver = HF_DRIVER_NONE; m->throttle = 0; m->steer = 0; }
+}
+
+#include "movers_hover.c" /* SDK 36: hover vehicles (MvUnit, MvRay, MvWaterAt, MvPush, MvRate) */
+
 static void MvUnitTick(MvUnit* m, float dt)
 {
     const MvDef* def = &g_mvDefs[m->def - 1];
     m->age += dt;
     m->inputAge += dt;
+    m->seatAge += dt;
     uint32_t unit = 0, network = 0;
     if (!WcEntity(m->entity, &unit, &network) || !unit) return;
     if (unit != m->unit) /* a hellpod's payload can change units as it deploys: its root is read again */
@@ -251,6 +379,7 @@ static void MvUnitTick(MvUnit* m, float dt)
         m->unit = unit; m->started = 0;
     }
     if (m->age < def->def.start_delay) { m->status = HF_MOVER_WAITING; return; }
+    if (def->def.mode == HF_MOVE_HOVER) { HvUnitTick(m, def, dt); return; }
     if (!m->started)
     {
         if (!MvParent(m)) { m->status = HF_MOVER_WAITING; return; }
@@ -263,10 +392,8 @@ static void MvUnitTick(MvUnit* m, float dt)
         MvListMobile(m);
         if (!MvKeepFrame(m, def)) { ApiLog(def->mod, "mover: unit %u: its root no longer reads; it waits", m->entity); m->started = 0; return; }
     }
-    if (m->inputAge < MV_INPUT_S) m->driver = HF_DRIVER_MOD;
-    else if (def->ai) { m->driver = HF_DRIVER_AI; MvAiInputs(m, def); }
-    else { m->driver = HF_DRIVER_NONE; m->throttle = 0; m->steer = 0; }
-    MvDrive(m, &def->def, dt);
+    MvDriver(m, def);
+    MvDrive(m, def, dt);
     MvSetRoot(m);
     MvTrace(m, def, dt);
 }
@@ -282,7 +409,8 @@ static int MvCalls(float dt)
     g_mvPos = (MvPosFn)ApiFunction(&g_mvMod, "UnitTeleportLocalPosition");
     g_mvRot = (MvPosFn)ApiFunction(&g_mvMod, "UnitTeleportLocalRotation");
     if (!g_mvLevel) g_mvLevel = (MvLevelFn)ApiFunction(&g_mvMod, "UnitLevel");
-    if (g_mvPos && g_mvRot) { Note("movers: on"); return 1; }
+    if (!g_mvWater) g_mvWater = (MvWaterFn)ApiFunction(&g_mvMod, "WaterHeight");
+    if (g_mvPos && g_mvRot) { Note(g_mvWater ? "movers: on" : "movers: on, without water (WaterHeight is not the reviewed code)"); return 1; }
     if ((waited += dt) > 60 && !said) { said = 1; Note("movers: off; the teleport calls are not the reviewed ones"); }
     return 0;
 }
@@ -311,10 +439,10 @@ static void MvTick(HfMod* mod, float dt, void* user)
 static void MvSpawned(HfMod* mod, const HfSpawnEvent* e, void* user)
 {
     (void)mod; (void)user;
-    if (!e->authority) return;
     for (LONG d = 0; d < g_mvDefCount; d++)
     {
-        if (g_mvDefs[d].def.entity != e->resource) continue;
+        /* a hover is followed everywhere: the machine that simulates it can change (a client drives it) */
+        if (g_mvDefs[d].def.entity != e->resource || (!e->authority && g_mvDefs[d].def.mode != HF_MOVE_HOVER)) continue;
         AcquireSRWLockExclusive(&g_mvLock);
         for (int i = 0; i < MV_UNITS; i++)
             if (!g_mvUnits[i].entity) { memset(&g_mvUnits[i], 0, sizeof g_mvUnits[i]); g_mvUnits[i].entity = e->entity; g_mvUnits[i].def = (uint32_t)d + 1; break; }
@@ -367,26 +495,48 @@ static int MvSettling(uint32_t entity)
 
 /* ---- the API ---- */
 
+/* Hover defaults are the tested HV-1's: 0.3 g of fan thrust and 22 m/s, a light hovercraft's; reversed fans brake as
+ * hard as they push. A reverse speed of 0.7 x top speed is half the thrust backward. */
+static void MvOr(float* v, float fallback) { if (*v == 0) *v = fallback; }
+
 static void MvDefaults(HfMoverDef* d)
 {
+    const int hover = d->mode == HF_MOVE_HOVER;
     if (!d->mode) d->mode = HF_MOVE_WALK;
     if (!d->turn) d->turn = HF_TURN_SPOT;
-    if (d->speed == 0) d->speed = 4.0f;
-    if (d->reverse_speed == 0) d->reverse_speed = d->speed * 0.5f;
-    if (d->acceleration == 0) d->acceleration = 8.0f;
-    if (d->turn_rate == 0) d->turn_rate = 120.0f;
-    if (d->turn_radius == 0) d->turn_radius = 4.0f;
-    if (d->step_up == 0) d->step_up = 0.5f;
-    if (d->step_down == 0) d->step_down = 1.0f;
-    if (d->reach == 0) d->reach = 0.6f;
+    if (!d->water) d->water = HF_WATER_WADE;
+    MvOr(&d->speed, hover ? 22.0f : 4.0f);
+    MvOr(&d->reverse_speed, d->speed * (hover ? 0.7f : 0.5f));
+    MvOr(&d->acceleration, hover ? 3.0f : 8.0f);
+    MvOr(&d->brake, d->acceleration);
+    MvOr(&d->wade_depth, d->mode == HF_MOVE_DRIVE ? 0.5f : 0.8f); /* an SUV's wading depth; a person's mid-thigh */
+    MvOr(&d->grip, 0.7f);
+    MvOr(&d->hover_height, 1.5f);
+    MvOr(&d->mass, 3000.0f);
+    MvOr(&d->hover_hz, 1.2f);
+    MvOr(&d->hover_damping, 0.7f);
+    MvOr(&d->side_drag, 0.5f);
+    MvOr(&d->turn_rate, hover ? 57.0f : 120.0f);
+    MvOr(&d->turn_radius, 4.0f);
+    MvOr(&d->step_up, 0.5f);
+    MvOr(&d->step_down, 1.0f);
+    MvOr(&d->reach, 0.6f);
 }
 
 static const char* MvRefusal(const HfMoverDef* in, HfMoverDef* d)
 {
-    if (in == NULL || in->size < sizeof *in || in->entity == 0) return "no HfMoverDef, its size or its entity";
-    *d = *in;
+    if (in == NULL || in->size < HF_MOVER_DEF_SIZE_35 || in->entity == 0) return "no HfMoverDef, its size or its entity";
+    memset(d, 0, sizeof *d);
+    memcpy(d, in, in->size < sizeof *d ? in->size : sizeof *d);
+    if (in->size < sizeof *d) d->water = HF_WATER_IGNORE; /* an SDK 35 mover keeps walking along the bottom */
     MvDefaults(d);
-    if (d->mode > HF_MOVE_DRIVE || d->turn > HF_TURN_VEHICLE) return "mode WALK or DRIVE, turn SPOT or VEHICLE (hover and fly come later)";
+    if (d->mode > HF_MOVE_HOVER || d->turn > HF_TURN_VEHICLE || d->water > HF_WATER_IGNORE || d->drivetrain > HF_DRIVETRAIN_NONE)
+        return "mode WALK, DRIVE or HOVER, turn SPOT or VEHICLE, water WADE .. IGNORE, drivetrain 0 .. NONE";
+    if (d->mode == HF_MOVE_HOVER && d->drivetrain && d->drivetrain != HF_DRIVETRAIN_NONE) return "a hover has no driven wheels: drivetrain 0 or NONE";
+    if (!AiIn(d->brake, 0.1f, 200) || !AiIn(d->wade_depth, 0, 20) || !AiIn(d->grip, 0.05f, 2) || !AiIn(d->hover_height, 0.2f, 20) ||
+        !AiIn(d->carried, 0, 1) || !AiIn(d->mass, 50, 200000) || !AiIn(d->hover_hz, 0.2f, 5) || !AiIn(d->hover_damping, 0.1f, 2) ||
+        !AiIn(d->side_drag, 0, 20))
+        return "brake 0.1 .. 200, wade_depth 0 .. 20, grip 0.05 .. 2, hover_height 0.2 .. 20, carried 0 .. 1, mass 50 .. 200000, hover_hz 0.2 .. 5, hover_damping 0.1 .. 2, side_drag 0 .. 20";
     if (!AiIn(d->speed, 0.1f, 40) || !AiIn(d->reverse_speed, 0, 40) || !AiIn(d->acceleration, 0.1f, 200) || !AiIn(d->turn_rate, 1, 1440) ||
         !AiIn(d->turn_radius, 0.1f, 100) || !AiIn(d->step_up, 0, 10) || !AiIn(d->step_down, 0, 50) || !AiIn(d->reach, 0, 20) ||
         !AiIn(d->start_delay, 0, 120))
@@ -406,17 +556,22 @@ static int ApiAddMover(HfMod* mod, const HfMoverDef* in)
     LONG at = InterlockedIncrement(&g_mvDefCount) - 1;
     if (at >= MV_DEFS) { InterlockedDecrement(&g_mvDefCount); ApiLog(mod, "add_mover: refused: %d movers already", MV_DEFS); return 1; }
     g_mvDefs[at] = (MvDef){mod, d, 0, 3.0f};
-    ApiLog(mod, "add_mover(%016llx): %s, %.1f m/s (%.1f back), %s at %.0f deg/s, steps %.2f up %.2f down", (unsigned long long)d.entity,
-        d.mode == HF_MOVE_DRIVE ? "drives" : "walks", (double)d.speed, (double)d.reverse_speed,
-        d.turn == HF_TURN_VEHICLE ? "turns like a vehicle" : "turns on the spot", (double)d.turn_rate, (double)d.step_up, (double)d.step_down);
+    static const char* const kMode[] = {"", "walks", "drives", "hovers"}, * const kWater[] = {"", "wades", "stays dry", "floats", "ignores water"};
+    ApiLog(mod, "add_mover(%016llx): %s, %.1f m/s (%.1f back), %s at %.0f deg/s, brakes %.1f m/s2, %s (%.2f m), drivetrain %u", (unsigned long long)d.entity,
+        kMode[d.mode], (double)d.speed, (double)d.reverse_speed, d.turn == HF_TURN_VEHICLE ? "turns like a vehicle" : "turns on the spot",
+        (double)d.turn_rate, (double)d.brake, d.mode == HF_MOVE_HOVER ? "crosses water" : kWater[d.water], (double)d.wade_depth, d.drivetrain);
+    if (d.mode == HF_MOVE_HOVER)
+        ApiLog(mod, "add_mover(%016llx): hovers %.2f m up, %.0f kg (%.0f%% carried by its data), %.1f Hz", (unsigned long long)d.entity,
+            (double)d.hover_height, (double)d.mass, (double)(d.carried * 100), (double)d.hover_hz);
     MvStart();
+    if (d.mode == HF_MOVE_HOVER) HvStart();
     return 0;
 }
 
 /* SDK 35, mover_input: a driver's throttle and steer for the next half second. Game thread, on the host. 0 taken. */
 static int ApiMoverInput(HfMod* mod, uint32_t entity, const HfMoverInput* in)
 {
-    if (!WcGameThread(mod, "mover_input") || in == NULL || in->size < sizeof *in) return 1;
+    if (!WcGameThread(mod, "mover_input") || in == NULL || in->size < sizeof *in || g_mvPushThread == GetCurrentThreadId()) return 1;
     AcquireSRWLockExclusive(&g_mvLock);
     MvUnit* m = MvUnitOf(entity);
     if (m != NULL) { m->throttle = MvClamp(in->throttle, -1, 1); m->steer = MvClamp(in->steer, -1, 1); m->inputAge = 0; }
@@ -424,23 +579,30 @@ static int ApiMoverInput(HfMod* mod, uint32_t entity, const HfMoverInput* in)
     return m == NULL;
 }
 
-/* SDK 35, mover_state: how a mover's unit moves (HF_MOVER_...). Any thread. */
+/* A unit's state as mover_state gives it. Under g_mvLock. */
+static void MvSnapshot(const MvUnit* m, HfMoverState* s)
+{
+    memset(s, 0, sizeof *s);
+    s->size = sizeof *s;
+    if (m == NULL) return;
+    s->status = m->started ? m->status : HF_MOVER_WAITING; s->driver = m->driver;
+    memcpy(s->position, m->pos, 12);
+    s->yaw = m->yaw; s->speed = m->speed; s->turning = m->turning; s->throttle = m->throttle; s->steer = m->steer;
+    s->height = m->height; s->water_depth = m->waterDepth; s->grade = m->grade; s->driven = m->driven;
+}
+
+/* SDK 35, mover_state: how a mover's unit moves (HF_MOVER_...). Any thread; an SDK 35 size gets SDK 35's fields. */
 static uint32_t ApiMoverState(HfMod* mod, uint32_t entity, HfMoverState* state)
 {
     (void)mod;
     HfMoverState s;
-    memset(&s, 0, sizeof s);
-    s.size = sizeof s;
+    if (g_mvPushThread == GetCurrentThreadId()) return HF_MOVER_NONE;
     AcquireSRWLockShared(&g_mvLock);
-    const MvUnit* m = MvUnitOf(entity);
-    if (m != NULL)
-    {
-        s.status = m->started ? m->status : HF_MOVER_WAITING; s.driver = m->driver;
-        memcpy(s.position, m->pos, 12);
-        s.yaw = m->yaw; s.speed = m->speed; s.turning = m->turning; s.throttle = m->throttle; s.steer = m->steer;
-    }
+    MvSnapshot(MvUnitOf(entity), &s);
     ReleaseSRWLockShared(&g_mvLock);
-    if (state != NULL && state->size >= sizeof s) *state = s;
+    const uint32_t n = state == NULL ? 0 : state->size >= sizeof s ? (uint32_t)sizeof s : state->size >= HF_MOVER_STATE_SIZE_35 ? HF_MOVER_STATE_SIZE_35 : 0;
+    s.size = n;
+    if (n) memcpy(state, &s, n);
     return s.status;
 }
 

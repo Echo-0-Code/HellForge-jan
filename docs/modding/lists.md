@@ -2,7 +2,7 @@
 
 <!-- diataxis: how-to -->
 
-SDK 36 lets a mod narrow two of the game's lists without hooking the code that builds them: the Armory's weapon
+SDK 38 lets a mod narrow two of the game's lists without hooking the code that builds them: the Armory's weapon
 grids and the stratagem picker. HellForge owns that code. A mod adds a rule (its own test per row) or a filter (text
 the row's name must contain). The types are in `hellforge_lists.h`, which `hellforge_mod.h` includes.
 
@@ -16,7 +16,7 @@ the row's name must contain). The types are in `hellforge_lists.h`, which `hellf
 
 ## Before you call
 
-- Check `hf->size >= offsetof(HfApi, list_state) + sizeof(void*)` and set `"sdk": 36` in `hellforge-mod.json`.
+- Check `hf->size >= offsetof(HfApi, list_state) + sizeof(void*)` and set `"sdk": 38` in `hellforge-mod.json`.
 - The lists are `HF_LIST_ARMORY_WEAPONS` and `HF_LIST_STRATAGEMS`.
 - Do not hook `0x18D7360` (the Armory grid) or `0x18D8710` (the picker) to hide rows. Two mods writing the same rows in
   one build undo each other's work.

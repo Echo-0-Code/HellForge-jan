@@ -5472,6 +5472,19 @@
       "meaning": "The vehicle motion system's frame: the vehicles' and mechs' driving physics. The world update (0x571250) calls it every frame",
       "source": "game.dll: the world update's call (lea rcx, [world + offset]; movaps xmm1, the frame time); live.py: rcx and xmm1 only"
     },
+    "WaterHeight": {
+      "rva": "0x13D46E0",
+      "code": "48 83 EC 38 80 79 44 00 74 33 4D 85 C0 74 2E F2 0F 10 02 8B 42 08 48 8D 54 24 20 4D 8B 80 C8 02 00 00 49 81 C0 48 FF 19 01",
+      "returns": "float",
+      "params": [
+        {"name": "state", "type": "void*", "meaning": "the water state: [game.dll+0x347CE48] (+0x44, a byte: the map has water)"},
+        {"name": "position", "type": "const float*", "meaning": "x, y, z in the world"},
+        {"name": "level", "type": "void*", "meaning": "the mission's level: hf_global_Game's level field"}
+      ],
+      "hook": false,
+      "meaning": "The water surface's height at a point: the map's water heightmap inside the map, its flat height outside, -500 with no water",
+      "source": "HellForge's hover movers (movers_hover.c); found in a static pass of helldivers2.exe (build 25480438), proven in game by the hover test mod"
+    },
     "AvatarUpdate": {
       "rva": "0x829E90",
       "code": "4C 8B DC 55 57 41 55 49 8D AB 08 FB FF FF 48 81 EC 00 06 00 00 48 8B 05 64 21 E1 01 48 33 C4 48 89 85 18 04 00 00",
@@ -5824,6 +5837,97 @@
       "hook": true,
       "meaning": "Unit.teleport_local_position's engine side: writes the node's local position like UnitSetLocalPosition, marks the node changed and the unit moving (WorldSetUnitMoving, 5).",
       "source": "the Lua binding's disassembly in helldivers2.exe (build 25480438)"
+    },
+    "ActorAddImpulse": {
+      "module": "helldivers2.exe",
+      "rva": "0x797CF0",
+      "code": "48 89 5C 24 10 48 89 6C 24 18 56 57 41 56 48 83 EC 60 49 8B F0 8B D9 4C 8B F2",
+      "returns": "void",
+      "params": [
+        {"name": "actor", "type": "uint32_t", "meaning": "the physics actor's handle (UnitActors)"},
+        {"name": "impulse", "type": "const float*", "meaning": "x, y, z in the world, N s"},
+        {"name": "point", "type": "const float*", "meaning": "where it acts in the world, or NULL for the centre of mass"}
+      ],
+      "hook": false,
+      "meaning": "Adds a linear impulse to a dynamic physics actor's body (the engine's Actor.add_impulse); the actor table +0xC0 holds it",
+      "source": "HellForge's hover movers (movers_hover.c); found in a static pass of helldivers2.exe (build 25480438), proven in game by the hover test mod"
+    },
+    "ActorAddAngularImpulse": {
+      "module": "helldivers2.exe",
+      "rva": "0x797E40",
+      "code": "48 89 5C 24 08 57 48 83 EC 30 48 8B FA 44 8B D9 E8 ?? ?? ?? ?? 48 8B D8 48 85 C0",
+      "returns": "void",
+      "params": [
+        {"name": "actor", "type": "uint32_t", "meaning": "the physics actor's handle"},
+        {"name": "impulse", "type": "const float*", "meaning": "x, y, z in the world, N m s"}
+      ],
+      "hook": false,
+      "meaning": "Adds an angular impulse to a dynamic physics actor's body",
+      "source": "HellForge's hover movers (movers_hover.c); found in a static pass of helldivers2.exe (build 25480438), proven in game by the hover test mod"
+    },
+    "ActorVelocity": {
+      "module": "helldivers2.exe",
+      "rva": "0x799540",
+      "code": "48 89 5C 24 08 57 48 83 EC 40 49 8B D8 44 8B D9 48 8B FA",
+      "returns": "void",
+      "params": [
+        {"name": "actor", "type": "uint32_t", "meaning": "the physics actor's handle"},
+        {"name": "linear", "type": "float*", "meaning": "out: x, y, z, m/s"},
+        {"name": "angular", "type": "float*", "meaning": "out: x, y, z, rad/s"}
+      ],
+      "hook": false,
+      "meaning": "A physics actor's linear and angular velocity in the world",
+      "source": "HellForge's hover movers (movers_hover.c); found in a static pass of helldivers2.exe (build 25480438), proven in game by the hover test mod"
+    },
+    "UnitActors": {
+      "module": "helldivers2.exe",
+      "rva": "0x7E1C20",
+      "code": "48 89 5C 24 20 55 48 83 EC 20 8B C1 4D 8B D0 25 FF FF 3F 00 8B EA",
+      "returns": "uint64_t",
+      "params": [
+        {"name": "unit", "type": "uint32_t", "meaning": "the unit's handle"},
+        {"name": "mask", "type": "uint32_t", "meaning": "1: its physics actors"},
+        {"name": "out", "type": "uint64_t*", "meaning": "out, 12 words: out[0] points at the actor handles (u32), their count is the u32 at byte 0x38"}
+      ],
+      "hook": false,
+      "meaning": "A unit's physics actors; 0xFFFFFFFF when it has none",
+      "source": "HellForge's hover movers (movers_hover.c); found in a static pass of helldivers2.exe (build 25480438), proven in game by the hover test mod"
+    },
+    "ActorResolves": {
+      "module": "helldivers2.exe",
+      "rva": "0x7972F0",
+      "code": "48 83 EC 28 E8 ?? ?? ?? ?? 33 C9 48 85 C0 0F 95 C1 8B C1 48 83 C4 28 C3",
+      "returns": "uint8_t",
+      "params": [
+        {"name": "actor", "type": "uint32_t", "meaning": "the physics actor's handle"}
+      ],
+      "hook": false,
+      "meaning": "Whether a physics actor's handle still names a live actor (a bool in al: 1 or 0)",
+      "source": "HellForge's hover movers (movers_hover.c); found in a static pass of helldivers2.exe (build 25480438), proven in game by the hover test mod"
+    },
+    "ActorUnit": {
+      "module": "helldivers2.exe",
+      "rva": "0x799980",
+      "code": "48 83 EC 28 E8 ?? ?? ?? ?? 48 85 C0 74 08 8B 40 0C 48 83 C4 28 C3",
+      "returns": "uint32_t",
+      "params": [
+        {"name": "actor", "type": "uint32_t", "meaning": "the physics actor's handle"}
+      ],
+      "hook": false,
+      "meaning": "The unit a physics actor belongs to (its record +0xC)",
+      "source": "HellForge's hover movers (movers_hover.c); found in a static pass of helldivers2.exe (build 25480438), proven in game by the hover test mod"
+    },
+    "ActorRecord": {
+      "module": "helldivers2.exe",
+      "rva": "0x7951B0",
+      "code": "44 8B C1 8B C1 48 C1 E8 1E 49 C1 E8 1C 44 8B C9 41 83 E0 03 48 8D 0D",
+      "returns": "const uint8_t*",
+      "params": [
+        {"name": "actor", "type": "uint32_t", "meaning": "the physics actor's handle"}
+      ],
+      "hook": false,
+      "meaning": "A physics actor's record: +0x14 its body id in its world (the handle's top two bits pick the world)",
+      "source": "HellForge's hover movers (movers_hover.c); found in a static pass of helldivers2.exe (build 25480438), proven in game by the hover test mod"
     },
     "UnitTeleportLocalPose": {
       "module": "helldivers2.exe",

@@ -454,5 +454,6 @@ static void WorldCallsStart(void)
 #include "nav_routes.c"    /* SDK 32: after world_sight.c (ApiLineOfSight), before ai_orders.c (its routes for units with no agent) */
 #include "ai_orders.c"     /* SDK 31: after this file (WcEntity, EvpUnitPosition and the channel's lines) */
 #include "movers.c"        /* SDK 35: after ai_orders.c (AiDrivePoint, ApiAiObey) and world_sight.c (ApiLineOfSight) */
+#include "turrets.c"       /* SDK 37: after movers.c (AiIn via ai_orders.c); fields.c (its edits) comes first */
 #include "item_traits.c"   /* SDK 34: after this file; fields.c (its deferred edits) and registry.c (the mods' texts) come first */
-#include "list_filter.c"   /* SDK 36: after item_traits.c (ItStub, ItPoint, ItCallsTo); stratagems.c (its table) comes first */
+#include "list_filter.c"   /* SDK 38: after item_traits.c (ItStub, ItPoint, ItCallsTo); stratagems.c (its table) comes first */
