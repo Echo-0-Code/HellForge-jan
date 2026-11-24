@@ -606,10 +606,11 @@ static void DeliverTo(HfEvent event, const HfMod* only)
 
 static void Deliver(HfEvent event) { DeliverTo(event, NULL); }
 
+static void TrGunReady(void); /* turrets.c: its gun edits need the loaded weapon records, and go in before they apply */
 static void Fire(HfEvent event)
 {
-    if (event == HF_EVENT_ENTITIES_READY) StratagemPayloadsCheck(); /* nothing calls in an entity that is not there */
-    if (event == HF_EVENT_ENTITIES_READY) ApplyFieldEdits(); /* SDK 6 deferred edits, before any mod hears of it */
+    /* nothing calls in an entity that is not there; SDK 6 deferred edits apply before any mod hears of it */
+    if (event == HF_EVENT_ENTITIES_READY) { TrGunReady(); StratagemPayloadsCheck(); ApplyFieldEdits(); }
     LONG at = g_fireCount; /* the load events only: a live set-up hears them again, never the session's end */
     if (!g_fired[event] && event <= HF_EVENT_PROJECTILES_READY && at < 4) { g_fireOrder[at] = event; InterlockedExchange(&g_fireCount, at + 1); }
     InterlockedExchange(&g_fired[event], 1);

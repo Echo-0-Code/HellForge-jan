@@ -23,6 +23,9 @@ On `dev`, since 0.4.0-beta.
 - **Simpler mover options (SDK 39).** `HfMoverDef` is reordered. Hover fields move into a `hover` block and the drive
   modes carry the drivetrain (`HF_MOVE_DRIVE_FWD`, `_RWD`, `_4WD`). Water is `WADE`, `DRY`, `FLOAT` or `SINK`.
   `turn_radius` 0 turns on the spot and `reverse_speed` 0 can't reverse ([Movers](docs/modding/movers.md)).
+- **Simpler turret options (SDK 39).** `HfTurretDef` takes one `aimer`: AI, a seat's player, both or the mod's code.
+  Limits need no flags (both 0 keep the game's), and side and rear sight are only shorter. `projectile` takes a vanilla
+  or `add_projectile` type. SDK 37 turret mods must be rebuilt ([Turrets](docs/modding/turrets.md)).
 - **Mover slopes, tilt, flying heights, boost, strafe and sounds (SDK 37).** `add_mover` takes `max_slope`,
   `tilt_limit`, hover fly heights and `climb_rate`, `boost_speed`, `strafe_speed` and six sound slots. `mover_input`
   gives `strafe`, `lift` and `boost` ([Movers](docs/modding/movers.md)).

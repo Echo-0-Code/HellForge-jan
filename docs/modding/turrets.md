@@ -2,9 +2,9 @@
 
 <!-- diataxis: how-to -->
 
-SDK 37 sets up a turret with one call: how fast it turns, how far it may turn, how far it sees, how fast it fires and
-who aims it. `add_turret` can also put the turret on another entity, such as a [mover](movers.md)'s back. The types
-are in `hellforge_turret.h`, which `hellforge_mod.h` includes.
+SDK 39 sets up a turret with one call: how fast it turns, how far it may turn, how far it sees, what and how fast it
+fires and who aims it. `add_turret` can also put the turret on another entity, such as a [mover](movers.md)'s back. The
+types are in `hellforge_turret.h`, which `hellforge_mod.h` includes.
 
 ## Contents
 
@@ -16,7 +16,8 @@ are in `hellforge_turret.h`, which `hellforge_mod.h` includes.
 
 ## Before you call
 
-- Check `hf->size >= offsetof(HfApi, add_turret) + sizeof(void*)` and set `"sdk": 37` in `hellforge-mod.json`.
+- Check `hf->size >= offsetof(HfApi, add_turret) + sizeof(void*)` and set `"sdk": 39` in `hellforge-mod.json`.
+- Build with the SDK 39 header. An SDK 37 `HfTurretDef` is refused.
 - Call `add_turret` from `hellforge_mod_init`, so your own entities get records of their own to change.
 - Give it your own entity (`register_entity`). A vanilla entity's record is often shared, and a shared record is
   refused when the data loads.
@@ -26,9 +27,9 @@ are in `hellforge_turret.h`, which `hellforge_mod.h` includes.
 ```c
 HfTurretDef gun = {sizeof gun};
 gun.entity = MY_AUTOCANNON;
+gun.aimer = HF_AIM_AI;
 gun.yaw_speed = 90.0f;
 gun.pitch_speed = 45.0f;
-gun.limits = HF_TURRET_LIMIT_PITCH;
 gun.pitch_min = -10.0f;
 gun.pitch_max = 60.0f;
 gun.range = 80.0f;
@@ -42,16 +43,21 @@ Every field left at 0 keeps the game's value.
 |---|---|
 | `entity` | The entity that aims: a sentry, a walker, a turret a vehicle carries |
 | `gun` | The entity whose weapon fires, when it is not `entity`, such as a walker's mounted gun |
+| `aimer` | Who aims it, see [Who aims it](#who-aims-it) |
 | `yaw_speed`, `pitch_speed` | Its fastest turn sideways and up or down, °/s |
 | `pitch_coupling` | How much pitching slows while it turns sideways |
-| `limits` | `HF_TURRET_LIMIT_YAW` and `HF_TURRET_LIMIT_PITCH`: which of the four angles below it sets |
-| `yaw_min`, `yaw_max` | Traverse from its rest, -180 to 180°. `yaw_min` is its left limit |
-| `pitch_min`, `pitch_max` | Elevation, -90 to 90° |
-| `body_turn_speed` | A walker's body turn onto its target, °/s |
-| `range`, `side_range`, `rear_range` | How far it sees ahead, to its sides and behind, metres |
+| `yaw_min`, `yaw_max` | Traverse from its rest, -180 to 180°. `yaw_min` is its left limit. Both 0 keep the game's |
+| `pitch_min`, `pitch_max` | Elevation, -90 to 90°. Both 0 keep the game's |
+| `body_turn_speed`, `body_turn_accel`, `body_turn_decel` | A walker's body turn onto its target: °/s, and how fast it speeds up and slows |
+| `range` | How far it sees, metres, all round |
+| `side_range`, `rear_range` | A shorter sight to its sides or behind, or 0 for `range` |
 | `aim_spring`, `aim_damping` | How hard its aim pulls on and how much its swing is held back |
-| `weapon`, `fire_rate` | `HF_TURRET_WEAPON_PROJECTILE` or `HF_TURRET_WEAPON_BEAM`, and its rounds or pulses a minute |
+| `projectile` | What it fires: a vanilla `HF_PROJECTILE_` type or one from `add_projectile`. 0 keeps its own |
+| `fire_rate` | Rounds or beam pulses a minute |
 | `rounds` | Rounds a magazine, at most 2047 |
+
+A projectile needs a gun with a projectile weapon; a beam gun keeps its beam. The mod's log names a setting the gun
+can't take.
 
 An aim that swings too freely never settles inside the fire cone, so the turret never fires. The vanilla aim is
 spring 10, damping 1. Spring 25 and damping 10 settle a walker's gun.
@@ -69,14 +75,17 @@ gun.attach_node = MY_BACK_JOINT;
 
 ## Who aims it
 
-| `ai` | `seat` | Who aims it |
+| `aimer` | `seat` | Who aims it |
 |---|---|---|
-| `HF_TURRET_AI_NATIVE` | 0 | The game's turret AI picks targets, aims and fires, as for a sentry |
-| `HF_TURRET_AI_OFF` | a seat | The player in that seat. Seats aim turrets from a later SDK; until then the seat is kept |
-| `HF_TURRET_AI_OFF` | 0 | Only your mod's code |
+| `HF_AIM_AI` | 0 | The game's turret AI picks targets, aims and fires, as for a sentry |
+| `HF_AIM_PLAYER` | a seat | Only the player in that seat of the host, counted from 1 |
+| `HF_AIM_BOTH` | a seat | The player in that seat, and the AI while the seat is empty |
+| `HF_AIM_CUSTOM` | 0 | Only your mod's code |
 
-`HF_TURRET_AI_OFF` shuts the turret's sight, so it never picks a target. Its behaviour still runs, because the
-behaviour also deploys it and feeds its gun. Leave the ranges at 0 with `HF_TURRET_AI_OFF`.
+`HF_AIM_PLAYER` and `HF_AIM_CUSTOM` shut the turret's sight, so it never picks a target. Leave the ranges at 0 with
+them. Its behaviour still runs, because the behaviour also deploys it and feeds its gun.
+
+Seats aim turrets from a later SDK. Until then the seat is kept, and `HF_AIM_BOTH` aims as `HF_AIM_AI`.
 
 ## What HellForge writes
 
@@ -86,10 +95,10 @@ and firing.
 | Record | Fields |
 |---|---|
 | `Turret` | yaw and pitch speeds, coupling, limits |
-| `Rotation` | `body_turn_speed` |
+| `Rotation` | the body turn's speed, acceleration and deceleration |
 | `Targeting` | `aim_spring`, `aim_damping` |
-| `SensorEye` | the three ranges, or 0 for `HF_TURRET_AI_OFF` |
-| `ProjectileWeapon` or `BeamWeapon` | `fire_rate`, on `gun` |
+| `SensorEye` | the three ranges, or 0 for `HF_AIM_PLAYER` and `HF_AIM_CUSTOM` |
+| `ProjectileWeapon` or `BeamWeapon` | `fire_rate`, and `projectile` on a projectile weapon, on `gun` |
 | `WeaponMagazine` | `rounds`, on `gun` |
 | the host's `Mount` | the slot and its node |
 
