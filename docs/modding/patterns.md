@@ -188,6 +188,9 @@ be one mod, or one of them loses its layers.
 - **Entity copies of support weapons.** A stratagem's weapon made with `add_entity` and `own_all = 1` gets a paint
   package of its own, the game's paints and the patterns, all held from the start. Without `own_all` it shares its
   base's record and takes no paints of its own.
+- **Throwable copies.** The game gives grenades no customization record. An `add_weapon` copy of a grenade with
+  `paints = 1` (SDK 40) gets one, with the game's paints, the patterns and a package of its own, so its card has
+  CUSTOMIZE. The game paints nothing in a mission: the mod reads the pick and paints its units itself.
 - **The hangar.** Ship Management's Vehicle Customization lists the Pelican, the hellpod and every vehicle, each with
   its patterns.
 - **Picks.** A pick saves as the game's patterns do and is kept across sessions. Without the mod, the weapon or vehicle

@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 39
+#define HF_MOD_SDK_VERSION 40
 #define HF_MOD_EXPORT __declspec(dllexport)
 
 typedef struct HfMod HfMod; /* Identifies the calling mod in logs and status. Opaque, but for SDK 6's HF_API(mod). */
@@ -126,8 +126,7 @@ typedef struct HfWeapon
     /* SDK 17: the beam or arc it fires (a vanilla type, or one add_beam or add_arc returned; 0: its base's). Its base must
      * fire one: a beam weapon's or an arc weapon's own record names the type, and everything else about the beam or arc
      * is in the type's row. */
-    uint32_t beam;
-    uint32_t arc;
+    uint32_t beam, arc;
     /* SDK 20: the damage its spray deals (a vanilla damage id, or one add_damage returned; 0: its base's). Its base must
      * spray (a flamethrower, the Sterilizer: a SprayWeaponComponentData record): a spray has no shared settings row,
      * so the weapon gets that record of its own with the damage in it (docs/modding/content.md "Sprays"). */
@@ -137,6 +136,9 @@ typedef struct HfWeapon
      * the player may change, so set_weapon_pick can load another. Its delta sets the projectile, over `projectile`. 0:
      * none (a weapon with a projectile of its own then has no ammunition). */
     uint32_t ammunition;
+    /* SDK 40: 1 gives a grenade copy the game's paints, the patterns and CUSTOMIZE; the mod paints its units from the
+     * pick (docs/modding/patterns.md). Ignored where the base has a customization record. */
+    uint32_t paints;
 } HfWeapon;
 
 /* A part of an entity (SDK 17, HfEntity.parts): a component's name ("#52": its number) and the entity whose record it takes. */

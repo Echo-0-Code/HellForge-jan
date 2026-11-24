@@ -4,6 +4,8 @@
  * Default paint as its default. Done before the mods' weapons, so their copies inherit it and OwnCustomization renames
  * the package to WeaponChild(seed, copy), the id the backend serves. Included by registry_load.c. */
 
+#define REG_OVERRIDES_AT 200u          /* WeaponMaterialOverride[]: a paint's material LUTs, up to the trigger settings */
+#define REG_OVERRIDES_BYTES 4480u
 #define REG_SLOTS_AT 0x50u                /* u32[10]: the slots the player may change, packed, 0 after the last */
 #define REG_PAINT_SLOT 3u
 #define REG_DEFAULT_PAINT 0x80FBE63Du      /* the Default paint, every primary's default in slot 3 */
