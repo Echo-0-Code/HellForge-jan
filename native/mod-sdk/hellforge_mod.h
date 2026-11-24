@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 40
+#define HF_MOD_SDK_VERSION 41
 #define HF_WEAPON_PAINTS 1 /* HfWeapon.paints exists */
 #define HF_MOD_EXPORT __declspec(dllexport)
 
@@ -470,8 +470,7 @@ typedef struct HfProjectile
     uint64_t flight_effect;
     /* SDK 17: the explosion of a hit and of the end of its flight (vanilla types, or ones add_explosion returned; 0: the
      * base's). */
-    uint32_t impact_explosion;
-    uint32_t expiry_explosion;
+    uint32_t impact_explosion, expiry_explosion;
 } HfProjectile;
 
 /* A network field type: kind 1 is an integer of `bits` bits starting at `min` (range min .. min + 2^bits - 1). */
@@ -1072,8 +1071,7 @@ typedef struct HfBrowseLobby
     uint32_t size;           /* sizeof(HfBrowseLobby): set by the caller */
     uint32_t verdict;        /* HF_LOBBY_... */
     uint32_t flags;          /* HF_LOBBY_FLAG_... */
-    uint32_t members;
-    uint32_t max_members;
+    uint32_t members, max_members;
     int32_t difficulty;      /* 1 and up, or -1 not known */
     int32_t planet;          /* the planet's index, or -1 not known (on the ship, or not said) */
     uint32_t mods;           /* the host's shared mods */
@@ -1823,6 +1821,8 @@ typedef struct HfApi
     uint32_t (*list_state)(HfMod* mod, uint32_t list, HfListState* state); /* its last build. 1 filled, 0 none seen */
     /* ---- SDK 40: a band at the top of a list (docs/modding/lists.md; check hf->size) -------------------------------- */
     int (*set_list_band)(HfMod* mod, uint32_t list, float height); /* room (0 .. 200 units) above its heading. 0 done */
+    uint32_t (*add_hangar_category)(HfMod* mod, const HfHangarCategory* category); /* SDK 41 (hellforge_hangar.h): handle or 0 */
+    int (*set_hangar_equipped)(HfMod* mod, uint32_t category, uint32_t card); /* shown as equipped; 0 done, 1 refused */
 } HfApi;
 
 /* SDK 6: an HfMod starts with the API, so these need only the mod. */

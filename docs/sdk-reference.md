@@ -319,6 +319,8 @@ for changing and adding content; [Hooks and game memory](modding/hooks.md) for `
 ### SDK 40: a band at the top of a list (docs/modding/lists.md; check hf->size)
 
 - `set_list_band`: `int (HfMod* mod, uint32_t list, float height)`
+- `add_hangar_category`: `uint32_t (HfMod* mod, const HfHangarCategory* category)`
+- `set_hangar_equipped`: `int (HfMod* mod, uint32_t category, uint32_t card)`
 
 ## Functions
 

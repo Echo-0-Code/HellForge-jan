@@ -43,4 +43,6 @@ typedef struct HfListState
     float band_h;         /* its height */
 } HfListState;
 
+#include "hellforge_hangar.h" /* SDK 41: a category of the mod's own in Vehicle Customization */
+
 #endif
