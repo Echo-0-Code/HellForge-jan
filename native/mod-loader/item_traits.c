@@ -1,23 +1,28 @@
 /* SDK 34: the traits an item's card shows (hellforge_traits.h, docs/modding/traits.md), for game.dll build 25480438.
  * Loadout items: deferred edits of LoadoutEntry traits_1..5, so they are written again on every entity-data load.
- * Stratagem cards: the card builder's two calls are pointed at HellForge, not hooked, so nothing else changes and
- * the row's flags are never written. Included by world_calls.c after ai_orders.c. */
+ * Stratagem cards: the tag loops' flag and label calls point at HellForge (not hooked: nothing else changes, and
+ * no row flag is written); the picker's list of an item's trait ids is hooked. Included by world_calls.c after ai_orders.c. */
 #include "hellforge_traits.h"
 
-#define IT_BUILDER 0x14D97B0u    /* (?, list, StratagemType): the card's ITEM TRAITS lines */
-#define IT_FLAG_CALL 0x14D97FFu  /* call +0x11F2680 (type, tag index): the row's flag of that tag */
-#define IT_TEXT_CALL 0x14D9888u  /* call +0x1780410 (key): the tag's label, by its text key */
+#define IT_BUILDER 0x14D97B0u    /* (?, list, StratagemType): the armory card's ITEM TRAITS lines, at most 4 */
 #define IT_FLAG 0x11F2680u
 #define IT_TEXT 0x1780410u
 #define IT_TEXT_ID 0x17802E0u    /* (id): a text id's text, the game's wrapper of the engine's text call */
 #define IT_KEYS 0x32EE650u       /* 25 pointers: each tag's "nui_equipment_tag_*" key, the card's order */
 #define IT_TAG_IDS 0x32E5B30u    /* 25 u32: each tag's text id (the HF_ITEM_TRAIT_ ids) */
 #define IT_TAGS 25u
+#define IT_ITEM_LIST 0x17899C0u  /* (item id, ?, u32 out[25]): an item's trait ids, as the stratagem picker shows them */
+#define IT_ITEM_TYPE 0x11F2490u  /* (item id): its StratagemType, 0 for a loadout item */
 
 /* The builder keeps the key table in r8 across the flag call (its skip path does not reload it). */
 static const uint8_t kItBuilderPin[] = {0x48, 0x89, 0x4C, 0x24, 0x08, 0x55, 0x56, 0x41, 0x54};
-static const uint8_t kItFlagCallPin[] = {0xE8, 0x7C, 0x8E, 0xD1, 0xFF, 0x84, 0xC0};
-static const uint8_t kItTextCallPin[] = {0xE8, 0x83, 0x6B, 0x2A, 0x00, 0x48, 0x8B, 0xD0};
+/* The three loops that list a stratagem's tags: the armory card (+0x14D97B0) and the stratagem picker's two
+ * (+0x14E4020, +0x14E82xx). Each asks the flag of tag i, then that tag's label by its key. */
+typedef struct ItSite { uint32_t flag, text; } ItSite;
+static const ItSite kItSites[] = {{0x14D97FFu, 0x14D9888u}, {0x14E4058u, 0x14E40E2u}, {0x14E8346u, 0x14E83F2u}};
+#define IT_SITES (sizeof kItSites / sizeof kItSites[0])
+static const uint8_t kItItemListPin[] = {0x48, 0x89, 0x5C, 0x24, 0x08, 0x48, 0x89, 0x74, 0x24, 0x10, 0x57, 0x48, 0x83, 0xEC, 0x20, 0x33, 0xFF, 0x49, 0x8B, 0xF0};
+static const uint8_t kItItemTypePin[] = {0x85, 0xC9, 0x74};
 static const uint8_t kItTextIdPin[] = {0x40, 0x53, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x8B, 0x05};
 static const uint8_t kItKeysLeaPin[] = {0x4C, 0x8D, 0x05, 0x68, 0x4E, 0xE1, 0x01}; /* at +0x14D97E1: lea r8, [IT_KEYS] */
 
@@ -25,6 +30,9 @@ typedef struct ItCard { HfMod* mod; uint32_t type, count, ids[HF_STRATAGEM_TRAIT
 typedef uint8_t (*ItFlagFn)(uint32_t type, uint32_t index);
 typedef const char* (*ItTextFn)(const char* key, void* b, void* c, void* d);
 typedef const char* (*ItTextIdWrapFn)(uint32_t id);
+typedef uint32_t (*ItItemListFn)(uint32_t item, void* b, uint32_t* out);
+typedef uint32_t (*ItItemTypeFn)(uint32_t item);
+static ItItemListFn g_itItemList;
 
 static SRWLOCK g_itLock = SRWLOCK_INIT;
 static ItCard* g_itCards;
@@ -95,15 +103,43 @@ static const char* ItText(const char* key, void* b, void* c, void* d)
     return own != NULL ? own : text(key, b, c, d);
 }
 
-/* A call at `site` pointed at a stub near game.dll that calls `to`; r8 kept when `keep_r8`. 0 done. */
-static int ItRedirect(uint8_t* stub, uintptr_t site, void* to, int keep_r8)
+/* The picker's list of an item's trait ids: a stratagem with lines of a mod's lists those instead. Its out array
+ * holds the 25 tags, so 4 always fit. */
+static uint32_t ItItemList(uint32_t item, void* b, uint32_t* out)
 {
-    uint8_t* c = stub;
+    uint32_t count = g_itItemList(item, b, out);
+    uint32_t type = out != NULL ? ((ItItemTypeFn)(g_itGame + IT_ITEM_TYPE))(item) : 0;
+    if (type == 0) return count;
+    AcquireSRWLockShared(&g_itLock);
+    const ItCard* card = ItCardOf(type);
+    if (card != NULL) { memcpy(out, card->ids, card->count * 4); count = card->count; }
+    ReleaseSRWLockShared(&g_itLock);
+    return count;
+}
+
+/* A stub that calls `to`; r8 kept when `keep_r8` (the armory loop keeps its key table there across the flag call). */
+static void ItStub(uint8_t* c, void* to, int keep_r8)
+{
     if (keep_r8) { *c++ = 0x41; *c++ = 0x50; *c++ = 0x48; *c++ = 0x83; *c++ = 0xEC; *c++ = 0x20; } /* push r8; sub rsp, 32 */
     *c++ = 0x48; *c++ = 0xB8; memcpy(c, &to, 8); c += 8; /* mov rax, to */
     if (keep_r8) { *c++ = 0xFF; *c++ = 0xD0; *c++ = 0x48; *c++ = 0x83; *c++ = 0xC4; *c++ = 0x20; *c++ = 0x41; *c++ = 0x58; *c++ = 0xC3; }
-    else { *c++ = 0xFF; *c++ = 0xE0; } /* jmp rax: the callee returns to the builder */
-    int64_t rel = (int64_t)(intptr_t)stub - (int64_t)(site + 5);
+    else { *c++ = 0xFF; *c++ = 0xE0; } /* jmp rax: the callee returns to the loop */
+}
+
+/* Whether `site` is a call to `target` (rel32). */
+static int ItCallsTo(uintptr_t site, uintptr_t target)
+{
+    uint8_t call[5];
+    int32_t rel;
+    if (HookedCode(site, call, 5) || call[0] != 0xE8) return 0;
+    memcpy(&rel, call + 1, 4);
+    return site + 5 + (intptr_t)rel == target;
+}
+
+/* The call at `site` pointed at `to`. 0 done. */
+static int ItPoint(uintptr_t site, uintptr_t to)
+{
+    int64_t rel = (int64_t)to - (int64_t)(site + 5);
     if (rel != (int32_t)rel) return 1;
     uint8_t call[5] = {0xE8};
     int32_t rel32 = (int32_t)rel;
@@ -111,32 +147,45 @@ static int ItRedirect(uint8_t* stub, uintptr_t site, void* to, int keep_r8)
     return JournalPut(site, call, sizeof call);
 }
 
-static const char* ItInstallAt(uintptr_t game)
+/* NULL when every piece of code the cards' calls touch is the reviewed one. */
+static const char* ItReviewed(uintptr_t game)
 {
     if (!PinMatches(game + IT_BUILDER, kItBuilderPin, sizeof kItBuilderPin) || !PinMatches(game + 0x14D97E1u, kItKeysLeaPin, sizeof kItKeysLeaPin) ||
-        !PinMatches(game + IT_FLAG_CALL, kItFlagCallPin, sizeof kItFlagCallPin) || !PinMatches(game + IT_TEXT_CALL, kItTextCallPin, sizeof kItTextCallPin) ||
-        !PinMatches(game + IT_TEXT_ID, kItTextIdPin, sizeof kItTextIdPin))
+        !PinMatches(game + IT_TEXT_ID, kItTextIdPin, sizeof kItTextIdPin) || !PinMatches(game + IT_ITEM_LIST, kItItemListPin, sizeof kItItemListPin) ||
+        !PinMatches(game + IT_ITEM_TYPE, kItItemTypePin, sizeof kItItemTypePin))
         return "the stratagem card's code is not the reviewed one";
+    for (size_t i = 0; i < IT_SITES; i++)
+        if (!ItCallsTo(game + kItSites[i].flag, game + IT_FLAG) || !ItCallsTo(game + kItSites[i].text, game + IT_TEXT))
+            return "a stratagem card's tag loop is not the reviewed one";
+    return NULL;
+}
+
+/* Call k of the sites (two a site: its flag call, then its text call) and what it calls in the game. */
+static uintptr_t ItCall(uintptr_t game, size_t k, uintptr_t* target)
+{
+    *target = game + (k % 2 ? IT_TEXT : IT_FLAG);
+    return game + (k % 2 ? kItSites[k / 2].text : kItSites[k / 2].flag);
+}
+
+static const char* ItInstallAt(uintptr_t game)
+{
+    const char* why = ItReviewed(game);
+    if (why != NULL) return why;
     uint8_t* stubs = AllocateNearGame(game, 0x1000);
     if (stubs == NULL) return "no memory within 2 GB of game.dll";
     g_itGame = game;
-    uint8_t* textStub = stubs + 64;
-    int failed = ItRedirect(stubs, game + IT_FLAG_CALL, (void*)ItFlag, 1);
+    ItStub(stubs, (void*)ItFlag, 1);
+    ItStub(stubs + 64, (void*)ItText, 0);
     DWORD was;
     VirtualProtect(stubs, 0x1000, PAGE_EXECUTE_READ, &was);
     FlushInstructionCache(GetCurrentProcess(), stubs, 0x1000);
-    if (failed) return "the card's flag call could not be pointed at HellForge";
-    VirtualProtect(stubs, 0x1000, PAGE_EXECUTE_READWRITE, &was);
-    failed = ItRedirect(textStub, game + IT_TEXT_CALL, (void*)ItText, 0);
-    VirtualProtect(stubs, 0x1000, PAGE_EXECUTE_READ, &was);
-    FlushInstructionCache(GetCurrentProcess(), stubs, 0x1000);
-    if (failed)
-    {
-        static const uint8_t back[] = {0xE8, 0x7C, 0x8E, 0xD1, 0xFF};
-        JournalPut(game + IT_FLAG_CALL, back, sizeof back); /* both calls or neither: a flag answered with no text of its own */
-        return "the card's text call could not be pointed at HellForge";
-    }
-    return NULL;
+    size_t done = 0; /* every call or none, so a flag never lacks its text */
+    uintptr_t target;
+    while (done < 2 * IT_SITES && !ItPoint(ItCall(game, done, &target), (uintptr_t)(done % 2 ? stubs + 64 : stubs))) done++;
+    if (done == 2 * IT_SITES && !LoaderHook("item traits: the picker's trait list", game + IT_ITEM_LIST, (void*)ItItemList, (void**)&g_itItemList))
+        return NULL;
+    for (size_t k = 0; k < done; k++) { uintptr_t site = ItCall(game, k, &target); ItPoint(site, target); }
+    return "a stratagem card's call could not be pointed at HellForge";
 }
 
 /* Each override's lines and what they will show, once the card's calls point here. */
