@@ -61,6 +61,8 @@ static LfBand g_lfBands[16];
 static LfBandAt g_lfBandAt[LF_LISTS];
 static uint32_t g_lfRuleCount, g_lfFilterCount, g_lfBandCount;
 static int g_lfWidgets; /* the widget setters match: bands can be given */
+static uint32_t g_lfOpened[LF_LISTS]; /* the game's own builds of each list (HfListState.opened) */
+static int g_lfOwnBuild;              /* inside LfRebuildNow: a build HellForge asked for */
 static HfListState g_lfState[LF_LISTS] = {{sizeof(HfListState)}, {sizeof(HfListState)}}; /* open follows the screen */
 static volatile LONG g_lfRebuild[LF_LISTS], g_lfTicking;
 static int g_lfArmory, g_lfPicker; /* 0 not yet, 1 on, -1 off (modloader.log says why) */
@@ -135,6 +137,7 @@ static int LfUsed(uint32_t list)
 
 static void LfGridBuild(uintptr_t grid, uint32_t type)
 {
+    if (!g_lfOwnBuild) g_lfOpened[0]++;
     static uintptr_t at[LF_ROWS_MAX];
     static uint32_t item[LF_ROWS_MAX];
     static uint8_t keep[LF_ROWS_MAX], match[LF_ROWS_MAX];
@@ -287,6 +290,7 @@ static void LfPickerDecide(void)
 
 static void LfPickerBuild(uint8_t* rcx, uint32_t rdx, void* r8)
 {
+    if (!g_lfOwnBuild) g_lfOpened[1]++;
     g_lfPickerArgs[0] = rcx, g_lfPickerArgs[1] = (uint8_t*)r8, g_lfPickerRdx = rdx;
     AcquireSRWLockShared(&g_lfLock);
     const int used = LfUsed(HF_LIST_STRATAGEMS);
@@ -335,6 +339,7 @@ static const char* LfPickerInstall(uintptr_t game)
 /* The asked rebuilds of the lists that are up, on the game thread, outside any build. */
 static void LfRebuildNow(void)
 {
+    g_lfOwnBuild = 1;
     if (InterlockedExchange(&g_lfRebuild[0], 0) && g_lfArmory == 1)
     {
         const uintptr_t screen = LfArmoryScreen();
@@ -343,6 +348,7 @@ static void LfRebuildNow(void)
     }
     if (InterlockedExchange(&g_lfRebuild[1], 0) && g_lfPicker == 1 && LfPickerOpen())
         LfPickerBuild(g_lfPickerArgs[0], g_lfPickerRdx, g_lfPickerArgs[1]);
+    g_lfOwnBuild = 0;
 }
 
 static void LfNoteInstall(const char* armory, const char* picker)
@@ -468,6 +474,7 @@ static uint32_t ApiListState(HfMod* mod, uint32_t list, HfListState* state)
     if (size < offsetof(HfListState, band_x) || (list != HF_LIST_ARMORY_WEAPONS && list != HF_LIST_STRATAGEMS) || g_lfState[list - 1].size == 0) return 0;
     HfListState out = g_lfState[list - 1];
     LfOwnBand(mod, list, &out);
+    out.opened = g_lfOpened[list - 1];
     memcpy(state, &out, size < sizeof out ? size : sizeof out);
     state->size = size;
     return 1;
