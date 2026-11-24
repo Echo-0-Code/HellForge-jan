@@ -236,13 +236,14 @@ static void HvControl(MvUnit* m, const MvDef* def, float dt)
     m->turning = om[2];
 }
 
-/* Every 2 s for its first minute, and while it is lost or over water. */
+/* Every 2 s for a minute from its start and from each change of driver, and while it is lost or over water. */
 static void HvLog(MvUnit* m, const MvDef* def, float dt)
 {
-    if ((m->sinceLog += dt) < 2.0 || (m->age > def->def.start_delay + 60 && m->lost <= 0 && m->waterDepth <= 0)) return;
+    if (m->logUntil <= 0 || m->driver != m->loggedDriver) { m->logUntil = (m->logUntil <= 0 ? def->def.start_delay : m->age) + 60; m->loggedDriver = m->driver; m->sinceLog = 2.0; }
+    if ((m->sinceLog += dt) < 2.0 || (m->age > m->logUntil && m->lost <= 0 && m->waterDepth <= 0)) return;
     m->sinceLog = 0;
-    ApiLog(def->mod, "mover: unit %u hover %s, %.2f m over %s (water query %.2f), speed %.1f, throttle %.2f, steer %.2f, driver %u", m->entity,
-        m->engaged ? "on" : "off", (double)m->height, m->waterDepth > 0 ? "water" : "ground", (double)MvWaterAt(m->pos[0], m->pos[1], m->pos[2]),
+    ApiLog(def->mod, "mover: unit %u hover %s, %.2f m over %s (target %.2f, water query %.2f), speed %.1f, throttle %.2f, steer %.2f, driver %u", m->entity,
+        m->engaged ? "on" : "off", (double)m->height, m->waterDepth > 0 ? "water" : "ground", (double)m->targetHeight, (double)MvWaterAt(m->pos[0], m->pos[1], m->pos[2]),
         (double)m->speed, (double)m->throttle, (double)m->steer, m->driver);
 }
 

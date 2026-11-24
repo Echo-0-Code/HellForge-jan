@@ -157,6 +157,7 @@ typedef struct Weapon
     uint32_t beam, arc;                    /* HfWeapon.beam, HfWeapon.arc */
     uint32_t sprayDamage;                  /* HfWeapon.spray_damage */
     uint32_t ammunition;                   /* HfWeapon.ammunition */
+    int paints;                            /* HfWeapon.paints */
     uint8_t* projectileRecord;             /* its own ProjectileWeapon record, when it has a projectile */
     int ownCount;
     uint32_t own[REG_MAX_OWN], ownStride[REG_MAX_OWN]; /* components it owns records of (HfWeapon.own_components) */
@@ -610,12 +611,13 @@ static int WeaponSpray(HfMod* mod, const char* unit, const HfWeapon* def, Weapon
     return 0;
 }
 
-/* The members a mod built with an older SDK may not have: its sounds, own_all and ammunition. */
+/* The members a mod built with an older SDK may not have: its sounds, own_all, ammunition and paints. */
 static void WeaponOptions(const HfWeapon* def, Weapon* w)
 {
     if (def->size >= offsetof(HfWeapon, sound_from) + sizeof def->sound_from) w->soundFrom = def->sound_from;
     if (def->size >= offsetof(HfWeapon, own_all) + sizeof def->own_all) w->ownAll = def->own_all != 0;
     if (def->size >= offsetof(HfWeapon, ammunition) + sizeof def->ammunition) w->ammunition = def->ammunition;
+    if (def->size >= offsetof(HfWeapon, paints) + sizeof def->paints) w->paints = def->paints != 0;
 }
 
 /* Its own text ids (HfWeapon.name and the rest), when the mod names it. */

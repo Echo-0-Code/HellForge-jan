@@ -197,6 +197,8 @@ static uint8_t* OwnCustomization(uint8_t* state, const Weapon* w, uint64_t baseE
     return customization;
 }
 
+#include "registry_throwable_paints.c" /* a throwable copy's paint slot (HfWeapon.paints) */
+
 /* Its own ProjectileWeapon record, for its own projectile or sounds; NULL when it needs none or its base has none. */
 static uint8_t* OwnFireRecord(uint8_t* state, const Weapon* w, uint64_t baseEntity)
 {
@@ -340,6 +342,7 @@ static void GiveOwnRecords(WeaponLoad* L, Weapon* w, uint64_t baseEntity, const 
     if (w->plain && Donor(w, REG_LOADOUT, baseEntity) != 0) PlainLoadoutRecord(L, w, Donor(w, REG_LOADOUT, baseEntity));
     if (!w->plain || w->unit != 0) OwnUnitRecord(state, w, Donor(w, REG_UNIT, baseEntity));
     uint8_t* customization = OwnCustomization(state, w, baseEntity);
+    if (customization == NULL) customization = OwnThrowablePaints(L, w, baseEntity);
     uint8_t* fireRecord = OwnFireRecord(state, w, baseEntity);
     if (fireRecord != NULL && w->soundFrom != 0) TakeSounds(L, w, fireRecord);
     if (fireRecord != NULL && w->projectile != 0) OwnProjectile(w, fireRecord, customization);

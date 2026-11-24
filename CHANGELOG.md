@@ -14,6 +14,8 @@ On `dev`, since 0.4.0-beta.
 
 - **List bands (SDK 40).** `set_list_band` moves the heading and rows of the Armory's weapon grids or the stratagem
   picker down, so a mod can draw a search box above them; `list_state` gives its place ([Item lists](docs/modding/lists.md)).
+- **Paints on throwable copies (SDK 40).** `HfWeapon.paints = 1` gives a grenade copy the game's paints, the patterns
+  and CUSTOMIZE on its armory card; the mod paints its units from the pick ([Patterns](docs/modding/patterns.md#where-it-shows)).
 - **Item lists (SDK 38).** `add_list_rule` and `set_list_filter` narrow the Armory's weapon grids and the stratagem
   picker per row or by name; HellForge owns both builders, so mods no longer hook them ([Item lists](docs/modding/lists.md)).
 - **Turrets (SDK 37).** `add_turret` sets a turret's turn speeds, traverse limits, sight ranges, aim, fire rate and
@@ -552,6 +554,7 @@ On `dev`, since 0.4.0-beta.
 
 ### Fixed
 
+- **Copies of support weapons are held.** An `add_weapon` copy of a support weapon now has its paints and CUSTOMIZE. It was left out of the inventory, since its base's catalogue item is its stratagem's.
 - **Follow me after a death.** A unit that followed a Helldiver who died no longer holds for good. It follows that player's next Helldiver, or the nearest one standing ([AI orders](docs/modding/ai.md)).
 - **No nameless items in the armory.** The game ships a few unfinished items with no name: a secondary with the
   Solo Silo remote's model and three throwables. The game's own armory list has them, so SECONDARY showed a nameless
