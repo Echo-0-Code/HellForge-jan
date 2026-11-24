@@ -16,13 +16,13 @@ jobs:
       - name: Download the artifact and publish it
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: '45429140850'
-          TAG: test-e77b19e
+          RUN_ID: '45434051861'
+          TAG: test-b882d9d
         run: |
           gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n test-package -D pkg
           find pkg -type f -exec ls -la {} \;
           cp "$(find pkg -name HellForge-Setup.exe | head -1)" HellForge-Setup.exe
           sha256sum HellForge-Setup.exe | tee SHA256SUMS
-          gh release create "$TAG" -R "$GITHUB_REPOSITORY" --prerelease --target e77b19e09a0f736ebb3e33e0b6e936acc14484f1 \
-            --title "Test build e77b19e, simpler turret options (SDK 39) (run $RUN_ID)" --notes "test-package artifact of run $RUN_ID, republished for download." \
+          gh release create "$TAG" -R "$GITHUB_REPOSITORY" --prerelease --target b882d9db38b9330cf51ed3bf32b1f33826dd5146 \
+            --title "Test build b882d9d, list bands for a search box (SDK 40) (run $RUN_ID)" --notes "test-package artifact of run $RUN_ID, republished for download." \
             HellForge-Setup.exe SHA256SUMS
