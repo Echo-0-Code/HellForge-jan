@@ -12,6 +12,8 @@ On `dev`, since 0.4.0-beta.
 
 ### Added
 
+- **List bands (SDK 40).** `set_list_band` moves the heading and rows of the Armory's weapon grids or the stratagem
+  picker down, so a mod can draw a search box above them; `list_state` gives its place ([Item lists](docs/modding/lists.md)).
 - **Item lists (SDK 38).** `add_list_rule` and `set_list_filter` narrow the Armory's weapon grids and the stratagem
   picker per row or by name; HellForge owns both builders, so mods no longer hook them ([Item lists](docs/modding/lists.md)).
 - **Turrets (SDK 37).** `add_turret` sets a turret's turn speeds, traverse limits, sight ranges, aim, fire rate and

@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 39
+#define HF_MOD_SDK_VERSION 40
 #define HF_MOD_EXPORT __declspec(dllexport)
 
 typedef struct HfMod HfMod; /* Identifies the calling mod in logs and status. Opaque, but for SDK 6's HF_API(mod). */
@@ -594,8 +594,7 @@ typedef struct HfField
 } HfField;
 #define HF_FIELD(C, f) {Hf##C##_INFO, (uint16_t)offsetof(Hf##C, f), (uint16_t)sizeof(((Hf##C*)0)->f), HF_TYPE_##C##_##f, __LINE__}
 /* One element of an array field, to set on its own: HF_FIELD_AT(ProjectileWeapon, fire_rate, 1). */
-#define HF_FIELD_AT(C, f, i) {Hf##C##_INFO, (uint16_t)(offsetof(Hf##C, f) + (i) * sizeof(((Hf##C*)0)->f[0])), \
-    (uint16_t)sizeof(((Hf##C*)0)->f[0]), HF_TYPE_##C##_##f, __LINE__}
+#define HF_FIELD_AT(C, f, i) {Hf##C##_INFO, (uint16_t)(offsetof(Hf##C, f) + (i) * sizeof(((Hf##C*)0)->f[0])), (uint16_t)sizeof(((Hf##C*)0)->f[0]), HF_TYPE_##C##_##f, __LINE__}
 
 /* A value for a field, tagged with its type: HF_F32(0), HF_U32(2000). The tag must be the field's type, and the value
  * must fit it (HF_U32(-1) is refused, not wrapped). */
@@ -1820,6 +1819,8 @@ typedef struct HfApi
     int (*set_list_filter)(HfMod* mod, uint32_t list, const char* text);
     int (*rebuild_list)(HfMod* mod, uint32_t list); /* built again on the next update. 0 asked, 1 refused or not up */
     uint32_t (*list_state)(HfMod* mod, uint32_t list, HfListState* state); /* its last build. 1 filled, 0 none seen */
+    /* ---- SDK 40: a band at the top of a list (docs/modding/lists.md; check hf->size) -------------------------------- */
+    int (*set_list_band)(HfMod* mod, uint32_t list, float height); /* room (0 .. 200 units) above its heading. 0 done */
 } HfApi;
 
 /* SDK 6: an HfMod starts with the API, so these need only the mod. */

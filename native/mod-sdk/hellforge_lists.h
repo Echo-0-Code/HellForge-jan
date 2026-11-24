@@ -1,4 +1,4 @@
-/* HellForge mod SDK 38: the game's item lists (docs/modding/lists.md). Included by hellforge_mod.h.
+/* HellForge mod SDK 38 (40: bands): the game's item lists (docs/modding/lists.md). Included by hellforge_mod.h.
  * HellForge owns the code that builds the Armory's weapon grids and the stratagem picker's list. A mod narrows them
  * with a rule (its own test per row) or a filter (text the row's shown name must contain), instead of hooking that
  * code itself: two mods hiding rows in one build no longer fight. */
@@ -35,6 +35,12 @@ typedef struct HfListState
     uint32_t total;       /* rows the rules kept */
     uint32_t matched;     /* of those, the rows every filter matches */
     uint32_t shown;       /* rows listed: matched, or total when no row matched (a filter never empties a list) */
+    /* SDK 40: the calling mod's band (set_list_band) while the list is up, in the overlay's units; all 0 for none.
+     * The layout is 1920 wide and centred: in an overlay draw, x is band_x + (draw->width - 1920) / 2. */
+    float band_x;         /* its left edge */
+    float band_y;         /* its top edge, down from the screen's top */
+    float band_w;         /* its width: the heading's */
+    float band_h;         /* its height */
 } HfListState;
 
 #endif

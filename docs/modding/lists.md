@@ -12,6 +12,7 @@ the row's name must contain). The types are in `hellforge_lists.h`, which `hellf
 - [Hide rows with a rule](#hide-rows-with-a-rule)
 - [Filter by name](#filter-by-name)
 - [Read what the list shows](#read-what-the-list-shows)
+- [Make room above the list](#make-room-above-the-list)
 - [What HellForge does in a build](#what-hellforge-does-in-a-build)
 
 ## Before you call
@@ -78,6 +79,28 @@ if (hf->list_state(mod, HF_LIST_ARMORY_WEAPONS, &state) && state.open)
 | `total` | rows the rules kept |
 | `matched` | of those, rows every filter matches |
 | `shown` | rows listed: `matched`, or `total` when nothing matched |
+
+## Make room above the list
+
+SDK 40 moves the list's heading and rows down by a band the mod draws in, such as a search box. The list's bottom stays.
+
+```c
+hf->set_list_band(mod, HF_LIST_ARMORY_WEAPONS, 60.0f);   /* 60 units; 0 takes it away */
+
+/* in the overlay draw */
+HfListState state = {sizeof state};
+if (hf->list_state(mod, HF_LIST_ARMORY_WEAPONS, &state) && state.open && state.band_h > 0)
+{
+    const float x = state.band_x + (draw->width - 1920.0f) / 2.0f;
+    draw->rect(x, state.band_y, x + state.band_w, state.band_y + state.band_h, fill, edge, 2);
+}
+```
+
+- Units are the overlay's: 1080 high. The game's layout is 1920 wide and centred, hence the `x` offset.
+- Each mod's band is its own slice, in the order the mods asked; the total is at most 200 units.
+- HellForge gives the band again after each build of the list, such as a tab change.
+- Take it away when the list closes, or it is still there when the list opens again.
+- Check `hf->size >= offsetof(HfApi, set_list_band) + sizeof(void*)` and set `"sdk": 40`.
 
 ## What HellForge does in a build
 

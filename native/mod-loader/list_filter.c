@@ -9,6 +9,7 @@
 #define LF_TAB_SELECT 0x14570B0u  /* (screen, tab index): the weapon page's tab select, which builds the grid again */
 #define LF_ARMORY 0x33269E8u      /* the armory object: count at +0x1B40+type*4, first row at +0x1B24+type*4 */
 #define LF_MENU 0x347CE38u        /* +0 the menu state (2 the armory), +0x60 the armory screen */
+#define LF_ARMORY_GRID 0x7F718u  /* the screen's weapon grid (LF_GRID_BUILD's first argument) */
 #define LF_TAB_TYPES 0x479C8u     /* the screen's tab types (u32, 0x3010 apart) */
 #define LF_GRID_TYPE 0x1F83ACu    /* the screen's grid type, as last built */
 #define LF_RECORD 0x4F8A50u       /* EncyclopediaRecord(entity): +0 name, +0x08 upper-case name, +0x24 designation */
@@ -19,6 +20,9 @@
 #define LF_HELD 0x136FC20u
 #define LF_ACCOUNT 0x347CEF8u
 #define LF_PICKER_STATE 0x2818u   /* the picker's screen: 10 while the picker is up */
+#define LF_POS 0x14476A0u        /* (widget, packed x, y): a widget's position, +y up */
+#define LF_SIZE 0x1447160u       /* (widget, packed w, h): a widget's size */
+#define LF_BAND_MAX 200.0f       /* units: the list keeps at least two rows of cards below the band */
 #define LF_ROWS_MAX 1024u
 #define LF_TYPES_MAX 4096u
 #define LF_NAME 160u
@@ -31,6 +35,8 @@ static const uint8_t kLfTabPin[] = {0x48, 0x89, 0x5C, 0x24, 0x18, 0x57, 0x48, 0x
 static const uint8_t kLfPickerPin[] = {0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x6C, 0x24, 0x18, 0x48, 0x89, 0x74, 0x24, 0x20, 0x57};
 static const uint8_t kLfWalkPin[] = {0xBF}; /* at LF_PICKER_BOUND - 1 */
 static const uint8_t kLfWalkArgs[] = {0x8B, 0xD3, 0x49, 0x8B, 0xCE}; /* mov edx, ebx; mov rcx, r14: just before the held call */
+static const uint8_t kLfPosPin[] = {0x48, 0x89, 0x5C, 0x24, 0x18, 0x48, 0x89, 0x6C, 0x24, 0x20, 0x48, 0x89, 0x54, 0x24, 0x10, 0x56, 0x57, 0x41, 0x57, 0x48, 0x83, 0xEC, 0x20, 0xF3, 0x0F, 0x10, 0x41, 0x04};
+static const uint8_t kLfSizePin[] = {0x48, 0x89, 0x5C, 0x24, 0x18, 0x48, 0x89, 0x6C, 0x24, 0x20, 0x48, 0x89, 0x54, 0x24, 0x10, 0x56, 0x57, 0x41, 0x57, 0x48, 0x83, 0xEC, 0x20, 0xF3, 0x0F, 0x10, 0x41, 0x0C};
 static const uint8_t kLfRecordPin[] = {0x48, 0x85, 0xC9, 0x74, 0x71, 0x48, 0x8B, 0x05};
 static const uint8_t kLfTextPin[] = {0x40, 0x53, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x8B, 0x05};
 
@@ -40,14 +46,21 @@ typedef void (*LfPickerFn)(uint8_t* rcx, uint32_t rdx, void* r8);
 typedef uint8_t (*LfHeldFn)(uintptr_t account, uint32_t type);
 typedef uint8_t* (*LfRecordFn)(uint64_t entity);
 typedef const char* (*LfTextFn)(uint32_t id);
+typedef void (*LfSetFn)(uintptr_t widget, uint64_t packed);
 
 typedef struct LfRule { HfMod* mod; uint32_t list; HfListRule rule; void* user; } LfRule;
+typedef struct LfBand { HfMod* mod; uint32_t list; float height; } LfBand;
+/* A list's band as given: the grid it went to, the units moved, the heading's y after it, and its left, top, width */
+typedef struct LfBandAt { uintptr_t root; float applied, headY, x, top, w; } LfBandAt;
 typedef struct LfFilter { HfMod* mod; uint32_t list; char text[LF_TEXT_MAX]; } LfFilter;
 
 static SRWLOCK g_lfLock = SRWLOCK_INIT;
 static LfRule g_lfRules[32];
 static LfFilter g_lfFilters[32];
-static uint32_t g_lfRuleCount, g_lfFilterCount;
+static LfBand g_lfBands[16];
+static LfBandAt g_lfBandAt[LF_LISTS];
+static uint32_t g_lfRuleCount, g_lfFilterCount, g_lfBandCount;
+static int g_lfWidgets; /* the widget setters match: bands can be given */
 static HfListState g_lfState[LF_LISTS];
 static volatile LONG g_lfRebuild[LF_LISTS], g_lfTicking;
 static int g_lfArmory, g_lfPicker; /* 0 not yet, 1 on, -1 off (modloader.log says why) */
@@ -177,6 +190,62 @@ static int LfArmoryTab(uintptr_t screen)
     return -1;
 }
 
+/* ---- the band at the top of a list ---- */
+/* The grids' root widget: .1 the list column (.0 its scroll track, .1 its viewport), .2 the category heading bar,
+ * whose position is its bottom edge. The game places both only when it builds the page, so a band given once stays
+ * until the next build, which LfBandApply notices by the heading's y. */
+
+static uintptr_t LfChild(uintptr_t widget, int n)
+{
+    uintptr_t c = 0;
+    if (!widget || SafeRead(widget + 0xE0, &c, 8)) return 0;
+    for (; c && n > 0; n--) if (SafeRead(c + 0xE8, &c, 8)) return 0;
+    return c;
+}
+
+static uint64_t LfPack(float a, float b)
+{
+    uint32_t x, y;
+    memcpy(&x, &a, 4), memcpy(&y, &b, 4);
+    return (uint64_t)y << 32 | x;
+}
+
+static void LfShift(uintptr_t widget, float dy, int move)
+{
+    float r[4];
+    if (!widget || SafeRead(widget + 4, r, 16)) return;
+    if (move) ((LfSetFn)(g_lfGame + LF_POS))(widget, LfPack(r[0], r[1] - dy));
+    else ((LfSetFn)(g_lfGame + LF_SIZE))(widget, LfPack(r[2], r[3] - dy));
+}
+
+static float LfBandTotal(uint32_t list)
+{
+    float total = 0;
+    AcquireSRWLockShared(&g_lfLock);
+    for (uint32_t i = 0; i < g_lfBandCount; i++) if (g_lfBands[i].list == list) total += g_lfBands[i].height;
+    ReleaseSRWLockShared(&g_lfLock);
+    return total > LF_BAND_MAX ? LF_BAND_MAX : total;
+}
+
+/* Moves the heading and the list down by the bands of the list, and the list's bottom stays. Game thread. */
+static void LfBandApply(uint32_t list, uintptr_t root)
+{
+    LfBandAt* at = &g_lfBandAt[list - 1];
+    const uintptr_t column = LfChild(root, 1), heading = LfChild(root, 2), track = LfChild(column, 0);
+    float h[4];
+    if (!g_lfWidgets || !column || !heading || SafeRead(heading + 4, h, 16)) return;
+    if (root != at->root || (at->applied != 0 && h[1] != at->headY)) at->root = root, at->applied = 0; /* built again */
+    const float dy = LfBandTotal(list) - at->applied;
+    if (dy != 0)
+    {
+        LfShift(heading, dy, 1), LfShift(column, dy, 1);
+        LfShift(column, dy, 0), LfShift(track, dy, 0), LfShift(LfChild(track, 0), dy, 0), LfShift(LfChild(column, 1), dy, 0);
+        at->applied += dy;
+        SafeRead(heading + 4, h, 16);
+    }
+    at->headY = h[1], at->x = h[0], at->w = h[2], at->top = -h[1] - h[3] - at->applied;
+}
+
 /* ---- the stratagem picker ---- */
 
 static int LfHiddenType(uint32_t type) { return type < LF_TYPES_MAX && (g_lfHidden[type / 8] >> (type % 8) & 1); }
@@ -238,6 +307,7 @@ static int LfPickerOpen(void)
 
 static const char* LfArmoryInstall(uintptr_t game)
 {
+    g_lfWidgets = PinMatches(game + LF_POS, kLfPosPin, sizeof kLfPosPin) && PinMatches(game + LF_SIZE, kLfSizePin, sizeof kLfSizePin);
     if (!PinMatches(game + LF_GRID_BUILD, kLfBuildPin, sizeof kLfBuildPin) || !PinMatches(game + LF_ROWS_READ, kLfRowsPin, sizeof kLfRowsPin) ||
         !PinMatches(game + LF_TAB_SELECT, kLfTabPin, sizeof kLfTabPin) || !PinMatches(game + LF_RECORD, kLfRecordPin, sizeof kLfRecordPin) ||
         !PinMatches(game + LF_TEXT, kLfTextPin, sizeof kLfTextPin))
@@ -304,6 +374,11 @@ static void LfTick(HfMod* mod, float dt, void* user)
     if (g_lfState[0].open && LfArmoryTab(LfArmoryScreen()) < 0) g_lfState[0].open = 0;
     if (g_lfState[1].open && !LfPickerOpen()) g_lfState[1].open = 0;
     LfRebuildNow();
+    const uintptr_t screen = LfArmoryScreen();
+    if (g_lfArmory == 1 && LfArmoryTab(screen) >= 0) LfBandApply(HF_LIST_ARMORY_WEAPONS, screen + LF_ARMORY_GRID);
+    else g_lfBandAt[0].root = 0;
+    if (g_lfPicker == 1 && LfPickerOpen()) LfBandApply(HF_LIST_STRATAGEMS, (uintptr_t)g_lfPickerArgs[0]);
+    else g_lfBandAt[1].root = 0;
 }
 
 static void LfStartTick(void)
@@ -370,15 +445,47 @@ static int ApiRebuildList(HfMod* mod, uint32_t list)
     return g_lfState[list - 1].open ? 0 : 1;
 }
 
+/* The calling mod's slice of a list's band, below the slices of the mods that asked before it. */
+static void LfOwnBand(HfMod* mod, uint32_t list, HfListState* out)
+{
+    const LfBandAt* at = &g_lfBandAt[list - 1];
+    float above = 0, own = 0;
+    AcquireSRWLockShared(&g_lfLock);
+    for (uint32_t i = 0; i < g_lfBandCount && own == 0; i++)
+        if (g_lfBands[i].list == list) *(g_lfBands[i].mod == mod ? &own : &above) += g_lfBands[i].height;
+    ReleaseSRWLockShared(&g_lfLock);
+    if (own <= 0 || !at->root || above >= at->applied) return;
+    out->band_x = at->x, out->band_y = at->top + above, out->band_w = at->w;
+    out->band_h = own < at->applied - above ? own : at->applied - above;
+}
+
 /* SDK 38, list_state: what the list showed at its last build. 1 filled, 0 not (no build seen, or a bad call). */
 static uint32_t ApiListState(HfMod* mod, uint32_t list, HfListState* state)
 {
-    if (state == NULL || state->size < sizeof(HfListState) || (list != HF_LIST_ARMORY_WEAPONS && list != HF_LIST_STRATAGEMS)) return 0;
-    (void)mod;
-    if (g_lfState[list - 1].size == 0) return 0;
-    *state = g_lfState[list - 1];
+    const uint32_t size = state ? state->size : 0;
+    if (size < offsetof(HfListState, band_x) || (list != HF_LIST_ARMORY_WEAPONS && list != HF_LIST_STRATAGEMS) || g_lfState[list - 1].size == 0) return 0;
+    HfListState out = g_lfState[list - 1];
+    LfOwnBand(mod, list, &out);
+    memcpy(state, &out, size < sizeof out ? size : sizeof out);
+    state->size = size;
     return 1;
 }
 
+/* SDK 40, set_list_band: room of height units at the top of the list for the mod to draw in; 0 takes it away. */
+static int ApiSetListBand(HfMod* mod, uint32_t list, float height)
+{
+    if (!LfListOk(mod, list, "set_list_band")) return 1;
+    if (!(height >= 0 && height <= LF_BAND_MAX)) { ApiLog(mod, "set_list_band: refused: height %.0f is not 0 .. %.0f", height, LF_BAND_MAX); return 1; }
+    AcquireSRWLockExclusive(&g_lfLock);
+    LfBand* b = NULL;
+    for (uint32_t i = 0; i < g_lfBandCount && b == NULL; i++) if (g_lfBands[i].mod == mod && g_lfBands[i].list == list) b = &g_lfBands[i];
+    if (b == NULL && g_lfBandCount < sizeof g_lfBands / sizeof g_lfBands[0]) b = &g_lfBands[g_lfBandCount++], b->mod = mod, b->list = list;
+    if (b != NULL) b->height = height;
+    ReleaseSRWLockExclusive(&g_lfLock);
+    if (b == NULL) { ApiLog(mod, "set_list_band: no room for more bands"); return 1; }
+    LfStartTick();
+    return 0;
+}
+
 /* The table's entries from SDK 38 on (ApiInit). */
-#define LF_API ApiAddListRule, ApiSetListFilter, ApiRebuildList, ApiListState
+#define LF_API ApiAddListRule, ApiSetListFilter, ApiRebuildList, ApiListState, ApiSetListBand
