@@ -127,6 +127,7 @@ static int LfUsed(uint32_t list)
 {
     for (uint32_t i = 0; i < g_lfRuleCount; i++) if (g_lfRules[i].list == list) return 1;
     for (uint32_t i = 0; i < g_lfFilterCount; i++) if (g_lfFilters[i].list == list && g_lfFilters[i].text[0]) return 1;
+    for (uint32_t i = 0; i < g_lfBandCount; i++) if (g_lfBands[i].list == list && g_lfBands[i].height > 0) return 1; /* list_state places it */
     return 0;
 }
 
@@ -480,10 +481,12 @@ static int ApiSetListBand(HfMod* mod, uint32_t list, float height)
     LfBand* b = NULL;
     for (uint32_t i = 0; i < g_lfBandCount && b == NULL; i++) if (g_lfBands[i].mod == mod && g_lfBands[i].list == list) b = &g_lfBands[i];
     if (b == NULL && g_lfBandCount < sizeof g_lfBands / sizeof g_lfBands[0]) b = &g_lfBands[g_lfBandCount++], b->mod = mod, b->list = list;
+    const int first = b != NULL && b->height == 0 && height > 0;
     if (b != NULL) b->height = height;
     ReleaseSRWLockExclusive(&g_lfLock);
     if (b == NULL) { ApiLog(mod, "set_list_band: no room for more bands"); return 1; }
     LfStartTick();
+    if (first && !g_lfState[list - 1].open) InterlockedExchange(&g_lfRebuild[list - 1], 1); /* so list_state has a build */
     return 0;
 }
 
