@@ -31,7 +31,7 @@ typedef struct AiUnit
 {
     HfMod* mod;
     uint32_t entity, rider, rule; /* rule: its ai_obey row + 1, 0 none */
-    uint32_t order, target, status, issued, tries, detour, moved;
+    uint32_t order, target, status, issued, tries, detour, moved, spared;
     float point[3], goal[3], sent[3], detourAt[3], lastPos[3], headwayFrom[3];
     float follow, hold;
     double sinceSent, sinceHeadway, retryIn, sinceLog;
@@ -511,6 +511,39 @@ static void AiSettled(uint32_t entity, uint64_t resource)
     uint32_t player = rule->def.start_order == HF_ORDER_FOLLOW ? AiNearestPlayer(pos) : 0;
     if (player) AiSetOrder(u, HF_ORDER_FOLLOW, player, NULL, "its start order");
     else if (rule->def.start_order == HF_ORDER_FOLLOW) AiLog(u, "no standing Helldiver to follow: it waits for an order");
+}
+
+/* ---- friendly fire ---- */
+
+static int AiWantsDamage(void) { return g_aiRuleCount > 0; }
+
+/* Whether a network id is an obeying unit or its rider. Read without g_aiLock: the damage consumer can run inside the
+ * unit update that holds it, and a stale id only lets one hit through. */
+static AiUnit* AiDealer(uint32_t network)
+{
+    uint32_t entity = network && network != 0x7FFF ? ApiEntityOfNetwork(&g_aiMod, network) : 0;
+    for (int i = 0; entity && i < AI_UNITS; i++)
+        if (g_aiUnits[i].rule && (g_aiUnits[i].entity == entity || g_aiUnits[i].rider == entity)) return &g_aiUnits[i];
+    return NULL;
+}
+
+/* A hit by an obeying unit (its body, rider or a part it owns) on its own side deals nothing. Its brain's area attacks
+ * (the Scout Strider's kick, damage kind 6) take no side into account, so a unit that follows at a few metres hurt
+ * the Helldiver it followed. */
+static void AiDamage(uint8_t* event)
+{
+    if (g_aiRuleCount == 0) return;
+    uint32_t target, dealer, owner;
+    int32_t amount;
+    memcpy(&target, event, 4); memcpy(&dealer, event + 0x10, 4); memcpy(&owner, event + 0x14, 4); memcpy(&amount, event + 0x2C, 4);
+    AiUnit* u = AiDealer(dealer);
+    if (u == NULL && owner != dealer) u = AiDealer(owner);
+    if (u == NULL || amount == 0 || target == u->entity || target == u->rider) return;
+    uint32_t mine = ApiFactionOf(&g_aiMod, u->entity), theirs = ApiFactionOf(&g_aiMod, target);
+    if (!(mine & theirs)) return;
+    const int32_t none = 0;
+    memcpy(event + 0x2C, &none, 4);
+    if (u->spared++ == 0) AiLog(u, "its hit on entity %u (faction %u, its own side) deals nothing; later ones are not logged", target, theirs);
 }
 
 /* ---- the game thread ---- */
