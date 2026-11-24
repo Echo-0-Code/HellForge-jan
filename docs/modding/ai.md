@@ -53,9 +53,9 @@ uint64_t entity = api->register_entity(mod, &walker);
 
 `ai_obey` makes every unit of an entity obey Follow me and Hold position. No other code is needed.
 
-An obeying unit deals no damage to its own side: hits by its body, its rider or a part it owns on a unit of its faction
-deal nothing. Its brain's area attacks do not check sides, so without this a unit that follows at a few metres hurts
-the Helldiver it follows.
+An obeying unit's melee abilities (damage kind 6, such as the Scout Strider's kick) deal nothing to its own side. The
+brain swings them at whatever stands in reach, so without this a unit that follows at a few metres kicks the Helldiver
+it follows. Its gunfire and explosions still hit friends in the way, as a sentry's do.
 
 ```c
 HfAiObey obey = {sizeof obey};
