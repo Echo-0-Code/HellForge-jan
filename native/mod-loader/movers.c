@@ -37,6 +37,8 @@ typedef struct MvUnit
     uint32_t body, engaged, told;
     float lost, lastSurface, seatThrottle, seatSteer;
     float flWant, flIdle; /* a flier: the height it climbs toward, and how long nobody has flown it (movers_fly.c) */
+    uint32_t rail;        /* a rail mover's rail, once it is on it (movers_rail.c) */
+    float railS, railDir; /* how far along it, and +1 or -1: the way along it its heading points */
     uint32_t loggedDriver;
     double seatAge, sinceLog, logUntil;
 } MvUnit;
@@ -459,9 +461,12 @@ static void MvSpeedTurn(MvUnit* m, const MvDef* def, float top, float dt)
     m->turning = m->steer * MvRate(d, m->speed);
 }
 
+#include "movers_rail.c" /* SDK 43: rails (MvSpeedTurn, MvTop, MvBlocked) */
+
 static void MvDrive(MvUnit* m, const MvDef* def, float dt)
 {
     const HfMoverDef* d = &def->def;
+    if (d->mode == HF_MOVE_RAIL) { MvRailDrive(m, def, dt); return; }
     const float top = MvTop(m, d, dt);
     MvSpeedTurn(m, def, top, dt);
     m->driven = fabsf(m->throttle) > 0.02f ? def->axles : 0;
@@ -725,13 +730,14 @@ static const float kMvKind[][6] = {
     {60.0f, 4.0f, 30.0f, 0, 0.5f, 8.0f},    /* plane */
     {12.0f, 1.5f, 20.0f, 0, 0.5f, 12.0f},   /* boat */
     {7.0f, 0.8f, 12.0f, 0, 1.5f, 15.0f},    /* submarine */
+    {15.0f, 1.0f, 1.0f, 0, 0.5f, 0},       /* rail: light rail's 54 km/h, a service brake's 1 m/s2 */
 };
 
 static void MvDefaults(HfMoverDef* d)
 {
-    static const int kKindOf[] = {0, 0, 1, 2, 1, 1, 1, 3, 4, 5, 6};
+    static const int kKindOf[] = {0, 0, 1, 2, 1, 1, 1, 3, 4, 5, 6, 7};
     if (!d->mode) d->mode = HF_MOVE_WALK;
-    const float* k = kMvKind[d->mode <= HF_MOVE_SUB ? kKindOf[d->mode] : 0];
+    const float* k = kMvKind[d->mode <= HF_MOVE_RAIL ? kKindOf[d->mode] : 0];
     if (!d->water) d->water = HF_WATER_WADE;
     MvOr(&d->speed, k[0]);
     if (d->reverse_speed < 0) d->reverse_speed *= -d->speed; /* a share of its forward speed */
@@ -771,7 +777,8 @@ static const char* MvRefusal(const HfMoverDef* in, HfMoverDef* d)
     memset(d, 0, sizeof *d);
     memcpy(d, in, in->size < sizeof *d ? in->size : sizeof *d);
     MvDefaults(d);
-    if (d->mode > HF_MOVE_SUB || d->water > HF_WATER_SINK) return "mode WALK, DRIVE (_FWD, _RWD, _4WD), HOVER, HELI, PLANE, BOAT or SUB, water WADE, DRY, FLOAT or SINK";
+    if (d->mode > HF_MOVE_RAIL || d->water > HF_WATER_SINK) return "mode WALK, DRIVE (_FWD, _RWD, _4WD), HOVER, HELI, PLANE, BOAT, SUB or RAIL, water WADE, DRY, FLOAT or SINK";
+    if (d->rail > MV_RAILS) return "rail: an id add_rail gave, or 0 for the nearest";
     if (!AiIn(d->speed, 0.1f, MvFlier(d->mode) ? 120.0f : 40.0f) || !AiIn(d->stall_speed, 1, d->speed) || !AiIn(d->bank_max, 5, 80) || !AiIn(d->dive_depth, 0.5f, 30))
         return "speed 0.1 .. 40 (a flier 120), stall_speed 1 .. speed, bank_max 5 .. 80, dive_depth 0.5 .. 30";
     if (!AiIn(d->reverse_speed, 0, 40) || !AiIn(d->acceleration, 0.1f, 200) || !AiIn(d->brake, 0.1f, 200) ||
@@ -795,11 +802,11 @@ static int ApiAddMover(HfMod* mod, const HfMoverDef* in)
         if (g_mvDefs[i].def.entity == d.entity) { ApiLog(mod, "add_mover(%016llx): refused: it has a mover already", (unsigned long long)d.entity); return 1; }
     LONG at = InterlockedIncrement(&g_mvDefCount) - 1;
     if (at >= MV_DEFS) { InterlockedDecrement(&g_mvDefCount); ApiLog(mod, "add_mover: refused: %d movers already", MV_DEFS); return 1; }
-    static const uint32_t kAxles[] = {0, 0, 0, 0, HF_AXLE_FRONT, HF_AXLE_REAR, HF_AXLE_FRONT | HF_AXLE_REAR, 0, 0, 0, 0};
+    static const uint32_t kAxles[] = {0, 0, 0, 0, HF_AXLE_FRONT, HF_AXLE_REAR, HF_AXLE_FRONT | HF_AXLE_REAR, 0, 0, 0, 0, 0};
     const uint32_t asked = d.mode;
     if (kAxles[d.mode]) d.mode = HF_MOVE_DRIVE; /* one driver from here on, with its axles */
     g_mvDefs[at] = (MvDef){mod, d, 0, 3.0f, d.max_slope >= 89.9f ? 1e9f : tanf(d.max_slope * 0.0174533f), kAxles[asked], asked};
-    static const char* const kMode[] = {"", "walks", "drives", "hovers", "drives (FWD)", "drives (RWD)", "drives (4WD)", "flies (helicopter)", "flies (plane)", "sails (boat)", "sails (submarine)"}, * const kWater[] = {"", "wades", "stays dry", "floats", "sinks"};
+    static const char* const kMode[] = {"", "walks", "drives", "hovers", "drives (FWD)", "drives (RWD)", "drives (4WD)", "flies (helicopter)", "flies (plane)", "sails (boat)", "sails (submarine)", "rides a rail"}, * const kWater[] = {"", "wades", "stays dry", "floats", "sinks"};
     ApiLog(mod, "add_mover(%016llx): %s, %.1f m/s (%.1f back), %s at %.0f deg/s, brakes %.1f m/s2, %s (%.2f m)%s", (unsigned long long)d.entity,
         kMode[asked], (double)d.speed, (double)d.reverse_speed, d.turn_radius > 0 ? "turns like a vehicle" : "turns on the spot",
         (double)d.turn_rate, (double)d.brake, MvPhysical(d.mode) ? "crosses water" : kWater[d.water], (double)d.wade_depth, d.drive ? ", its own push" : "");

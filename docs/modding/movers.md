@@ -4,7 +4,7 @@
 
 SDK 35 lets HellForge move a unit itself: a sentry that walks, a cart that drives, any object your mod spawns. SDK 36
 adds hover vehicles, brakes, water and drivetrains. SDK 37 adds slopes, tilting, flying heights, boost, strafing and
-sounds. SDK 43 adds helicopters, planes, boats and submarines. You describe how it moves once with `add_mover`. A driver then
+sounds. SDK 43 adds helicopters, planes, boats, submarines and rail vehicles. You describe how it moves once with `add_mover`. A driver then
 gives it a throttle and a steer: your code with `mover_input`, the custom AI with `ai_drive`, or a hover's seated
 player. The types are in `hellforge_move.h`, which `hellforge_mod.h` includes.
 
@@ -17,6 +17,7 @@ player. The types are in `hellforge_move.h`, which `hellforge_mod.h` includes.
 - [Hover vehicles](#hover-vehicles)
 - [Helicopters and planes](#helicopters-and-planes)
 - [Boats and submarines](#boats-and-submarines)
+- [Rail vehicles](#rail-vehicles)
 - [Slopes, tilt, boost and sounds](#slopes-tilt-boost-and-sounds)
 - [Drive it from code](#drive-it-from-code)
 - [Let the custom AI drive it](#let-the-custom-ai-drive-it)
@@ -26,7 +27,7 @@ player. The types are in `hellforge_move.h`, which `hellforge_mod.h` includes.
 
 ## Before you call
 
-- Check `hf->size >= offsetof(HfApi, ai_drive) + sizeof(void*)` and set `"sdk": 39` in `hellforge-mod.json`. Fliers need `"sdk": 43`.
+- Check `hf->size >= offsetof(HfApi, ai_drive) + sizeof(void*)` and set `"sdk": 39` in `hellforge-mod.json`. Fliers, vessels and rails need `"sdk": 43`, and `add_rail` its own `hf->size` check.
 - Call `add_mover` and `ai_drive` from `hellforge_mod_init`.
 - Walkers and drivers run on the host. Their moves reach the other players as their root's moves do.
 - The game's own physics no longer move a walker or driver. Leave out any movement code of your own for it.
@@ -45,7 +46,7 @@ api->add_mover(mod, &walker);
 
 | Field | Default | What it does |
 |---|---|---|
-| `mode` | `HF_MOVE_WALK` | `HF_MOVE_WALK` steps to either side of a block. `HF_MOVE_DRIVE` (and its `_FWD`, `_RWD`, `_4WD`) goes only where it faces. `HF_MOVE_HOVER`: [Hover vehicles](#hover-vehicles). `HF_MOVE_HELI`, `HF_MOVE_PLANE`: [Helicopters and planes](#helicopters-and-planes). `HF_MOVE_BOAT`, `HF_MOVE_SUB`: [Boats and submarines](#boats-and-submarines) |
+| `mode` | `HF_MOVE_WALK` | `HF_MOVE_WALK` steps to either side of a block. `HF_MOVE_DRIVE` (and its `_FWD`, `_RWD`, `_4WD`) goes only where it faces. `HF_MOVE_HOVER`: [Hover vehicles](#hover-vehicles). `HF_MOVE_HELI`, `HF_MOVE_PLANE`: [Helicopters and planes](#helicopters-and-planes). `HF_MOVE_BOAT`, `HF_MOVE_SUB`: [Boats and submarines](#boats-and-submarines). `HF_MOVE_RAIL`: [Rail vehicles](#rail-vehicles) |
 | `speed` | 4 m/s, hover 22, helicopter 40, plane 60 | Top speed forward, at most 40 m/s (a flier 120) |
 | `reverse_speed` | 0: no reverse | Top speed backward in m/s. A negative value is a share of `speed`: -0.5 is half |
 | `acceleration` | 8 m/s², hover 3 | How fast it speeds up |
@@ -63,6 +64,7 @@ api->add_mover(mod, &walker);
 | `hover` | | [Hover vehicles](#hover-vehicles) |
 | `stall_speed`, `bank_max` | 0.45 × `speed`, 40° | [Helicopters and planes](#helicopters-and-planes) |
 | `dive_depth` | 3 m | [Boats and submarines](#boats-and-submarines) |
+| `rail` | 0: the nearest | [Rail vehicles](#rail-vehicles) |
 
 ## Water
 
@@ -207,6 +209,33 @@ the water: one dropped on land sits aground.
 | `hover.climb_rate` | | 0.5 m/s (its dive rate) |
 
 `mover_state` gives `height` as its root over the surface, negative under it, and `water_depth` under it.
+
+## Rail vehicles
+
+`HF_MOVE_RAIL` locks a unit to a rail. Give the line first with `add_rail`, its points at track height in world metres:
+
+```c
+static const float kLine[] = {0, 0, 10, 0, 50, 10, 40, 90, 12, 120, 100, 12};
+HfRailDef line = {sizeof line, 4, kLine, 0};
+const uint32_t rail = api->add_rail(mod, &line);   /* 0: refused, the log says why */
+
+HfMoverDef tram = {sizeof tram};
+tram.entity = MY_TRAM;
+tram.mode = HF_MOVE_RAIL;
+tram.rail = rail;
+tram.reverse_speed = -1.0f;
+api->add_mover(mod, &tram);
+```
+
+- A rail has 2 to 4096 points, each at least 5 cm from the one before. `loop` 1 joins its last point to its first.
+- A rail mover starts on its `rail`, or with 0 on the nearest one, at most 20 m from where it spawns.
+- It faces the way along the line nearest its heading. Throttle moves it that way, and back at `reverse_speed`.
+- Steer does nothing. Its heading follows the track, and with a `tilt_limit` its pitch follows the grade.
+- At a line's end it stops, as at a buffer, and `status` is `HF_MOVER_BLOCKED`.
+- It is moved by its root like a driver, so it runs on the host. It ploughs through units and walls on its way.
+
+Its defaults are light rail's: 15 m/s, and 1 m/s² to speed up and brake. A mod builds its own track and lays it along
+the line. Lines from the map's own routes come in a later SDK.
 
 ## Slopes, tilt, boost and sounds
 

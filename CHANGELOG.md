@@ -35,6 +35,8 @@ On `dev`, since 0.4.0-beta.
 - **Fighting movers (SDK 37).** `ai_drive` takes an engage range, a distance to keep, a leash and a reaction time. It
   retreats below a health share, running or backing off while firing, and takes whose orders and a spacing from other
   units ([Movers](docs/modding/movers.md#let-it-fight)).
+- **Rail vehicles (SDK 43).** `add_rail` gives a line, and `HF_MOVE_RAIL` locks a mover to it: throttle moves it along,
+  and a line's end stops it ([Movers](docs/modding/movers.md#rail-vehicles)).
 - **Boats and submarines (SDK 43).** `add_mover` takes `HF_MOVE_BOAT` and `HF_MOVE_SUB`. They float at their draft,
   steer by a rudder and sit aground in shallows; a sub dives to `dive_depth` ([Movers](docs/modding/movers.md#boats-and-submarines)).
 - **Helicopters and planes (SDK 43).** `add_mover` takes `HF_MOVE_HELI` and `HF_MOVE_PLANE`. They take off once

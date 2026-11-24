@@ -24,6 +24,8 @@
 /* SDK 43: vessels, physics bodies afloat wade_depth (their draft) under the water's surface; aground they sit still */
 #define HF_MOVE_BOAT 9u  /* on the surface, steered by its rudder: it turns only while moving */
 #define HF_MOVE_SUB 10u  /* a boat that dives: lift takes it down to dive_depth under the surface and back */
+/* SDK 43: locked to a rail (add_rail): throttle moves it along the line, steer does nothing; it stops at a line's end */
+#define HF_MOVE_RAIL 11u
 
 
 /* HfMoverDef.water (SDK 36): what a walker or driver does in water. A hover always crosses over it. */
@@ -81,7 +83,7 @@ typedef struct HfMoverSounds
 typedef struct HfMoverDef
 {
     uint32_t size;        /* sizeof(HfMoverDef) */
-    uint32_t mode;        /* HF_MOVE_WALK (default), _DRIVE, _DRIVE_FWD, _RWD, _4WD, _HOVER, _HELI, _PLANE, _BOAT or _SUB */
+    uint32_t mode;        /* HF_MOVE_WALK (default), _DRIVE, _DRIVE_FWD, _RWD, _4WD, _HOVER, _HELI, _PLANE, _BOAT, _SUB or _RAIL */
     uint64_t entity;      /* the entity resource its units are */
     float speed;          /* top speed forward, m/s (default 4, at most 40; a flier 120) */
     float reverse_speed;  /* top speed backward, m/s; negative: a share of speed (-0.5 half, -1 as fast); 0: it can't reverse */
@@ -112,10 +114,20 @@ typedef struct HfMoverDef
     float stall_speed;    /* HF_MOVE_PLANE: below this its wings carry it less (lift grows with speed squared), m/s (default 0.45 x speed) */
     float bank_max;       /* HF_MOVE_PLANE: its steepest bank at full steer, degrees; the bank sets its turn (default 40) */
     float dive_depth;     /* HF_MOVE_SUB: the deepest it dives, metres under the surface, at hover.climb_rate (default 3) */
+    uint32_t rail;        /* HF_MOVE_RAIL: the rail add_rail gave, or 0: the nearest rail within 20 m of where it starts */
 } HfMoverDef;
 
 #define HF_MOVER_DEF_SIZE_39 ((uint32_t)offsetof(HfMoverDef, stall_speed))
 
+
+/* add_rail (SDK 43): a line rail movers ride, its points at track height in world metres. HellForge copies them. */
+typedef struct HfRailDef
+{
+    uint32_t size;        /* sizeof(HfRailDef) */
+    uint32_t count;       /* points, 2 .. 4096, each at least 5 cm from the one before */
+    const float* points;  /* count x (x, y, z) */
+    uint32_t loop;        /* 1: the last point joins the first, and it never ends */
+} HfRailDef;
 
 /* mover_input: what a driver asks of it now. It holds for half a second; call it every update while driving. */
 typedef struct HfMoverInput
