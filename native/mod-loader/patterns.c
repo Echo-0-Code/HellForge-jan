@@ -419,9 +419,12 @@ static void PatPackagesTick(uintptr_t game)
     Note("patterns: %d attachment(s) and pattern(s) mapped to their base's package (%u entries, %u of the game's)", added, map.count, from.count);
 }
 
+#include "patterns_probe.c"
+
 /* On the game thread after the deltas: the collections (once the game has them) and the package map. */
 static void PatternsTick(uintptr_t game)
 {
+    PatProbe(game);
     uint32_t collections = *(volatile uint32_t*)(game + PAT_COLLECTION_COUNT);
     for (uint32_t k = 0; g_patternCount > 0 && PatProven(game) && k < collections && k < PAT_COLLECTION_SLOTS; k++) PatCollectionTick(game, k);
     PatPackagesTick(game);
