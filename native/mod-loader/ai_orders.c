@@ -67,6 +67,7 @@ static SRWLOCK g_aiInboxLock = SRWLOCK_INIT;
 static HfMod g_aiMod;
 static int MvWhere(uint32_t entity, float out[3]); /* movers.c: a mover's unit this machine moves */
 static int MvPending(uint32_t entity);
+static int MvSettling(uint32_t entity);
 static volatile LONG g_aiTicking;
 static int g_aiState;                        /* 0 waiting for the game, 1 ready, -1 off (logged) */
 static int g_aiHooked, g_aiListening;
@@ -252,7 +253,8 @@ static void AiSteer(AiUnit* u, AiCtx* c, const float pos[3], const float want[3]
     int replaced = u->sinceSent > (u->onTrail ? 0.5 : 2.0) && AiAgentGoal(u->entity, goal) && AiDist(goal, u->sent) > 1.0f; /* its brain or a stop */
     if (!u->issued || AiDist(aim, u->sent) > slack || replaced) AiSend(u, c, aim);
     u->status = u->detour ? HF_AI_DETOUR : HF_AI_MOVING;
-    if (AiFlat(pos, u->headwayFrom) > 1.0f) { memcpy(u->headwayFrom, pos, 12); u->sinceHeadway = 0; return; }
+    const int settling = u->route && MvSettling(u->entity); /* a mover starting, or turning on the spot */
+    if (settling || AiFlat(pos, u->headwayFrom) > 1.0f) { memcpy(u->headwayFrom, pos, 12); u->sinceHeadway = 0; return; }
     if ((u->sinceHeadway += AI_STEP_S) >= AI_STUCK_S) AiNoHeadway(u, c, pos, want);
 }
 
