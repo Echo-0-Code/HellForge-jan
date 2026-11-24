@@ -16,7 +16,7 @@ typedef struct MvUnit
 {
     uint32_t entity, unit, def, started, status, driver;
     float pos[3], yaw, speed, turning, throttle, steer, par[4][3], parYaw;
-    double age, inputAge, sinceSolid;
+    double age, inputAge, sinceSolid, sinceTrace;
     uint32_t mobile[32], mobileCount, blockedLogged;
 } MvUnit;
 
@@ -199,13 +199,31 @@ static void MvDrive(MvUnit* m, const HfMoverDef* d, float dt)
             (double)m->pos[0], (double)m->pos[1], (double)m->pos[2]);
 }
 
+/* Its first half minute every 2 s: where HellForge puts its root against where the game shows it, to see a move go wrong. */
+static void MvTrace(MvUnit* m, const MvDef* def, float dt)
+{
+    if (m->age > def->def.start_delay + 30 || (m->sinceTrace += dt) < 2.0) return;
+    m->sinceTrace = 0;
+    float w[16];
+    const int seen = ApiJointPose(&g_mvMod, m->unit, 0, HF_POSE_WORLD, w);
+    ApiLog(def->mod, "mover: unit %u (game unit %u) put at %.2f %.2f %.2f yaw %.0f, shown %s %.2f %.2f %.2f; speed %.2f, throttle %.2f, steer %.2f, status %u",
+        m->entity, m->unit, (double)m->pos[0], (double)m->pos[1], (double)m->pos[2], (double)(m->yaw * 57.29578f), seen ? "at" : "nowhere",
+        (double)(seen ? w[12] : 0), (double)(seen ? w[13] : 0), (double)(seen ? w[14] : 0), (double)m->speed, (double)m->throttle,
+        (double)m->steer, m->status);
+}
+
 static void MvUnitTick(MvUnit* m, float dt)
 {
     const MvDef* def = &g_mvDefs[m->def - 1];
     m->age += dt;
     m->inputAge += dt;
-    uint32_t network = 0;
-    if (!m->unit && !WcEntity(m->entity, &m->unit, &network)) return;
+    uint32_t unit = 0, network = 0;
+    if (!WcEntity(m->entity, &unit, &network) || !unit) return;
+    if (unit != m->unit) /* a hellpod's payload can change units as it deploys: its root is read again */
+    {
+        if (m->unit) ApiLog(def->mod, "mover: unit %u is now game unit %u (was %u): its root is read again", m->entity, unit, m->unit);
+        m->unit = unit; m->started = 0;
+    }
     if (m->age < def->def.start_delay) { m->status = HF_MOVER_WAITING; return; }
     if (!m->started)
     {
@@ -219,6 +237,7 @@ static void MvUnitTick(MvUnit* m, float dt)
     else { m->driver = HF_DRIVER_NONE; m->throttle = 0; m->steer = 0; }
     MvDrive(m, &def->def, dt);
     MvSetRoot(m);
+    MvTrace(m, def, dt);
 }
 
 /* The game's calls resolve only once the game has loaded (their code may decode later still), and mods add movers before
@@ -246,7 +265,13 @@ static void MvTick(HfMod* mod, float dt, void* user)
     {
         MvUnit* m = &g_mvUnits[i];
         if (!m->entity) continue;
-        if (!EvpAlive(m->entity)) { memset(m, 0, sizeof *m); continue; }
+        if (!EvpAlive(m->entity))
+        {
+            ApiLog(g_mvDefs[m->def - 1].mod, "mover: unit %u is gone after %.0f s, last put at %.1f %.1f %.1f", m->entity, m->age,
+                (double)m->pos[0], (double)m->pos[1], (double)m->pos[2]);
+            memset(m, 0, sizeof *m);
+            continue;
+        }
         MvUnitTick(m, dt);
     }
     ReleaseSRWLockExclusive(&g_mvLock);
