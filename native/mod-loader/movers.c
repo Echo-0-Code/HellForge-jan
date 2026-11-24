@@ -221,10 +221,26 @@ static void MvUnitTick(MvUnit* m, float dt)
     MvSetRoot(m);
 }
 
+/* The game's calls resolve only once the game has loaded (their code may decode later still), and mods add movers before
+ * that: ask each update until they come, and say so once after a minute without them. */
+static int MvCalls(float dt)
+{
+    static float waited;
+    static int said;
+    if (g_mvPos && g_mvRot) return 1;
+    if (said || !g_fired[HF_EVENT_GAME_LOADED]) return 0;
+    g_mvPos = (MvPosFn)ApiFunction(&g_mvMod, "UnitTeleportLocalPosition");
+    g_mvRot = (MvPosFn)ApiFunction(&g_mvMod, "UnitTeleportLocalRotation");
+    if (!g_mvLevel) g_mvLevel = (MvLevelFn)ApiFunction(&g_mvMod, "UnitLevel");
+    if (g_mvPos && g_mvRot) { Note("movers: on"); return 1; }
+    if ((waited += dt) > 60 && !said) { said = 1; Note("movers: off; the teleport calls are not the reviewed ones"); }
+    return 0;
+}
+
 static void MvTick(HfMod* mod, float dt, void* user)
 {
     (void)mod; (void)user;
-    if (!g_mvPos || !g_mvRot) return;
+    if (!MvCalls(dt)) return;
     AcquireSRWLockExclusive(&g_mvLock);
     for (int i = 0; i < MV_UNITS; i++)
     {
@@ -258,10 +274,6 @@ static void MvStart(void)
     snprintf(g_mvMod.id, sizeof g_mvMod.id, "hellforge.movers");
     g_mvMod.log = g_log;
     g_mvMod.loaded = 1;
-    g_mvPos = (MvPosFn)ApiFunction(&g_mvMod, "UnitTeleportLocalPosition");
-    g_mvRot = (MvPosFn)ApiFunction(&g_mvMod, "UnitTeleportLocalRotation");
-    g_mvLevel = (MvLevelFn)ApiFunction(&g_mvMod, "UnitLevel");
-    if (!g_mvPos || !g_mvRot) Note("movers: off; the teleport calls are not the reviewed ones");
     ApiSubscribe(&g_mvMod, HF_ON_SPAWN, (HfListener)(void (*)(void))MvSpawned, NULL, 0);
     ApiOnGameThread(&g_mvMod, MvTick, NULL);
 }
