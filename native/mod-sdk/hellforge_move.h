@@ -26,6 +26,8 @@
 #define HF_MOVE_SUB 10u  /* a boat that dives: lift takes it down to dive_depth under the surface and back */
 /* SDK 43: locked to a rail (add_rail): throttle moves it along the line, steer does nothing; it stops at a line's end */
 #define HF_MOVE_RAIL 11u
+/* SDK 43: tracks, a driver with every wheel driven: it pivots on the spot, and a hard turn slows it (half at full steer) */
+#define HF_MOVE_TRACKS 12u
 
 
 /* HfMoverDef.water (SDK 36): what a walker or driver does in water. A hover always crosses over it. */
@@ -83,7 +85,7 @@ typedef struct HfMoverSounds
 typedef struct HfMoverDef
 {
     uint32_t size;        /* sizeof(HfMoverDef) */
-    uint32_t mode;        /* HF_MOVE_WALK (default), _DRIVE, _DRIVE_FWD, _RWD, _4WD, _HOVER, _HELI, _PLANE, _BOAT, _SUB or _RAIL */
+    uint32_t mode;        /* HF_MOVE_WALK (default), _DRIVE, _DRIVE_FWD, _RWD, _4WD, _HOVER, _HELI, _PLANE, _BOAT, _SUB, _RAIL or _TRACKS */
     uint64_t entity;      /* the entity resource its units are */
     float speed;          /* top speed forward, m/s (default 4, at most 40; a flier 120) */
     float reverse_speed;  /* top speed backward, m/s; negative: a share of speed (-0.5 half, -1 as fast); 0: it can't reverse */
@@ -98,7 +100,7 @@ typedef struct HfMoverDef
     float brake;          /* m/s2 when it slows down or turns about (default: acceleration) */
     uint32_t water;       /* HF_WATER_WADE (default), _DRY, _FLOAT or _SINK; a hover or flier always crosses */
     float wade_depth;     /* the deepest water it wades, or its draft afloat, metres (default walk 0.8, drive 0.5) */
-    float grip;           /* HF_MOVE_DRIVE_FWD, _RWD, _4WD: tyre friction on the ground (default 0.7, dirt and gravel) */
+    float grip;           /* HF_MOVE_DRIVE_FWD, _RWD, _4WD, _TRACKS: friction on the ground (default 0.7, dirt and gravel; tracks 1) */
     HfMoverDriveFn drive; /* any mode: the mod's own push each update instead of HellForge's (NULL: HellForge's) */
     void* drive_user;     /* passed to drive */
     /* SDK 37 */

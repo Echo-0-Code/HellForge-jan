@@ -46,7 +46,7 @@ api->add_mover(mod, &walker);
 
 | Field | Default | What it does |
 |---|---|---|
-| `mode` | `HF_MOVE_WALK` | `HF_MOVE_WALK` steps to either side of a block. `HF_MOVE_DRIVE` (and its `_FWD`, `_RWD`, `_4WD`) goes only where it faces. `HF_MOVE_HOVER`: [Hover vehicles](#hover-vehicles). `HF_MOVE_HELI`, `HF_MOVE_PLANE`: [Helicopters and planes](#helicopters-and-planes). `HF_MOVE_BOAT`, `HF_MOVE_SUB`: [Boats and submarines](#boats-and-submarines). `HF_MOVE_RAIL`: [Rail vehicles](#rail-vehicles) |
+| `mode` | `HF_MOVE_WALK` | `HF_MOVE_WALK` steps to either side of a block. `HF_MOVE_DRIVE` (and its `_FWD`, `_RWD`, `_4WD`, and `HF_MOVE_TRACKS`) goes only where it faces. `HF_MOVE_HOVER`: [Hover vehicles](#hover-vehicles). `HF_MOVE_HELI`, `HF_MOVE_PLANE`: [Helicopters and planes](#helicopters-and-planes). `HF_MOVE_BOAT`, `HF_MOVE_SUB`: [Boats and submarines](#boats-and-submarines). `HF_MOVE_RAIL`: [Rail vehicles](#rail-vehicles) |
 | `speed` | 4 m/s, hover 22, helicopter 40, plane 60 | Top speed forward, at most 40 m/s (a flier 120) |
 | `reverse_speed` | 0: no reverse | Top speed backward in m/s. A negative value is a share of `speed`: -0.5 is half |
 | `acceleration` | 8 m/s², hover 3 | How fast it speeds up |
@@ -83,7 +83,7 @@ water. `mover_state` gives `water_depth`, the water over the ground where it is.
 
 ## Drivetrains and your own drive code
 
-The drive modes say which axles push. With one of the three, its tyres' `grip` caps how hard it speeds up and
+The drive modes say which axles push. With one of these four, its tyres' `grip` caps how hard it speeds up and
 brakes, and slopes pull on it.
 
 | `mode` | Grip it pushes with |
@@ -92,6 +92,7 @@ brakes, and slopes pull on it.
 | `HF_MOVE_DRIVE_FWD` | The front axle's load. It falls uphill, as the load moves back |
 | `HF_MOVE_DRIVE_RWD` | The rear axle's load. It grows uphill |
 | `HF_MOVE_DRIVE_4WD` | All of its weight |
+| `HF_MOVE_TRACKS` | All of its weight, with `grip` 1. It pivots on the spot, and a hard turn slows it: half its speed at full steer |
 
 - `grip` is tyre friction: 0.7 (the default) for dirt and gravel, about 0.9 for tarmac, 0.3 for mud.
 - Every wheel brakes, so braking is capped at `grip` × g whatever the axles.
