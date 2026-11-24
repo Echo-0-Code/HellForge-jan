@@ -223,8 +223,8 @@ if (HAS(hf, set_loadout_layout)) hf->set_loadout_layout(mod, &layout);
 | `gap` | 14 | the space between boxes |
 | `wide_width` | 500 | the selected box's width: the game widens the box under the cursor |
 
-- Call both from `hellforge_mod_init`. All mods together get 3 boxes, `HF_LOADOUT_EXTRA`: the preview render has room
-  for 6. The last `set_loadout_layout` call counts.
+- Call both from `hellforge_mod_init`. All mods together get 3 boxes, `HF_LOADOUT_EXTRA`: their weapons render in one
+  preview slot of 3 rows. The last `set_loadout_layout` call counts.
 - The box needs a mod tab on `HF_ARMORY_TABS_WEAPONS`. A click or confirm opens the weapon page and picks that tab, as a
   click on its label would.
 - `item_fn` runs on the game thread each time the overview shows. The box draws the item as a secondary weapon's box.
