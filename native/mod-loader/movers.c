@@ -35,7 +35,7 @@ typedef struct MvUnit
     uint32_t driven, boosting, wasMoving, wasBlocked, sounded;
     /* hover (movers_hover.c) */
     uint32_t body, engaged, told;
-    float lost, lastSurface, seatThrottle, seatSteer;
+    float lost, lastSurface, seatThrottle, seatSteer, seatLift;
     float flWant, flIdle; /* a flier: the height it climbs toward, and how long nobody has flown it (movers_fly.c) */
     uint32_t rail;        /* a rail mover's rail, once it is on it (movers_rail.c) */
     float railS, railDir; /* how far along it, and +1 or -1: the way along it its heading points */
@@ -499,8 +499,9 @@ static void MvTrace(MvUnit* m, const MvDef* def, float dt)
 static void MvDriver(MvUnit* m, const MvDef* def)
 {
     if (m->inputAge < MV_INPUT_S) { m->driver = HF_DRIVER_MOD; return; }
-    m->strafe = m->lift = m->boost = 0; /* only a mod's input has them (a seat's keys come with seat driving) */
-    if (MvPhysical(def->def.mode) && m->seatAge < HV_SEAT_S) { m->driver = HF_DRIVER_SEAT; m->throttle = m->seatThrottle; m->steer = m->seatSteer; }
+    m->strafe = m->lift = m->boost = 0; /* a mod's input has them, and a seat's lift keys */
+    if (MvPhysical(def->def.mode) && m->seatAge < HV_SEAT_S)
+    { m->driver = HF_DRIVER_SEAT; m->throttle = m->seatThrottle; m->steer = m->seatSteer; m->lift = m->seatLift; }
     else if (def->ai) { m->driver = HF_DRIVER_AI; MvAiInputs(m, def); }
     else { m->driver = HF_DRIVER_NONE; m->throttle = 0; m->steer = 0; }
 }
@@ -632,6 +633,7 @@ static void MvSpawned(HfMod* mod, const HfSpawnEvent* e, void* user)
                 memset(m, 0, sizeof *m);
                 m->entity = e->entity; m->def = (uint32_t)d + 1;
                 m->boostLeft = g_mvDefs[d].def.boost_time; m->targetHeight = g_mvDefs[d].def.hover.height;
+                m->seatAge = 1e9; /* no seat has driven it: the lift keys wait for one */
                 break;
             }
         ReleaseSRWLockExclusive(&g_mvLock);

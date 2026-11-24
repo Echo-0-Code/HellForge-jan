@@ -186,7 +186,7 @@ A plane needs airspeed:
 | `hover.climb_rate`, `hover.mass`, `hover.side_drag` | 5 m/s, 2500 kg, 0.8 /s | 8 m/s, 1100 kg, 3 /s |
 
 Set its physics data as for a hover: `VRA` extraGravity at `hover.carried`, wheels at low friction, and `VRD` word 11 at 0.
-A seated driver gives throttle and steer. The `lift` input comes only from `mover_input`.
+A seated driver gives throttle and steer, and `lift` with Space (up) and Control (down).
 
 ## Boats and submarines
 
@@ -271,12 +271,13 @@ api->mover_input(mod, entity, &in);
 `throttle` runs from -1 (full reverse) to 1 (full ahead). `steer` runs from -1 (full right) to 1 (full left). A mod's
 input wins over `ai_drive` for as long as it holds, so a mod can make its own fight moves.
 
-SDK 37 adds three inputs. Only `mover_input` gives them; a seated player can't yet.
+SDK 37 adds three inputs. `mover_input` gives all three. A seated driver gives `lift` with Space (up) and Control
+(down), on a craft its seat drove in the last 30 s.
 
 | Input | Range | What it does |
 |---|---|---|
 | `strafe` | -1 right .. 1 left | Slides a walker or hover sideways |
-| `lift` | -1 down .. 1 up | Moves a hover's height at `hover.climb_rate` |
+| `lift` | -1 down .. 1 up | Moves a hover's or flier's height, or a sub's depth, at `hover.climb_rate` |
 | `boost` | 0 or 1 | Boosts while its boost lasts |
 
 ## Let the custom AI drive it

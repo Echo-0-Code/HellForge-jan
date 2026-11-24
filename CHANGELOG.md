@@ -35,6 +35,8 @@ On `dev`, since 0.4.0-beta.
 - **Fighting movers (SDK 37).** `ai_drive` takes an engage range, a distance to keep, a leash and a reaction time. It
   retreats below a health share, running or backing off while firing, and takes whose orders and a spacing from other
   units ([Movers](docs/modding/movers.md#let-it-fight)).
+- **Seat lift keys.** A seated driver raises a hover or flier with Space and lowers it with Control, and dives a sub
+  ([Movers](docs/modding/movers.md#drive-it-from-code)).
 - **Tracked vehicles (SDK 43).** `HF_MOVE_TRACKS` drives on all its weight with `grip` 1, pivots on the spot and slows
   in hard turns ([Movers](docs/modding/movers.md#drivetrains-and-your-own-drive-code)).
 - **Rail vehicles (SDK 43).** `add_rail` gives a line, and `HF_MOVE_RAIL` locks a mover to it: throttle moves it along,

@@ -283,6 +283,17 @@ static void HvUnitTick(MvUnit* m, const MvDef* def, float dt)
 
 /* The seated drivers' inputs, read where the game reads them (VehicleMotionManager +0x60 steer, throttle, brake; the
  * drive state's +0x618 lever: 0 reverse, 1 neutral). The game's steer is positive to the right. Under g_mvLock. */
+#define HV_LIFT_HOLD_S 30.0 /* the lift keys count for a craft whose seat drove it this recently: its driver is here */
+
+/* Space up, Control down (Jan's keys), while the game's window has the keyboard. */
+static float HvLiftKeys(void)
+{
+    DWORD process = 0;
+    const HWND w = GetForegroundWindow();
+    if (w == NULL || !GetWindowThreadProcessId(w, &process) || process != GetCurrentProcessId()) return 0;
+    return ((GetAsyncKeyState(VK_SPACE) & 0x8000) ? 1.0f : 0.0f) - ((GetAsyncKeyState(VK_CONTROL) & 0x8000) ? 1.0f : 0.0f);
+}
+
 /* One vehicle's record, input and lever. */
 static void HvSeat(uintptr_t record, uintptr_t input, uintptr_t leverAt)
 {
@@ -297,7 +308,8 @@ static void HvSeat(uintptr_t record, uintptr_t input, uintptr_t leverAt)
     const float throttle = lever == 0 ? -fmaxf(in[1], in[2]) : lever == 1 ? 0.0f : in[1] - in[2];
     m->seatThrottle = MvClamp(throttle, -1, 1);
     m->seatSteer = MvClamp(-in[0], -1, 1);
-    if (fabsf(throttle) > 0.02f || fabsf(in[0]) > 0.02f) m->seatAge = 0;
+    m->seatLift = m->seatAge < HV_LIFT_HOLD_S ? HvLiftKeys() : 0; /* on foot, Space is a jump: only a craft just driven here */
+    if (fabsf(throttle) > 0.02f || fabsf(in[0]) > 0.02f || m->seatLift != 0) m->seatAge = 0;
 }
 
 static void HvSeats(uintptr_t manager)
