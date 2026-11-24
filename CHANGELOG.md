@@ -12,6 +12,8 @@ On `dev`, since 0.4.0-beta.
 
 ### Added
 
+- **Item lists (SDK 36).** `add_list_rule` and `set_list_filter` narrow the Armory's weapon grids and the stratagem
+  picker per row or by name; HellForge owns both builders, so mods no longer hook them ([Item lists](docs/modding/lists.md)).
 - **Movers (SDK 35).** `add_mover` makes HellForge move an entity's units itself: walk or drive, speed, turning on the
   spot or like a vehicle, step heights. `mover_input` drives one from code, and `ai_drive` hands it to the custom AI
   ([Movers](docs/modding/movers.md)).

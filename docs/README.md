@@ -77,6 +77,8 @@ Reference and related pages:
   Hold position, and moving a unit through the game's own pathing.
 - [Movers](modding/movers.md): for code mod authors; SDK 35 units HellForge moves itself (walk or drive, turning on
   the spot or like a vehicle), driven by code or by the custom AI.
+- [Item lists](modding/lists.md): for code mod authors; SDK 36 rules and name filters for the Armory's weapon
+  grids and the stratagem picker, without hooking their builders.
 - [Building a lobby browser](lobby-browser.md): for front-end developers drawing their own lobby browser on the ship's
   terminal; the SDK 16 calls, the terminal's visit, what each lobby says and the rules a browser keeps.
 

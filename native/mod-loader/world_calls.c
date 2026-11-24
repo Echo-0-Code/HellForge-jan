@@ -455,3 +455,4 @@ static void WorldCallsStart(void)
 #include "ai_orders.c"     /* SDK 31: after this file (WcEntity, EvpUnitPosition and the channel's lines) */
 #include "movers.c"        /* SDK 35: after ai_orders.c (AiDrivePoint, ApiAiObey) and world_sight.c (ApiLineOfSight) */
 #include "item_traits.c"   /* SDK 34: after this file; fields.c (its deferred edits) and registry.c (the mods' texts) come first */
+#include "list_filter.c"   /* SDK 36: after item_traits.c (ItStub, ItPoint, ItCallsTo); stratagems.c (its table) comes first */

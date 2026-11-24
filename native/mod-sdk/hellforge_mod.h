@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 35
+#define HF_MOD_SDK_VERSION 36
 #define HF_MOD_EXPORT __declspec(dllexport)
 
 typedef struct HfMod HfMod; /* Identifies the calling mod in logs and status. Opaque, but for SDK 6's HF_API(mod). */
@@ -770,6 +770,7 @@ typedef struct HfEventInfo
 typedef void (*HfListener)(HfMod* mod, const HfEventInfo* event, void* user);
 #include "hellforge_ai.h" /* SDK 31: orders for AI units (HfOrderEvent needs HfEventInfo) */
 #include "hellforge_move.h" /* SDK 35: movers */
+#include "hellforge_lists.h" /* SDK 36: item lists */
 
 typedef struct HfStateEvent { HfEventInfo info; uint32_t from, to; } HfStateEvent;
 typedef struct HfPlayerEvent
@@ -1809,6 +1810,12 @@ typedef struct HfApi
     int (*mover_input)(HfMod* mod, uint32_t entity, const HfMoverInput* input);
     uint32_t (*mover_state)(HfMod* mod, uint32_t entity, HfMoverState* state); /* how it moves (HF_MOVER_...). Any thread */
     int (*ai_drive)(HfMod* mod, uint64_t entity, const HfAiDrive* ai); /* the custom AI drives its mover. 0 done, 1 refused */
+    /* ---- SDK 36: the game's item lists (hellforge_lists.h, docs/modding/lists.md; check hf->size) ------------------ */
+    int (*add_list_rule)(HfMod* mod, uint32_t list, HfListRule rule, void* user); /* asked of each row per build. 0 done, 1 refused */
+    /* Text each listed row's name must contain, any case (NULL or "": none); the list rebuilds if up. Any thread. 0 done */
+    int (*set_list_filter)(HfMod* mod, uint32_t list, const char* text);
+    int (*rebuild_list)(HfMod* mod, uint32_t list); /* built again on the next update. 0 asked, 1 refused or not up */
+    uint32_t (*list_state)(HfMod* mod, uint32_t list, HfListState* state); /* its last build. 1 filled, 0 none seen */
 } HfApi;
 
 /* SDK 6: an HfMod starts with the API, so these need only the mod. */
@@ -1913,20 +1920,15 @@ static inline int hf_on_player_down(HfMod* mod, HfPlayerListener listener, void*
 /* HF_ON_DAMAGE: damage this machine's game applies, before armour and multipliers. */
 static inline int hf_on_damage(HfMod* mod, HfDamageListener listener, void* user, int32_t priority) { return hf_subscribe_(mod, HF_ON_DAMAGE, HF_LISTENER_(listener), user, priority); }
 /* HF_ON_DAMAGE_PRE (SDK 11): damage about to apply; the listener may change event->damage.amount or set cancel. */
-static inline int hf_on_damage_pre(HfMod* mod, HfDamagePreListener listener, void* user, int32_t priority)
-{ return hf_subscribe_(mod, HF_ON_DAMAGE_PRE, HF_LISTENER_(listener), user, priority); }
+static inline int hf_on_damage_pre(HfMod* mod, HfDamagePreListener listener, void* user, int32_t priority) { return hf_subscribe_(mod, HF_ON_DAMAGE_PRE, HF_LISTENER_(listener), user, priority); }
 /* HF_ON_STRATAGEM: a stratagem's beacon activates (on the thrower's machine). */
-static inline int hf_on_stratagem(HfMod* mod, HfStratagemListener listener, void* user, int32_t priority)
-{ return hf_subscribe_(mod, HF_ON_STRATAGEM, HF_LISTENER_(listener), user, priority); }
+static inline int hf_on_stratagem(HfMod* mod, HfStratagemListener listener, void* user, int32_t priority) { return hf_subscribe_(mod, HF_ON_STRATAGEM, HF_LISTENER_(listener), user, priority); }
 /* HF_ON_KILL: something was killed (on the victim's owner). */
-static inline int hf_on_kill(HfMod* mod, HfKillListener listener, void* user, int32_t priority)
-{ return hf_subscribe_(mod, HF_ON_KILL, HF_LISTENER_(listener), user, priority); }
+static inline int hf_on_kill(HfMod* mod, HfKillListener listener, void* user, int32_t priority) { return hf_subscribe_(mod, HF_ON_KILL, HF_LISTENER_(listener), user, priority); }
 /* HF_ON_SPAWN: an entity was spawned in this machine's world (remote spawns too). */
-static inline int hf_on_spawn(HfMod* mod, HfSpawnListener listener, void* user, int32_t priority)
-{ return hf_subscribe_(mod, HF_ON_SPAWN, HF_LISTENER_(listener), user, priority); }
+static inline int hf_on_spawn(HfMod* mod, HfSpawnListener listener, void* user, int32_t priority) { return hf_subscribe_(mod, HF_ON_SPAWN, HF_LISTENER_(listener), user, priority); }
 /* HF_ON_HEAL (SDK 11): a Helldiver's health went up. */
-static inline int hf_on_heal(HfMod* mod, HfHealListener listener, void* user, int32_t priority)
-{ return hf_subscribe_(mod, HF_ON_HEAL, HF_LISTENER_(listener), user, priority); }
+static inline int hf_on_heal(HfMod* mod, HfHealListener listener, void* user, int32_t priority) { return hf_subscribe_(mod, HF_ON_HEAL, HF_LISTENER_(listener), user, priority); }
 /* HF_ON_STAT (SDK 11): the local player's mission stats grew (HF_STAT_...). */
 static inline int hf_on_stat(HfMod* mod, HfStatListener listener, void* user, int32_t priority)
 { return hf_subscribe_(mod, HF_ON_STAT, HF_LISTENER_(listener), user, priority); }
