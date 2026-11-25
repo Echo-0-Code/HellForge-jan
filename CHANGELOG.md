@@ -582,6 +582,8 @@ On `dev`, since 0.4.0-beta.
 
 ### Fixed
 
+- **Clicks after a modal screen.** A modal overlay screen closed by a click no longer leaves the mouse captured, so
+  the game's buttons answer again without switching windows.
 - **Last row under a list band.** A list with a band keeps its scroll range after a search or filter rebuilds it, so
   its last row scrolls into view.
 - **Boats float in deep water.** A boat read the water's surface as its bed and sat aground; it now reads the bed
