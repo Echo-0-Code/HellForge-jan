@@ -1,7 +1,7 @@
 {
  "build": "25480438",
  "game_dll_sha256": "2E2C3B7C2500646DADD5F2B4C6E0504DBB7E7896139F64CDDC0D1813C718F51E",
- "method": "Ghidra pass on the decoded game.dll: every instruction reading table 80 (entity state + 0xF126F8; 3, all lookups) and every use of the /18 magic 0xE38E38E38E38E38F classified by the table it reads (25; the other 22 read tables 70, 75, 108, 219, 245, 267 and 300). No default-record offset (0x860) and no other 0x120/0xE8 use next to a table 80 load.",
+ "method": "Ghidra pass on the decoded game.dll: every instruction reading table 80 (entity state + 0xF126F8; 3, all lookups) and every use of the /18 magic 0xE38E38E38E38E38F classified by the table it reads (25; the other 22 read tables 70, 75, 108, 219, 245, 267 and 300). No default-record offset (0x860) and no other 0x120/0xE8 use next to a table 80 load. Tables 91, 225, 231 (25 Nov): every instruction reading them (91: 3 at entity state + 0xF12750; 225: 1 at +0xF12B80; 231: 2 at +0xF12BB0) and every use of their magics (/40 0xCCCCCCCCCCCCCCCD, /28 0x2492492492492493, /26 0x4EC4EC4EC4EC4EC5) classified by the table loaded next to it; only the listed ones read these tables. Table 91 has a default-record offset 0x123E0 = 16*40 + 20*3704 in its two lookup fallbacks.",
  "tables": {
   "80": {
    "name": "component 80 (vehicles)",
@@ -163,6 +163,280 @@
       {
        "rva": "0x85a41f",
        "bytes": "498d9a20010000",
+       "imm_offset": 3,
+       "imm_size": 4,
+       "formula": "16*S/m",
+       "divisor": 1
+      }
+     ]
+    }
+   ]
+  },
+  "91": {
+   "name": "component 91 (Vehicle)",
+   "growable": true,
+   "slots": 40,
+   "records": 21,
+   "stride": 3704,
+   "rules": {
+    "max_slots": 127,
+    "slots_multiple_of": 1,
+    "pow2": false,
+    "magic64": true
+   },
+   "sites": [
+    {
+     "function": "0x4fa390",
+     "what": "the lookup (entity -> record)",
+     "constants": [
+      {
+       "rva": "0x4fa3a6",
+       "bytes": "48b8cdcccccccccccccc",
+       "imm_offset": 2,
+       "imm_size": 8,
+       "formula": "magic64(S)"
+      },
+      {
+       "rva": "0x4fa3b3",
+       "bytes": "48c1ea05",
+       "imm_offset": 3,
+       "imm_size": 1,
+       "formula": "shift(S)"
+      },
+      {
+       "rva": "0x4fa3b7",
+       "bytes": "8d0492c1e003",
+       "imm_offset": 0,
+       "imm_size": 6,
+       "formula": "imul8(S)"
+      },
+      {
+       "rva": "0x4fa3fb",
+       "bytes": "4183f928",
+       "imm_offset": 3,
+       "imm_size": 1,
+       "formula": "S"
+      },
+      {
+       "rva": "0x4fa3f4",
+       "bytes": "83f827",
+       "imm_offset": 2,
+       "imm_size": 1,
+       "formula": "S-1"
+      },
+      {
+       "rva": "0x4fa413",
+       "bytes": "480580020000",
+       "imm_offset": 2,
+       "imm_size": 4,
+       "formula": "16*S/m",
+       "divisor": 1
+      }
+     ]
+    },
+    {
+     "function": "0x5740b0",
+     "what": "ApplySpawnDeltas: the default record when the lookup finds none",
+     "constants": [
+      {
+       "rva": "0x574866",
+       "bytes": "4805e0230100",
+       "imm_offset": 2,
+       "imm_size": 4,
+       "formula": "16*S+(R-1)*stride"
+      }
+     ]
+    },
+    {
+     "function": "0x704e60",
+     "what": "the default record when the lookup finds none",
+     "constants": [
+      {
+       "rva": "0x704f24",
+       "bytes": "4805e0230100",
+       "imm_offset": 2,
+       "imm_size": 4,
+       "formula": "16*S+(R-1)*stride"
+      }
+     ]
+    }
+   ]
+  },
+  "225": {
+   "name": "component 225 (VehicleMotion)",
+   "growable": true,
+   "slots": 28,
+   "records": 14,
+   "stride": 456,
+   "rules": {
+    "max_slots": 127,
+    "slots_multiple_of": 1,
+    "pow2": false,
+    "magic64": false
+   },
+   "sites": [
+    {
+     "function": "0x507a90",
+     "what": "the lookup (entity -> record), 65-bit magic form",
+     "constants": [
+      {
+       "rva": "0x507ab8",
+       "bytes": "48b89324499224499224",
+       "imm_offset": 2,
+       "imm_size": 8,
+       "formula": "magic65(S)"
+      },
+      {
+       "rva": "0x507ad1",
+       "bytes": "48c1e804",
+       "imm_offset": 3,
+       "imm_size": 1,
+       "formula": "shift65(S)"
+      },
+      {
+       "rva": "0x507ad5",
+       "bytes": "6bc01c",
+       "imm_offset": 2,
+       "imm_size": 1,
+       "formula": "S"
+      },
+      {
+       "rva": "0x507b1b",
+       "bytes": "4183fa1c",
+       "imm_offset": 3,
+       "imm_size": 1,
+       "formula": "S"
+      },
+      {
+       "rva": "0x507b14",
+       "bytes": "83f81b",
+       "imm_offset": 2,
+       "imm_size": 1,
+       "formula": "S-1"
+      },
+      {
+       "rva": "0x507b2d",
+       "bytes": "4d8d8bc0010000",
+       "imm_offset": 3,
+       "imm_size": 4,
+       "formula": "16*S/m",
+       "divisor": 1
+      }
+     ]
+    }
+   ]
+  },
+  "231": {
+   "name": "component 231 (VehicleElectrics: FRVs, tanks, exosuits)",
+   "growable": true,
+   "slots": 26,
+   "records": 13,
+   "stride": 2592,
+   "rules": {
+    "max_slots": 127,
+    "slots_multiple_of": 1,
+    "pow2": false,
+    "magic64": true
+   },
+   "sites": [
+    {
+     "function": "0x5086c0",
+     "what": "the lookup (entity -> record)",
+     "constants": [
+      {
+       "rva": "0x5086e8",
+       "bytes": "48b8c54eecc44eecc44e",
+       "imm_offset": 2,
+       "imm_size": 8,
+       "formula": "magic64(S)"
+      },
+      {
+       "rva": "0x5086f5",
+       "bytes": "48c1ea03",
+       "imm_offset": 3,
+       "imm_size": 1,
+       "formula": "shift(S)"
+      },
+      {
+       "rva": "0x5086f9",
+       "bytes": "6bc21a",
+       "imm_offset": 2,
+       "imm_size": 1,
+       "formula": "S"
+      },
+      {
+       "rva": "0x50873b",
+       "bytes": "4183fa1a",
+       "imm_offset": 3,
+       "imm_size": 1,
+       "formula": "S"
+      },
+      {
+       "rva": "0x508734",
+       "bytes": "83f819",
+       "imm_offset": 2,
+       "imm_size": 1,
+       "formula": "S-1"
+      },
+      {
+       "rva": "0x50874d",
+       "bytes": "4d8d8ba0010000",
+       "imm_offset": 3,
+       "imm_size": 4,
+       "formula": "16*S/m",
+       "divisor": 1
+      }
+     ]
+    },
+    {
+     "function": "0x70fe70",
+     "what": "the lookup inlined in a loop; the magic is loaded before the loop and again at its end",
+     "constants": [
+      {
+       "rva": "0x71004a",
+       "bytes": "48bac54eecc44eecc44e",
+       "imm_offset": 2,
+       "imm_size": 8,
+       "formula": "magic64(S)"
+      },
+      {
+       "rva": "0x710b17",
+       "bytes": "48bac54eecc44eecc44e",
+       "imm_offset": 2,
+       "imm_size": 8,
+       "formula": "magic64(S)"
+      },
+      {
+       "rva": "0x7100ad",
+       "bytes": "48c1ea03",
+       "imm_offset": 3,
+       "imm_size": 1,
+       "formula": "shift(S)"
+      },
+      {
+       "rva": "0x7100b1",
+       "bytes": "6bc21a",
+       "imm_offset": 2,
+       "imm_size": 1,
+       "formula": "S"
+      },
+      {
+       "rva": "0x7100ef",
+       "bytes": "4183f91a",
+       "imm_offset": 3,
+       "imm_size": 1,
+       "formula": "S"
+      },
+      {
+       "rva": "0x7100e8",
+       "bytes": "83f819",
+       "imm_offset": 2,
+       "imm_size": 1,
+       "formula": "S-1"
+      },
+      {
+       "rva": "0x71023e",
+       "bytes": "4881c1a0010000",
        "imm_offset": 3,
        "imm_size": 4,
        "formula": "16*S/m",

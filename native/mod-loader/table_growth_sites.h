@@ -184,6 +184,14 @@ static const GrowthConstant kGrowthConstants[] = {
     {0x4F9D68u, 6, 2, 4, GROW_INDEX_SCALED, 1u, {0x48, 0x05, 0x00, 0x42, 0x00, 0x00}},
     {0x4FA29Eu, 6, 2, 4, GROW_DEFAULT_OFFSET, 0u, {0x48, 0x05, 0x80, 0x7b, 0x01, 0x00}},
     {0x8D855Cu, 6, 2, 4, GROW_DEFAULT_OFFSET, 0u, {0x48, 0x05, 0x80, 0x7b, 0x01, 0x00}},
+    {0x4FA3A6u, 10, 2, 8, GROW_MAGIC, 0u, {0x48, 0xb8, 0xcd, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc}},
+    {0x4FA3B3u, 4, 3, 1, GROW_SHIFT, 0u, {0x48, 0xc1, 0xea, 0x05}},
+    {0x4FA3B7u, 6, 0, 6, GROW_IMUL8, 0u, {0x8d, 0x04, 0x92, 0xc1, 0xe0, 0x03}},
+    {0x4FA3FBu, 4, 3, 1, GROW_S, 0u, {0x41, 0x83, 0xf9, 0x28}},
+    {0x4FA3F4u, 3, 2, 1, GROW_S_MINUS_1, 0u, {0x83, 0xf8, 0x27}},
+    {0x4FA413u, 6, 2, 4, GROW_INDEX_SCALED, 1u, {0x48, 0x05, 0x80, 0x02, 0x00, 0x00}},
+    {0x574866u, 6, 2, 4, GROW_DEFAULT_OFFSET, 0u, {0x48, 0x05, 0xe0, 0x23, 0x01, 0x00}},
+    {0x704F24u, 6, 2, 4, GROW_DEFAULT_OFFSET, 0u, {0x48, 0x05, 0xe0, 0x23, 0x01, 0x00}},
     {0x4FA946u, 10, 2, 8, GROW_MAGIC, 0u, {0x48, 0xb8, 0xc5, 0x4e, 0xec, 0xc4, 0x4e, 0xec, 0xc4, 0x4e}},
     {0x4FA953u, 4, 3, 1, GROW_SHIFT, 0u, {0x48, 0xc1, 0xea, 0x03}},
     {0x4FA957u, 3, 2, 1, GROW_S, 0u, {0x6b, 0xc2, 0x1a}},
@@ -462,6 +470,25 @@ static const GrowthConstant kGrowthConstants[] = {
     {0x5074B8u, 6, 2, 4, GROW_INDEX_SCALED, 1u, {0x48, 0x05, 0xa0, 0x3e, 0x00, 0x00}},
     {0x50790Eu, 6, 2, 4, GROW_DEFAULT_OFFSET, 0u, {0x48, 0x05, 0x30, 0x29, 0xa9, 0x00}},
     {0x929B45u, 6, 2, 4, GROW_DEFAULT_OFFSET, 0u, {0x48, 0x05, 0x30, 0x29, 0xa9, 0x00}},
+    {0x507AB8u, 10, 2, 8, GROW_MAGIC65, 0u, {0x48, 0xb8, 0x93, 0x24, 0x49, 0x92, 0x24, 0x49, 0x92, 0x24}},
+    {0x507AD1u, 4, 3, 1, GROW_SHIFT65, 0u, {0x48, 0xc1, 0xe8, 0x04}},
+    {0x507AD5u, 3, 2, 1, GROW_S, 0u, {0x6b, 0xc0, 0x1c}},
+    {0x507B1Bu, 4, 3, 1, GROW_S, 0u, {0x41, 0x83, 0xfa, 0x1c}},
+    {0x507B14u, 3, 2, 1, GROW_S_MINUS_1, 0u, {0x83, 0xf8, 0x1b}},
+    {0x507B2Du, 7, 3, 4, GROW_INDEX_SCALED, 1u, {0x4d, 0x8d, 0x8b, 0xc0, 0x01, 0x00, 0x00}},
+    {0x5086E8u, 10, 2, 8, GROW_MAGIC, 0u, {0x48, 0xb8, 0xc5, 0x4e, 0xec, 0xc4, 0x4e, 0xec, 0xc4, 0x4e}},
+    {0x5086F5u, 4, 3, 1, GROW_SHIFT, 0u, {0x48, 0xc1, 0xea, 0x03}},
+    {0x5086F9u, 3, 2, 1, GROW_S, 0u, {0x6b, 0xc2, 0x1a}},
+    {0x50873Bu, 4, 3, 1, GROW_S, 0u, {0x41, 0x83, 0xfa, 0x1a}},
+    {0x508734u, 3, 2, 1, GROW_S_MINUS_1, 0u, {0x83, 0xf8, 0x19}},
+    {0x50874Du, 7, 3, 4, GROW_INDEX_SCALED, 1u, {0x4d, 0x8d, 0x8b, 0xa0, 0x01, 0x00, 0x00}},
+    {0x71004Au, 10, 2, 8, GROW_MAGIC, 0u, {0x48, 0xba, 0xc5, 0x4e, 0xec, 0xc4, 0x4e, 0xec, 0xc4, 0x4e}},
+    {0x710B17u, 10, 2, 8, GROW_MAGIC, 0u, {0x48, 0xba, 0xc5, 0x4e, 0xec, 0xc4, 0x4e, 0xec, 0xc4, 0x4e}},
+    {0x7100ADu, 4, 3, 1, GROW_SHIFT, 0u, {0x48, 0xc1, 0xea, 0x03}},
+    {0x7100B1u, 3, 2, 1, GROW_S, 0u, {0x6b, 0xc2, 0x1a}},
+    {0x7100EFu, 4, 3, 1, GROW_S, 0u, {0x41, 0x83, 0xf9, 0x1a}},
+    {0x7100E8u, 3, 2, 1, GROW_S_MINUS_1, 0u, {0x83, 0xf8, 0x19}},
+    {0x71023Eu, 7, 3, 4, GROW_INDEX_SCALED, 1u, {0x48, 0x81, 0xc1, 0xa0, 0x01, 0x00, 0x00}},
     {0x508EA6u, 10, 2, 8, GROW_MAGIC, 0u, {0x48, 0xb8, 0xbf, 0xa0, 0x2f, 0xe8, 0x0b, 0xfa, 0x82, 0xbe}},
     {0x508EB3u, 4, 3, 1, GROW_SHIFT, 0u, {0x48, 0xc1, 0xea, 0x09}},
     {0x508EB7u, 6, 2, 4, GROW_S, 0u, {0x69, 0xc2, 0xb0, 0x02, 0x00, 0x00}},
@@ -817,61 +844,64 @@ static const GrowthTable kGrowthTables[] = {
     {88, 0, 3382u, 1692u, 136u, {134203354u, 1u, 0, 0}, 159, 8}, /* UnitComponentData */
     {89, 0, 96u, 48u, 1888u, {127u, 1u, 0, 1}, 167, 6}, /* MaterialSwapComponentData */
     {90, 0, 1056u, 529u, 152u, {134212711u, 1u, 0, 1}, 173, 8}, /* FactionComponentData */
-    {93, 0, 26u, 14u, 44u, {127u, 1u, 0, 1}, 181, 9}, /* MinefieldComponentData */
-    {94, 0, 30u, 16u, 344u, {127u, 1u, 0, 1}, 190, 9}, /* ShieldComponentData */
-    {99, 0, 6u, 4u, 4u, {7u, 1u, 0, 1}, 199, 9}, /* RechargeComponentData */
-    {101, 0, 150u, 76u, 10424u, {134168865u, 1u, 0, 1}, 208, 9}, /* InteractableMinigameComponentData */
-    {104, 0, 1376u, 688u, 3912u, {134217727u, 1u, 0, 1}, 217, 6}, /* EffectReferenceComponentData */
-    {105, 0, 948u, 474u, 32u, {2147483647u, 2u, 0, 0}, 223, 12}, /* CollisionEventComponentData */
-    {107, 0, 712u, 356u, 104u, {134217727u, 1u, 0, 0}, 235, 18}, /* PhysicsImpactEffectComponentData */
-    {111, 0, 1010u, 505u, 32u, {2147483647u, 2u, 0, 0}, 253, 12}, /* WieldableComponentData */
-    {113, 0, 498u, 250u, 80u, {134216482u, 1u, 0, 1}, 265, 8}, /* WeaponReloadComponentData */
-    {114, 0, 6u, 4u, 12u, {95u, 3u, 0, 1}, 273, 9}, /* WeaponLinkerComponentData */
-    {117, 0, 50u, 26u, 136u, {127u, 1u, 0, 0}, 282, 8}, /* WeaponRoundsComponentData */
-    {125, 0, 1386u, 693u, 72u, {2147483647u, 9u, 0, 1}, 290, 6}, /* SpottableComponentData */
-    {155, 0, 140u, 71u, 568u, {134215242u, 1u, 0, 1}, 296, 8}, /* HellpodRackComponentData */
-    {156, 0, 146u, 73u, 100u, {134217727u, 1u, 0, 1}, 304, 6}, /* InteractableObjectiveTerminalComponentData */
-    {158, 0, 1520u, 760u, 112u, {134217727u, 1u, 0, 0}, 310, 12}, /* AnimationComponentData */
-    {159, 0, 388u, 194u, 4836u, {134217727u, 1u, 0, 0}, 322, 6}, /* HitReactComponentData */
-    {164, 0, 230u, 116u, 12u, {134217641u, 1u, 0, 0}, 328, 9}, /* HellpodPayloadComponentData */
-    {169, 0, 10u, 5u, 20u, {127u, 5u, 0, 1}, 337, 12}, /* CarryEffectComponentData */
-    {177, 0, 58u, 30u, 152u, {127u, 1u, 0, 0}, 349, 21}, /* DepositComponentData */
-    {184, 0, 90u, 45u, 12u, {95u, 3u, 0, 1}, 370, 12}, /* ObjectiveDynamicLinkComponentData */
-    {188, 0, 572u, 286u, 16u, {2147483647u, 1u, 0, 1}, 382, 18}, /* NetworkPhysicsComponentData */
-    {190, 0, 80u, 40u, 128u, {127u, 8u, 0, 1}, 400, 6}, /* ObjectiveCarryComponentData */
-    {191, 0, 626u, 314u, 44u, {134216867u, 1u, 0, 0}, 406, 9}, /* SensorEyeComponentData */
-    {198, 0, 544u, 272u, 640u, {134217727u, 1u, 0, 1}, 415, 6}, /* VisibilityMaskComponentData */
-    {204, 0, 20u, 11u, 216u, {127u, 1u, 0, 1}, 421, 9}, /* WeaponChargeComponentData */
-    {218, 0, 494u, 247u, 20u, {2147483647u, 1u, 0, 1}, 430, 12}, /* GroundCheckComponentData */
-    {219, 0, 18u, 10u, 124u, {127u, 1u, 0, 1}, 442, 9}, /* GuidanceTargetComponentData */
-    {224, 0, 1002u, 502u, 22096u, {133525846u, 1u, 0, 0}, 451, 8}, /* HealthComponentData */
-    {233, GROWTH_PROTECTED_MATCH, 688u, 345u, 232u, {134212739u, 1u, 0, 1}, 459, 15}, /* EquipmentComponentData */
-    {234, 0, 590u, 295u, 64u, {134217727u, 1u, 0, 1}, 474, 19}, /* TargetingComponentData */
-    {236, 0, 730u, 366u, 1232u, {134189622u, 1u, 0, 0}, 493, 8}, /* WeaponDataComponentData */
-    {244, 0, 1114u, 557u, 1104u, {134217727u, 1u, 0, 1}, 501, 32}, /* InteractableComponentData */
-    {246, 0, 12u, 7u, 56u, {127u, 1u, 0, 1}, 533, 9}, /* WeaponLinkedAmmoComponentData */
-    {247, 0, 38u, 19u, 76u, {127u, 19u, 0, 1}, 542, 12}, /* StickyComponentData */
-    {251, 0, 6u, 3u, 8u, {63u, 1u, 0, 1}, 554, 18}, /* TwoPointChainAttachTargetComponentData */
-    {252, 0, 6u, 3u, 136u, {7u, 1u, 0, 1}, 572, 12}, /* TwoPointChainComponentData */
-    {255, 0, 142u, 72u, 360u, {134216130u, 1u, 0, 0}, 584, 8}, /* ExplosiveComponentData */
-    {258, 0, 10u, 6u, 752u, {127u, 1u, 0, 1}, 592, 9}, /* ThrowerComponentData */
-    {259, 0, 92u, 46u, 360u, {127u, 1u, 0, 0}, 601, 6}, /* ThrowableComponentData */
-    {260, 0, 34u, 17u, 112u, {127u, 1u, 0, 1}, 607, 12}, /* WeatheringComponentData */
-    {262, 0, 1606u, 803u, 64u, {134217727u, 1u, 0, 1}, 619, 19}, /* AttachableComponentData */
-    {264, 0, 6u, 4u, 280u, {7u, 1u, 0, 1}, 638, 9}, /* JumppackComponentData */
-    {265, 0, 20u, 11u, 80u, {127u, 5u, 0, 1}, 647, 9}, /* ArcWeaponComponentData */
-    {266, 0, 58u, 30u, 592u, {127u, 1u, 0, 0}, 656, 8}, /* WeaponHeatComponentData */
-    {267, GROWTH_PROTECTED_MATCH, 18u, 9u, 88u, {127u, 1u, 0, 1}, 664, 6}, /* AbilityWeaponComponentData */
-    {268, 0, 22u, 11u, 192u, {127u, 1u, 0, 1}, 670, 6}, /* MeleeWeaponComponentData */
-    {270, 0, 46u, 24u, 120u, {127u, 1u, 0, 0}, 676, 8}, /* BeamWeaponComponentData */
-    {271, 0, 382u, 192u, 4872u, {134159568u, 1u, 0, 1}, 684, 14}, /* WeaponCustomizationComponentData */
-    {282, 0, 638u, 319u, 24u, {2147483647u, 1u, 0, 1}, 698, 12}, /* DetectorComponentData */
-    {284, 0, 2008u, 1005u, 12u, {134216974u, 1u, 0, 0}, 710, 9}, /* BehaviorComponentData */
-    {290, 0, 1968u, 984u, 32u, {2147483647u, 2u, 0, 0}, 719, 18}, /* AbilityComponentData */
-    {298, 0, 46u, 23u, 152u, {127u, 1u, 0, 0}, 737, 12}, /* BoidsComponentData */
-    {307, GROWTH_PROTECTED_MATCH, 648u, 325u, 46600u, {133274077u, 1u, 0, 0}, 749, 8}, /* StatusEffectReceiverComponentData */
-    {310, 0, 448u, 225u, 312u, {134213359u, 1u, 0, 0}, 757, 8}, /* RotationComponentData */
-    {315, 0, 46u, 24u, 224u, {127u, 1u, 0, 0}, 765, 9}, /* SprayWeaponComponentData */
-    {321, GROWTH_PROTECTED_MATCH, 542u, 272u, 616u, {134207294u, 1u, 0, 1}, 774, 8}, /* ProjectileWeaponComponentData */
-    {322, 0, 454u, 227u, 104u, {134217727u, 1u, 0, 1}, 782, 12}, /* TargetAimConstraintComponentData */
+    {91, 0, 40u, 21u, 3704u, {127u, 1u, 0, 1}, 181, 8}, /* component 91 (Vehicle) */
+    {93, 0, 26u, 14u, 44u, {127u, 1u, 0, 1}, 189, 9}, /* MinefieldComponentData */
+    {94, 0, 30u, 16u, 344u, {127u, 1u, 0, 1}, 198, 9}, /* ShieldComponentData */
+    {99, 0, 6u, 4u, 4u, {7u, 1u, 0, 1}, 207, 9}, /* RechargeComponentData */
+    {101, 0, 150u, 76u, 10424u, {134168865u, 1u, 0, 1}, 216, 9}, /* InteractableMinigameComponentData */
+    {104, 0, 1376u, 688u, 3912u, {134217727u, 1u, 0, 1}, 225, 6}, /* EffectReferenceComponentData */
+    {105, 0, 948u, 474u, 32u, {2147483647u, 2u, 0, 0}, 231, 12}, /* CollisionEventComponentData */
+    {107, 0, 712u, 356u, 104u, {134217727u, 1u, 0, 0}, 243, 18}, /* PhysicsImpactEffectComponentData */
+    {111, 0, 1010u, 505u, 32u, {2147483647u, 2u, 0, 0}, 261, 12}, /* WieldableComponentData */
+    {113, 0, 498u, 250u, 80u, {134216482u, 1u, 0, 1}, 273, 8}, /* WeaponReloadComponentData */
+    {114, 0, 6u, 4u, 12u, {95u, 3u, 0, 1}, 281, 9}, /* WeaponLinkerComponentData */
+    {117, 0, 50u, 26u, 136u, {127u, 1u, 0, 0}, 290, 8}, /* WeaponRoundsComponentData */
+    {125, 0, 1386u, 693u, 72u, {2147483647u, 9u, 0, 1}, 298, 6}, /* SpottableComponentData */
+    {155, 0, 140u, 71u, 568u, {134215242u, 1u, 0, 1}, 304, 8}, /* HellpodRackComponentData */
+    {156, 0, 146u, 73u, 100u, {134217727u, 1u, 0, 1}, 312, 6}, /* InteractableObjectiveTerminalComponentData */
+    {158, 0, 1520u, 760u, 112u, {134217727u, 1u, 0, 0}, 318, 12}, /* AnimationComponentData */
+    {159, 0, 388u, 194u, 4836u, {134217727u, 1u, 0, 0}, 330, 6}, /* HitReactComponentData */
+    {164, 0, 230u, 116u, 12u, {134217641u, 1u, 0, 0}, 336, 9}, /* HellpodPayloadComponentData */
+    {169, 0, 10u, 5u, 20u, {127u, 5u, 0, 1}, 345, 12}, /* CarryEffectComponentData */
+    {177, 0, 58u, 30u, 152u, {127u, 1u, 0, 0}, 357, 21}, /* DepositComponentData */
+    {184, 0, 90u, 45u, 12u, {95u, 3u, 0, 1}, 378, 12}, /* ObjectiveDynamicLinkComponentData */
+    {188, 0, 572u, 286u, 16u, {2147483647u, 1u, 0, 1}, 390, 18}, /* NetworkPhysicsComponentData */
+    {190, 0, 80u, 40u, 128u, {127u, 8u, 0, 1}, 408, 6}, /* ObjectiveCarryComponentData */
+    {191, 0, 626u, 314u, 44u, {134216867u, 1u, 0, 0}, 414, 9}, /* SensorEyeComponentData */
+    {198, 0, 544u, 272u, 640u, {134217727u, 1u, 0, 1}, 423, 6}, /* VisibilityMaskComponentData */
+    {204, 0, 20u, 11u, 216u, {127u, 1u, 0, 1}, 429, 9}, /* WeaponChargeComponentData */
+    {218, 0, 494u, 247u, 20u, {2147483647u, 1u, 0, 1}, 438, 12}, /* GroundCheckComponentData */
+    {219, 0, 18u, 10u, 124u, {127u, 1u, 0, 1}, 450, 9}, /* GuidanceTargetComponentData */
+    {224, 0, 1002u, 502u, 22096u, {133525846u, 1u, 0, 0}, 459, 8}, /* HealthComponentData */
+    {225, 0, 28u, 14u, 456u, {127u, 1u, 0, 0}, 467, 6}, /* component 225 (VehicleMotion) */
+    {231, 0, 26u, 13u, 2592u, {127u, 1u, 0, 1}, 473, 13}, /* component 231 (VehicleElectrics: FRVs, tanks, exosuits) */
+    {233, GROWTH_PROTECTED_MATCH, 688u, 345u, 232u, {134212739u, 1u, 0, 1}, 486, 15}, /* EquipmentComponentData */
+    {234, 0, 590u, 295u, 64u, {134217727u, 1u, 0, 1}, 501, 19}, /* TargetingComponentData */
+    {236, 0, 730u, 366u, 1232u, {134189622u, 1u, 0, 0}, 520, 8}, /* WeaponDataComponentData */
+    {244, 0, 1114u, 557u, 1104u, {134217727u, 1u, 0, 1}, 528, 32}, /* InteractableComponentData */
+    {246, 0, 12u, 7u, 56u, {127u, 1u, 0, 1}, 560, 9}, /* WeaponLinkedAmmoComponentData */
+    {247, 0, 38u, 19u, 76u, {127u, 19u, 0, 1}, 569, 12}, /* StickyComponentData */
+    {251, 0, 6u, 3u, 8u, {63u, 1u, 0, 1}, 581, 18}, /* TwoPointChainAttachTargetComponentData */
+    {252, 0, 6u, 3u, 136u, {7u, 1u, 0, 1}, 599, 12}, /* TwoPointChainComponentData */
+    {255, 0, 142u, 72u, 360u, {134216130u, 1u, 0, 0}, 611, 8}, /* ExplosiveComponentData */
+    {258, 0, 10u, 6u, 752u, {127u, 1u, 0, 1}, 619, 9}, /* ThrowerComponentData */
+    {259, 0, 92u, 46u, 360u, {127u, 1u, 0, 0}, 628, 6}, /* ThrowableComponentData */
+    {260, 0, 34u, 17u, 112u, {127u, 1u, 0, 1}, 634, 12}, /* WeatheringComponentData */
+    {262, 0, 1606u, 803u, 64u, {134217727u, 1u, 0, 1}, 646, 19}, /* AttachableComponentData */
+    {264, 0, 6u, 4u, 280u, {7u, 1u, 0, 1}, 665, 9}, /* JumppackComponentData */
+    {265, 0, 20u, 11u, 80u, {127u, 5u, 0, 1}, 674, 9}, /* ArcWeaponComponentData */
+    {266, 0, 58u, 30u, 592u, {127u, 1u, 0, 0}, 683, 8}, /* WeaponHeatComponentData */
+    {267, GROWTH_PROTECTED_MATCH, 18u, 9u, 88u, {127u, 1u, 0, 1}, 691, 6}, /* AbilityWeaponComponentData */
+    {268, 0, 22u, 11u, 192u, {127u, 1u, 0, 1}, 697, 6}, /* MeleeWeaponComponentData */
+    {270, 0, 46u, 24u, 120u, {127u, 1u, 0, 0}, 703, 8}, /* BeamWeaponComponentData */
+    {271, 0, 382u, 192u, 4872u, {134159568u, 1u, 0, 1}, 711, 14}, /* WeaponCustomizationComponentData */
+    {282, 0, 638u, 319u, 24u, {2147483647u, 1u, 0, 1}, 725, 12}, /* DetectorComponentData */
+    {284, 0, 2008u, 1005u, 12u, {134216974u, 1u, 0, 0}, 737, 9}, /* BehaviorComponentData */
+    {290, 0, 1968u, 984u, 32u, {2147483647u, 2u, 0, 0}, 746, 18}, /* AbilityComponentData */
+    {298, 0, 46u, 23u, 152u, {127u, 1u, 0, 0}, 764, 12}, /* BoidsComponentData */
+    {307, GROWTH_PROTECTED_MATCH, 648u, 325u, 46600u, {133274077u, 1u, 0, 0}, 776, 8}, /* StatusEffectReceiverComponentData */
+    {310, 0, 448u, 225u, 312u, {134213359u, 1u, 0, 0}, 784, 8}, /* RotationComponentData */
+    {315, 0, 46u, 24u, 224u, {127u, 1u, 0, 0}, 792, 9}, /* SprayWeaponComponentData */
+    {321, GROWTH_PROTECTED_MATCH, 542u, 272u, 616u, {134207294u, 1u, 0, 1}, 801, 8}, /* ProjectileWeaponComponentData */
+    {322, 0, 454u, 227u, 104u, {134217727u, 1u, 0, 1}, 809, 12}, /* TargetAimConstraintComponentData */
 };
