@@ -1,5 +1,5 @@
 # Publishes an existing test-package artifact as a pre-release, so it can be fetched where only GitHub release
-# downloads are reachable. Pushed by the "Combine weapons into one mod" thread on 20 Nov, with Jan's approval.
+# downloads are reachable. Rewritten for each build by ai-shared scripts/cloud/publish-test.sh.
 name: Publish test package
 
 on:
@@ -16,13 +16,15 @@ jobs:
       - name: Download the artifact and publish it
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: '45572264076'
-          TAG: test-438a152
+          RUN_ID: "45598318185"
+          TAG: "test-03a7372"
+          TARGET: "03a7372ad5d27cb40a433f5976ac1edc3ecf1893"
+          TITLE: "Test build 03a7372, 438a152 + support copy paints, xaml base fix, hangar retired, SKINS page (SDK 45) (run 45598318185)"
         run: |
           gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n test-package -D pkg
           find pkg -type f -exec ls -la {} \;
           cp "$(find pkg -name HellForge-Setup.exe | head -1)" HellForge-Setup.exe
           sha256sum HellForge-Setup.exe | tee SHA256SUMS
-          gh release create "$TAG" -R "$GITHUB_REPOSITORY" --prerelease --target 438a152c58be25820135b65d790c5f3ab0f62c0e \
-            --title "Test build 438a152, helicopter collective lift (+ 4fbefa6) (run $RUN_ID)" --notes "test-package artifact of run $RUN_ID, republished for download." \
+          gh release create "$TAG" -R "$GITHUB_REPOSITORY" --prerelease --target "$TARGET" \
+            --title "$TITLE" --notes "test-package artifact of run $RUN_ID, republished for download." \
             HellForge-Setup.exe SHA256SUMS
