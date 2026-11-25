@@ -57,14 +57,10 @@ public sealed partial class RegisteredItems
                 SayPaints(weapon, 0x3A57E1u, "it has a mastery package, whose cards are its paints");
                 continue;
             }
-            // an admitted copy's item is counted with the items already (Cost)
-            var cost = GamePaints.Count(p => !game.Ids.Contains(WeaponChild(p, weapon))) +
-                (Itemless(game, admitted, weapon) && admitted.All(i => i.MixId != weapon) ? 1 : 0);
+            var cost = PaintCost(game, admitted, weapon);
             if (cost > room - used || packageRoom < 1)
             {
-                lock (reported)
-                    if (reported.Add(weapon ^ 0x9A1E7u))
-                        Log($"weapon {weapon} gets no paints: the game keeps {keeps.Items} catalogue items and {keeps.Packages} packages, and none are left.");
+                SayPaints(weapon, 0x9A1E7u, $"the game keeps {keeps.Items} catalogue items and {keeps.Packages} packages, and none are left");
                 continue;
             }
             used += cost;
@@ -76,6 +72,10 @@ public sealed partial class RegisteredItems
                 Log($"paints: {listed.Count} weapon(s) listed with a paint package, {candidates.Count - listed.Count} admitted copies of them, {painted.Count} served.");
         return painted;
     }
+
+    // The catalogue items a weapon's paints add; an admitted copy's own item is counted with the items already (Cost).
+    static int PaintCost(Vanilla game, IReadOnlyList<Item> admitted, uint weapon) =>
+        GamePaints.Count(p => !game.Ids.Contains(WeaponChild(p, weapon))) + (Itemless(game, admitted, weapon) && admitted.All(i => i.MixId != weapon) ? 1 : 0);
 
     // A weapon that gets no paints or no part of them, said once for each reason (salt).
     void SayPaints(uint weapon, uint salt, string why)
@@ -127,22 +127,28 @@ public sealed partial class RegisteredItems
         List<(int After, JsonObject Entry)> inserts = [];
         foreach (var weapon in weapons)
             if (PaintPlace(weapon, runEnd, supports) is { } at)
-                foreach (var paint in GamePaints)
-                {
-                    var mixId = WeaponChild(paint, weapon);
-                    if (!index.ChildOfItem.TryGetValue(paint, out var template))
-                    {
-                        SayPaints(weapon, 0x7E4A1u ^ paint, $"the catalogue has no child of paint {paint} to copy");
-                        continue;
-                    }
-                    if (!known.Add(mixId)) continue;
-                    var child = template.DeepClone().AsObject();
-                    child["mixId"] = mixId;
-                    child["parentId"] = at.Parent;
-                    inserts.Add((at.After, child));
-                }
+                inserts.AddRange(PaintChildren(weapon, at.Parent, index, known).Select(child => (at.After, child)));
         foreach (var group in inserts.Select((x, n) => (x.After, x.Entry, n)).GroupBy(x => x.After).OrderByDescending(g => g.Key))
             foreach (var x in group.OrderByDescending(x => x.n)) catalogue.Insert(group.Key + 1, x.Entry);
+    }
+
+    // A weapon's paint children, copies of the template weapon's, under parent; a paint without a template is said.
+    IEnumerable<JsonObject> PaintChildren(uint weapon, uint parent, CatalogueIndex index, HashSet<uint?> known)
+    {
+        foreach (var paint in GamePaints)
+        {
+            if (!index.ChildOfItem.TryGetValue(paint, out var template))
+            {
+                SayPaints(weapon, 0x7E4A1u ^ paint, $"the catalogue has no child of paint {paint} to copy");
+                continue;
+            }
+            var mixId = WeaponChild(paint, weapon);
+            if (!known.Add(mixId)) continue;
+            var child = template.DeepClone().AsObject();
+            child["mixId"] = mixId;
+            child["parentId"] = parent;
+            yield return child;
+        }
     }
 
     // The items of the painted weapons that have none (Itemless), at the end: each starts a run of its own.
