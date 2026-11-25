@@ -747,6 +747,14 @@ Test("Launch options are read as Steam takes them, and never set what a session 
     Check(GameLaunchOptions.Warnings(["--toaster_mode_x"]).Count == 0, "Only the switch itself warns.");
 });
 
+Test("The app's mod SDK version is the one hellforge_mod.h defines (a mod built for it is not refused)", () =>
+{
+    var folder = AppContext.BaseDirectory;
+    while (!File.Exists(Path.Combine(folder, "HellForge.slnx"))) folder = Path.GetDirectoryName(folder.TrimEnd(Path.DirectorySeparatorChar))!;
+    var header = File.ReadAllText(Path.Combine(folder, "native", "mod-sdk", "hellforge_mod.h"));
+    var match = System.Text.RegularExpressions.Regex.Match(header, @"#define\s+HF_MOD_SDK_VERSION\s+(\d+)");
+    Check(match.Success && int.Parse(match.Groups[1].Value) == ModCatalog.SdkVersion, $"Mods.cs SdkVersion {ModCatalog.SdkVersion} vs header {match.Groups[1].Value}.");
+});
 ModTests.Register(Test, Check, Reject, root);
 StatsTests.Register(Test, Check, Reject, root);
 DataBuilderTests.Register(Test, Check, Reject, root);
