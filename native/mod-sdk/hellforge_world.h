@@ -128,6 +128,19 @@ typedef struct HfJointPose
     float reserved;    /* 0 */
 } HfJointPose;
 
+/* view_pose (SDK 48): where this machine's camera is and where it looks, as the last frame rendered it. World space,
+ * metres, Z up. To put a world point p on an overlay screen (1080 units high, width wide): d = p - position; depth =
+ * d . forward; x = width / 2 + (d . right) / depth * k, y = 540 - (d . up) / depth * k, with k = 540 / tan(fov / 2). */
+typedef struct HfView
+{
+    uint32_t size;        /* sizeof(HfView) */
+    float right[3];       /* the camera's right, unit length */
+    float forward[3];     /* where it looks, unit length */
+    float up[3];          /* its up, unit length */
+    float position[3];    /* where it is */
+    float fov;            /* its vertical field of view, radians (the game's default view: 0.96) */
+} HfView;
+
 /* joint_pose's spaces */
 #define HF_POSE_WORLD 0u /* a 4x4 row-major matrix: the axis rows (with scale), then the position at [12..14] */
 #define HF_POSE_LOCAL 1u /* an HfJointPose */
@@ -185,6 +198,10 @@ typedef struct HfHoming
 #define HF_MENU_TABS_SPACE_STATION 5u /* the Democracy Space Station (3 vanilla labels) */
 #define HF_MENU_TABS_CUSTOMIZE 6u     /* the armory's customize screen of one weapon (2 vanilla labels) */
 #define HF_MENU_TABS_INFO_TERMINAL 7u /* the ship's Info Terminal (1 vanilla label) */
+/* SDK 45: the Armory's SKINS page. Its first tab adds a SKINS label to the categories; picking that opens a page whose
+ * bar holds the mods' SKINS tabs alone (8 at most), over the weapons page's grid. add_armory_tab takes it too. */
+#define HF_ARMORY_TABS_SKINS 8u
+#define HF_MENU_TABS_ARMORY_SKINS HF_ARMORY_TABS_SKINS
 typedef void (*HfArmoryTabCallback)(HfMod* mod, uint32_t tab, int selected, void* user);
 
 /* A new ability (SDK 7, add_ability), moved here from hellforge_mod.h: a vanilla ability HellForge holds hold_seconds

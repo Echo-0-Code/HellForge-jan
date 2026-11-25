@@ -1,4 +1,4 @@
-/* HellForge mod SDK 35: movers, units HellForge moves itself (docs/modding/movers.md). Included by hellforge_mod.h.
+/* HellForge mod SDK 35 and 47: movers, units HellForge moves itself (docs/modding/movers.md). Included by hellforge_mod.h.
  * add_mover gives every unit of an entity a way to move: walk, drive, hover or fly, a top speed, a turning style, the steps
  * it takes. HellForge moves it from two inputs, throttle and steer: a mod gives them with mover_input, ai_drive hands
  * them to the custom AI (hellforge_ai.h), and a hover vehicle's seated driver gives them too. Walkers and drivers are
@@ -108,7 +108,7 @@ typedef struct HfMoverDef
     float tilt_limit;     /* degrees it pitches and rolls with the ground under it, at most; 0 stays upright (a hover level) */
     float boost_speed;    /* top speed while boosting, m/s (default 0: no boost) */
     float boost_time;     /* seconds a full boost lasts; it refills in twice that (default 3) */
-    float strafe_speed;   /* walk or hover: top speed sideways at full strafe, m/s (default half of speed, hover 5) */
+    float strafe_speed;   /* walk or hover: top speed sideways at full strafe, m/s (default half of speed, at most 40; hover 5) */
     HfMoverSounds sounds;
     HfMoverHover hover;   /* HF_MOVE_HOVER, _HELI and _PLANE */
     uint32_t reserved[4]; /* 0; keeps this larger than SDK 37's layout, so that one is refused */
@@ -117,9 +117,85 @@ typedef struct HfMoverDef
     float bank_max;       /* HF_MOVE_PLANE: its steepest bank at full steer, degrees; the bank sets its turn (default 40) */
     float dive_depth;     /* HF_MOVE_SUB: the deepest it dives, metres under the surface, at hover.climb_rate (default 3) */
     uint32_t rail;        /* HF_MOVE_RAIL: the rail add_rail gave, or 0: the nearest rail within 20 m of where it starts */
+    /* SDK 47 (an SDK 43 size moves with the fields above) */
+    float thrust_max;     /* HF_MOVE_HELI: its rotor's most thrust over its weight, 1.05 .. 3; its ceiling, where thinning
+                           * air leaves only its weight, is hover.height_max (default 1.3, a utility helicopter's) */
+    /* SDK 48 (an SDK 47 size moves with the fields above) */
+    uint32_t mouse_steer; /* 1: a seated driver flies it with the mouse: it turns and climbs toward where the camera looks
+                           * (a plane banks, at most bank_max), A/D steer it by hand while held, and W/S move a throttle
+                           * that stays where it is left. 0: the keys drive it (default) */
 } HfMoverDef;
 
 #define HF_MOVER_DEF_SIZE_39 ((uint32_t)offsetof(HfMoverDef, stall_speed))
+#define HF_MOVER_DEF_SIZE_43 ((uint32_t)offsetof(HfMoverDef, thrust_max))
+#define HF_MOVER_DEF_SIZE_47 ((uint32_t)offsetof(HfMoverDef, mouse_steer))
+
+/* SDK 47: fixed forward weapons a mover's driver fires (add_fixed_gun): gun pods and rocket pods locked to the nose,
+ * aimed by pointing the vehicle. They fire on the host, while this machine's Helldiver sits in the driver's seat
+ * (within 1.2 m of `seat`) and holds the trigger; each round is spawn_projectile's, credited to that Helldiver. */
+#define HF_TRIGGER_FIRE 1u /* the fire button (left mouse) */
+#define HF_TRIGGER_ALT 2u  /* the aim button (right mouse) */
+
+typedef struct HfFixedGunDef
+{
+    uint32_t size;        /* sizeof(HfFixedGunDef) */
+    uint32_t trigger;     /* HF_TRIGGER_FIRE (default) or HF_TRIGGER_ALT */
+    uint64_t entity;      /* the mover entity carrying it (add_mover it first) */
+    uint32_t projectile;  /* what it fires: a vanilla HF_PROJECTILE_ or add_projectile's type */
+    uint32_t rounds;      /* rounds it holds when full (default 100); fixed_gun_refill tops it up */
+    float fire_rate;      /* rounds a minute (default 600) */
+    uint32_t burst;       /* rounds one press fires (0: as long as the trigger is held) */
+    float muzzle[3];      /* where a round starts, metres in the mover's frame (x right, y forward, z up) */
+    float seat[3];        /* the driver's seat in the mover's frame: the trigger counts only for a Helldiver within 1.2 m */
+    float spread;         /* degrees: the cone its rounds scatter in (0: none) */
+    float converge;       /* metres ahead where its line crosses the mover's centre line (0: parallel to the nose) */
+    float recoil;         /* newtons each shot pushes back at the muzzle, held for 60 / fire_rate s (0: none) */
+} HfFixedGunDef;
+
+/* fixed_gun_state's answer: one gun on one unit */
+typedef struct HfFixedGunState
+{
+    uint32_t size;        /* sizeof(HfFixedGunState) */
+    uint32_t rounds;      /* rounds left */
+    uint32_t capacity;    /* rounds when full */
+    uint32_t firing;      /* 1 while it fires */
+    uint32_t seated;      /* 1 while this machine's Helldiver sits in its driver's seat */
+} HfFixedGunState;
+
+/* SDK 47: damage zones on a mover's units (add_damage_zone): spheres in its frame that take the hits landing in them
+ * (HF_ON_DAMAGE_PRE's position, before armour) and break, with an effect. Host. */
+#define HF_ZONE_PLAIN 0u   /* breaks with no effect (armour that soaks hits) */
+#define HF_ZONE_ENGINE 1u  /* broken: a flier loses power and comes down at `sink` (a helicopter autorotates) */
+#define HF_ZONE_CONTROL 2u /* broken: it spins at `spin` and comes down at `sink` (a helicopter's tail rotor) */
+
+typedef struct HfDamageZoneDef
+{
+    uint32_t size;        /* sizeof(HfDamageZoneDef) */
+    uint32_t effect;      /* HF_ZONE_PLAIN, _ENGINE or _CONTROL */
+    uint64_t entity;      /* the mover entity (add_mover it first) */
+    float center[3];      /* metres in the mover's frame (x right, y forward, z up) */
+    float radius;         /* hits within this many metres of center land in it (a rotor: of its disc, 0.2 m thick; default 0.5) */
+    int32_t health;       /* damage it takes before it breaks, before armour (default 500) */
+    float scale;          /* x the damage the vehicle itself takes from a hit in it (default 1; negative: none) */
+    float sink;           /* _ENGINE, _CONTROL: m/s it comes down at once broken (default 5) */
+    float spin;           /* _CONTROL: degrees a second it spins once broken, positive left (default 60) */
+    /* SDK 47, rotor strikes: the zone is a disc swept against the scenery every 0.1 s */
+    float strike_damage;  /* share of its health a strike takes, 0 .. 1, once a contact and each second it lasts (0: no
+                           * sweep; Jan's open rotors 0.6). The ground and static objects (trees) strike */
+    float disc[3];        /* the disc's axis in the mover's frame; its radius is `radius` (0, 0, 0: straight up) */
+    float strike_speed;   /* a unit it touches (a building): moving toward it slower than this, m/s, it is pushed back
+                           * unharmed; faster, the zone breaks at once (0: units strike like trees) */
+    uint32_t strike_explosion; /* the explosion such a fast hit sets off where it touches, to wreck the building (0: none) */
+} HfDamageZoneDef;
+
+/* zone_state's answer: one zone on one unit */
+typedef struct HfZoneState
+{
+    uint32_t size;        /* sizeof(HfZoneState) */
+    int32_t health;       /* damage left before it breaks (0: broken) */
+    int32_t max_health;   /* its health whole */
+    uint32_t broken;      /* 1 once broken, until repair_zones */
+} HfZoneState;
 
 
 /* add_rail (SDK 43): a line rail movers ride, its points at track height in world metres. HellForge copies them. */

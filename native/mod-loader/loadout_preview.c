@@ -30,6 +30,8 @@ static const uint8_t kLoadoutPreviewFallback[] = {
     0x48,0x8b,0x44,0x24,0x78,0x48,0x8d,0x4d,0x90,0x44,0x8b,0x44,0x24,0x60,0x45,0x8b,0xcb,0xb2,0x01,
     0x48,0x89,0x44,0x24,0x20,0xe8,0xf8,0xf5,0xff,0xff};
 
+static void PreviewFitThumbBox(void* box); /* preview_fit.c: a thumbnail's set_preview_fit */
+
 static void* LoadoutPreviewDetour(void* out, uint8_t alternate, uint32_t slot, uint32_t mode, void* context)
 {
     for (LoadoutPreviewCall* call = g_loadoutPreviewCall; call; call = call->previous)
@@ -44,6 +46,7 @@ static void* LoadoutPreviewDetour(void* out, uint8_t alternate, uint32_t slot, u
     g_loadoutPreviewCall = &call;
     void* result = g_loadoutPreviewOriginal(out, alternate, slot, mode, context);
     g_loadoutPreviewCall = call.previous;
+    if (!call.previous) PreviewFitThumbBox(result); /* the outer query only: it calls itself for a missing part */
     return result;
 }
 
@@ -72,3 +75,5 @@ static void InstallLoadoutPreview(void)
         (void**)&g_loadoutPreviewOriginal) ? -1 : 1;
     Note(g_loadoutPreviewState == 1 ? "loadout preview: recursive fallback guarded" : "loadout preview: could not hook recursive fallback");
 }
+
+#include "preview_fit.c" /* SDK 46: the Armory preview's size */

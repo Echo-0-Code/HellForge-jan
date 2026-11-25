@@ -18,6 +18,7 @@ includes.
 - [Projectiles near a point](#projectiles-near-a-point)
 - [Friend or foe](#friend-or-foe)
 - [Posing joints](#posing-joints)
+- [The camera](#the-camera)
 - [Limits](#limits)
 
 ## Before you call
@@ -226,6 +227,25 @@ hf->on_render(mod, OnRender, NULL); /* once, from hellforge_mod_init */
 - Animated joints are set again by the game each frame, so pose them every frame.
 - `joint_pose` reads a joint's world pose (a 4x4 row-major matrix, position at `[12..14]`) or its local pose.
 - Node ids are `hf_node_id(mod, "<name>")`; 0 is the unit's root.
+
+## The camera
+
+SDK 48's `view_pose` reads where this machine's camera is and looks, as the last frame rendered it. Use it for a HUD
+marker over a point in the world:
+
+```c
+HfView view = {sizeof view};
+if (!hf->view_pose(mod, &view)) return;
+const float d[3] = {p[0] - view.position[0], p[1] - view.position[1], p[2] - view.position[2]};
+const float depth = d[0] * view.forward[0] + d[1] * view.forward[1] + d[2] * view.forward[2];
+const float k = 540.0f / tanf((view.fov > 0 ? view.fov : 0.96f) / 2);
+const float x = draw->width / 2 + (d[0] * view.right[0] + d[1] * view.right[1] + d[2] * view.right[2]) / depth * k;
+const float y = 540.0f - (d[0] * view.up[0] + d[1] * view.up[1] + d[2] * view.up[2]) / depth * k;
+```
+
+- Any thread, such as an overlay screen's draw callback. 0 before the first frame, or on another game build.
+- The vectors are unit length, in world space with Z up.
+- `fov` is 0 until HellForge reads it; 0.96 rad is the game's default view.
 
 ## Limits
 

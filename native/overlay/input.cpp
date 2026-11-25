@@ -35,6 +35,7 @@ struct Pending
     bool moved;
     uint32_t down, pressed, released;
     float wheel;
+    float boxWheel; /* turns over a click box, for the screen that owns it */
     uint32_t keys[16];
     uint32_t keyCount;
 };
@@ -56,6 +57,7 @@ volatile LONG g_clickOwner;     /* the screen whose box took the last press */
 volatile LONG g_heldByMessage;  /* HF_MOUSE_... pressed in a box, as window messages, until released */
 volatile LONG g_heldByRaw;      /* the same, as raw input */
 volatile LONG g_sawButtonMessage; /* the game's window gets WM_LBUTTONDOWN and the like (not raw input only) */
+volatile LONG g_sawWheelMessage;  /* the same for WM_MOUSEWHEEL */
 
 /* The screen with a click box under this point (client pixels), 0 none. Any thread. */
 int BoxAt(float x, float y)
@@ -145,9 +147,28 @@ bool Claim(uint32_t button, bool down, POINT at, volatile LONG* held, bool note)
     return true;
 }
 
-/* A button's window message with no modal screen open: true when a click box takes it. */
-bool TakeClick(UINT message, LPARAM l)
+/* The wheel over a click box: its screen gets it, as it gets a press there, and the game does not. */
+bool TakeWheel(POINT at, float turns, bool note)
 {
+    int id = BoxAt((float)at.x, (float)at.y);
+    if (id == 0) return false;
+    if (!note) return true;
+    TakeOwner(id);
+    AcquireSRWLockExclusive(&g_pendingLock);
+    g_pending.boxWheel += turns;
+    ReleaseSRWLockExclusive(&g_pendingLock);
+    return true;
+}
+
+/* A button's window message with no modal screen open: true when a click box takes it. */
+bool TakeClick(UINT message, WPARAM w, LPARAM l)
+{
+    if (message == WM_MOUSEWHEEL)
+    {
+        InterlockedExchange(&g_sawWheelMessage, 1);
+        POINT at = {(short)LOWORD(l), (short)HIWORD(l)}; /* screen coordinates, unlike the buttons' */
+        return g_window != NULL && ScreenToClient(g_window, &at) && TakeWheel(at, (float)GET_WHEEL_DELTA_WPARAM(w) / WHEEL_DELTA, true);
+    }
     bool down = false;
     uint32_t button = ButtonOf(message, &down);
     if (button == 0) return false;
@@ -167,9 +188,12 @@ void FilterRaw(RAWINPUT* input)
         {HF_MOUSE_RIGHT, RI_MOUSE_RIGHT_BUTTON_DOWN, RI_MOUSE_RIGHT_BUTTON_UP},
         {HF_MOUSE_MIDDLE, RI_MOUSE_MIDDLE_BUTTON_DOWN, RI_MOUSE_MIDDLE_BUTTON_UP},
     };
-    if (!(flags & 0x3F)) return;
+    if (!(flags & (0x3F | RI_MOUSE_WHEEL))) return;
     POINT at;
     if (!CursorInClient(&at)) return;
+    if ((flags & RI_MOUSE_WHEEL) &&
+        TakeWheel(at, (float)(SHORT)input->data.mouse.usButtonData / WHEEL_DELTA, !g_sawWheelMessage))
+        flags &= (USHORT)~RI_MOUSE_WHEEL, input->data.mouse.usButtonData = 0;
     bool note = !g_sawButtonMessage;
     for (const auto& k : kinds)
     {
@@ -226,7 +250,7 @@ LRESULT CALLBACK HostProc(HWND window, UINT message, WPARAM w, LPARAM l)
     if (TakeKey(message, w, l)) return 0;
     if (PointWithGameCursor(message, l)) return TRUE;
     EndImGuiPress(window, message, w, l);
-    if (!g_captured && TakeClick(message, l)) return 0;
+    if (!g_captured && TakeClick(message, w, l)) return 0;
     if (g_captured)
     {
         bool down = false;
@@ -388,6 +412,7 @@ void TakeInput(HfInput* out, bool captured, bool clicksOnly, float width, float 
     {
         g_pending.pressed = g_pending.released = 0;
         g_pending.wheel = 0;
+        if (clicksOnly) g_pending.boxWheel = 0;
         g_pending.keyCount = 0;
     }
     ReleaseSRWLockExclusive(&g_pendingLock);
@@ -399,7 +424,7 @@ void TakeInput(HfInput* out, bool captured, bool clicksOnly, float width, float 
     out->x = p.x * sx * unitsPerPixel;
     out->y = p.y * sy * unitsPerPixel;
     if (!captured) return;
-    if (clicksOnly) { p.wheel = 0; p.keyCount = 0; }
+    if (clicksOnly) { p.wheel = p.boxWheel; p.keyCount = 0; }
     out->wheel = p.wheel;
     out->down = p.down;
     out->pressed = p.pressed;

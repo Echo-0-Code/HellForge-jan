@@ -642,7 +642,7 @@ typedef struct HfStratagemSettings
     uint32_t code_length;                        /* +0x48 how many directions [mission?] */
     uint8_t _unknown_4C[4];
     uint32_t uses;                               /* +0x50 uses per mission (0xFFFFFFFF unlimited) [mission?] */
-    float call_in_time;                          /* +0x54 seconds from the throw to the arrival (unverified) [now] */
+    float call_in_time;                          /* +0x54 seconds from the throw to the arrival, before the delivery's own travel time [now] */
     float free_spot_radius;                      /* +0x58 radius searched for a free landing spot (unverified) [mission?] */
     uint8_t _unknown_5C[4];
     float linger;                                /* +0x60 seconds it lingers after activating (unverified) [mission?] */

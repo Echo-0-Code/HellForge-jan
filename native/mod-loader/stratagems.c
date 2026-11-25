@@ -25,7 +25,7 @@
  * Row members HellForge sets (HD2Runtime stratagem research): +0 type, +4 stable id (the catalogue's itemId of the
  * stratagem's kind-10 item and the saved loadout's identity), +0x28 / +0x2C / +0x30 name, cased name and description
  * text ids, +0x40 / +0x48 pointer to the input's u32 directions (1 up, 2 right, 3 down, 4 left) and their count, +0x50
- * uses (0xFFFFFFFF unlimited), +0x68 cooldown (f32 seconds), +0xB0 icon resource name, and when the mod names them
+ * uses (0xFFFFFFFF unlimited), +0x54 call-in and +0x68 cooldown (f32 seconds), +0xB0 icon resource name, and when the mod names them
  * +0x98 / +0xA0 the payload entities and their count (u64 resources; a kind-3 Pelican drop spawns payload[1] carrying
  * payload[0], 0x6AD12B), +0xA8 the mission package, +0xF8 a loadout item whose
  * package the mission loads too (the MG-206 stratagem names the MG-206's, 0x1FC9CA61), +0xB8 the loadout section and
@@ -141,6 +141,7 @@ typedef struct Stratagem
     uint64_t icon;             /* 0: the base's */
     float cooldown;
     int32_t uses;
+    float callIn;              /* 0: the base's */
     uint64_t payload[STR_MAX_PAYLOAD];
     uint32_t payloadCount;     /* 0: the base's */
     uint64_t package;          /* 0: the base's; ~0: none */
@@ -236,6 +237,9 @@ static int StratagemUse(HfMod* mod, const char* name, const HfStratagem* def, St
     if (def->uses < -1) { ApiLog(mod, "add_stratagem(%s): uses must be -1 (unlimited), 0 (the base's) or a count", name); return 1; }
     s->cooldown = def->cooldown;
     s->uses = def->uses;
+    if (def->size < offsetof(HfStratagem, call_in) + sizeof def->call_in) return 0;
+    if (!(def->call_in >= 0.0f && def->call_in <= 600.0f)) { ApiLog(mod, "add_stratagem(%s): call_in must be 0 to 600 seconds", name); return 1; }
+    s->callIn = def->call_in;
     return 0;
 }
 
@@ -591,6 +595,14 @@ static uint8_t* StratagemBlock(uintptr_t game, const char** why)
 
 /* A new stratagem's row (its base's, from the list in table, with what the mod gave it), the row's pointers into home,
  * where the entry lives for the session (s itself, or for a live change the entry s stands in for). NULL, or why not. */
+/* Its uses, call-in and cooldown; 0 keeps the base row's. */
+static void StratagemTimes(Stratagem* s)
+{
+    if (s->uses != 0) { uint32_t uses = s->uses < 0 ? 0xFFFFFFFFu : (uint32_t)s->uses; memcpy(s->row + 0x50, &uses, 4); }
+    if (s->callIn > 0.0f) memcpy(s->row + 0x54, &s->callIn, 4);
+    if (s->cooldown > 0.0f) memcpy(s->row + 0x68, &s->cooldown, 4);
+}
+
 static const char* StratagemRow(Stratagem* s, Stratagem* home, const uint8_t* table)
 {
     uint64_t base;
@@ -607,8 +619,7 @@ static const char* StratagemRow(Stratagem* s, Stratagem* home, const uint8_t* ta
         memcpy(s->row + 0x40, &code, 8);
         memcpy(s->row + 0x48, &s->codeLength, 4);
     }
-    if (s->uses != 0) { uint32_t uses = s->uses < 0 ? 0xFFFFFFFFu : (uint32_t)s->uses; memcpy(s->row + 0x50, &uses, 4); }
-    if (s->cooldown > 0.0f) memcpy(s->row + 0x68, &s->cooldown, 4);
+    StratagemTimes(s);
     if (s->icon != 0) memcpy(s->row + 0xB0, &s->icon, 8);
     if (s->payloadCount != 0)
     {

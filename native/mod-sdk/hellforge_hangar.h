@@ -8,7 +8,7 @@
 
 #include <stdint.h>
 
-#define HF_HANGAR_CATEGORIES 1 /* add_hangar_category exists (another branch may also call itself SDK 41) */
+/* Retired: add_hangar_category and set_hangar_equipped refuse (HF_HANGAR_CATEGORIES is no longer defined). */
 
 typedef struct HfMod HfMod;
 

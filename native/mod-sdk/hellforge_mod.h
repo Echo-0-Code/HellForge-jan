@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 44
+#define HF_MOD_SDK_VERSION 49
 #define HF_WEAPON_PAINTS 1 /* HfWeapon.paints exists */
 #define HF_MOD_EXPORT __declspec(dllexport)
 
@@ -436,6 +436,9 @@ typedef struct HfStratagem
      * default) follow the stratagem types: the mods' set-up order (by mod id), then add_stratagem call order. Ignored in
      * vanilla sections. */
     int32_t selection_order;
+    /* SDK 49: seconds from the throw to the arrival (row +0x54), 0 to 600; 0: the base's. The card and the call add the
+     * delivery's own travel time where the game works one out. The card's name prefix is the payload's designation. */
+    float call_in;
 } HfStratagem;
 
 /* HfStratagem.category, beam and flags: HF_CATEGORY_..., HF_BEAM_... and HF_TRAIT_... (hellforge_content.h). */
@@ -1187,6 +1190,8 @@ typedef struct HfEditDef
 
 #include "hellforge_generation.h" /* HfGenerationCapacity: room in the map generator's arrays (generation_capacity) */
 
+#include "hellforge_preview.h" /* SDK 46: HfPreviewFit, an item's size and place in the Armory's 3D preview */
+
 typedef struct HfApi
 {
     uint32_t version; /* HF_MOD_SDK_VERSION of the loader; functions are only ever added at the end. */
@@ -1678,7 +1683,8 @@ typedef struct HfApi
     /* Adds label after the vanilla labels of one of the Armory's tab lists (HF_ARMORY_TABS_...); a click or Q/E reaches
      * it as the game's own. The game's select is not run for it: the page keeps what it showed, for the mod to change.
      * on_select runs on the game thread, selected 1 when picked, 0 when another tab is or the Armory closes. Any
-     * thread. Its handle (1 and up), or 0 refused (the mod's log says why: no room on the bar, or another game build). */
+     * thread. Its handle (1 and up), or 0 refused (the mod's log says why: no room on the bar, or another game build).
+     * SDK 45: HF_ARMORY_TABS_SKINS puts it on the SKINS page (an older HellForge refuses it: fall back to WEAPONS). */
     uint32_t (*add_armory_tab)(HfMod* mod, uint32_t list, const char* label, HfArmoryTabCallback on_select, void* user);
 
     /* ---- SDK 27: a mod's tab on any of the game's tab bars (hellforge_world.h, docs/modding/ui.md; check hf->size) - */
@@ -1782,12 +1788,25 @@ typedef struct HfApi
     uint32_t (*list_state)(HfMod* mod, uint32_t list, HfListState* state); /* its last build. 1 filled, 0 none seen */
     /* ---- SDK 40: a band at the top of a list (docs/modding/lists.md; check hf->size) -------------------------------- */
     int (*set_list_band)(HfMod* mod, uint32_t list, float height); /* room (0 .. 200 units) above its heading. 0 done */
-    uint32_t (*add_hangar_category)(HfMod* mod, const HfHangarCategory* category); /* SDK 41 (hellforge_hangar.h): handle or 0 */
+    uint32_t (*add_hangar_category)(HfMod* mod, const HfHangarCategory* category); /* SDK 41, retired: always 0 */
     int (*set_hangar_equipped)(HfMod* mod, uint32_t category, uint32_t card); /* shown as equipped; 0 done, 1 refused */
     uint32_t (*add_loadout_box)(HfMod* mod, const HfLoadoutBoxDef* def); /* SDK 42 (hellforge_loadout.h): handle or 0 */
     int (*set_loadout_layout)(HfMod* mod, const HfLoadoutLayout* layout); /* the WEAPONRY boxes' sizes and rows. 0 done */
     /* ---- SDK 43: rails for HF_MOVE_RAIL movers (hellforge_move.h, docs/modding/movers.md; check hf->size) ---------- */
     uint32_t (*add_rail)(HfMod* mod, const HfRailDef* def); /* any time: the rail's id, or 0 refused (the log says why) */
+    /* ---- SDK 46: an item's size in the Armory's 3D preview (docs/modding/ui.md; check hf->size) ----------------- */
+    /* weapon: a loadout id (add_weapon's or a vanilla one); fit NULL or scale 0: the game's fit. Any time. 0 done, 1 refused */
+    int (*set_preview_fit)(HfMod* mod, uint32_t weapon, const HfPreviewFit* fit);
+    /* ---- SDK 47: fliers' fixed weapons and damage zones (hellforge_move.h, docs/modding/movers.md; check hf->size) -- */
+    /* add_fixed_gun, add_damage_zone: any time, the id (1 and up) or 0 refused (the log says why). The states: one gun or
+     * zone on one unit (an entity instance), 1 filled, 0 none; any thread. fixed_gun_refill adds rounds (0: full) to a
+     * gun (0: every gun) and repair_zones makes a zone (0: all) whole: host, 0 done, 1 not a mover's unit. */
+    uint32_t (*add_fixed_gun)(HfMod* mod, const HfFixedGunDef* def); uint32_t (*fixed_gun_state)(HfMod* mod, uint32_t entity, uint32_t gun, HfFixedGunState* state);
+    int (*fixed_gun_refill)(HfMod* mod, uint32_t entity, uint32_t gun, uint32_t rounds); uint32_t (*add_damage_zone)(HfMod* mod, const HfDamageZoneDef* def);
+    /* SDK 48, last on the next line (check hf->size): view_pose, where this machine's camera is and looks as the last
+     * frame rendered it (HfView; docs/modding/world.md). Any thread, in a mission or on the ship. 1 read, 0 not (another
+     * build, or no frame yet). */
+    uint32_t (*zone_state)(HfMod* mod, uint32_t entity, uint32_t zone, HfZoneState* state); int (*repair_zones)(HfMod* mod, uint32_t entity, uint32_t zone); int (*view_pose)(HfMod* mod, HfView* out);
 } HfApi;
 
 /* SDK 6: an HfMod starts with the API, so these need only the mod. */

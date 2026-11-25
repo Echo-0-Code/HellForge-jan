@@ -56,6 +56,13 @@ the same widget inside a menu screen, and each screen reacts to a tab change in 
   label is the MODS tab (below). The Megapack's MODS tabs accept the game's 3 labels or a 4th MODS, and nothing else.
 - The Store (+0x80) labels its bar through another setter (0x17AAFA0) with 12-byte records. The Superstore (+0x90)
   writes the index straight into its page state. Neither is supported yet.
+- The SKINS page (SDK 45) is the weapons page with other labels and the title SKINS:
+  - The Armory screen's +0x30 is the category: 0 weapons, 1 armour, 2 cosmetics. The overview's select (0x1456EF0)
+    sets it.
+  - Byte +0x34 is 1 while a page shows. 0x1457350 opens a page with 1, and the grid input's back key closes it with 0.
+  - HellForge's SKINS label never reaches the game's select. The next input or frame selects category 0 and opens the
+    page, and the open's hook sets the SKINS labels and the title (0x17AB370).
+  - The SKINS list has no game ids, so it is known by its first label.
 
 ## The WEAPONRY overview's boxes
 

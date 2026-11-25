@@ -89,6 +89,7 @@ static class RegisteredItemsTests
         Paints(file, fixtures, check);
         SupportPaints(file, fixtures, check);
         CopiedSupportPaints(file, fixtures, check);
+        AddWeaponSupportPaints(file, fixtures, check);
 
         // A stratagem a code mod adds (stratagems.c): a copy of the Orbital Airburst Strike's item (stable id 1560416221)
         // and its child, the child's itemId being the new stable id. An entry whose base is not known yet waits.
@@ -329,6 +330,31 @@ static class RegisteredItemsTests
         var none = JsonSerializer.SerializeToElement(new { items = Array.Empty<object>() });
         var inventory = JsonNode.Parse(items.Apply("/Progression/inventory", none).GetRawText())!["items"]!.AsArray().Select(i => (uint)i!["mixId"]!).ToList();
         check(inventory.Contains(Drumfire) && paints.All(inventory.Contains), "The copied support weapon, its paints or its pattern are not held.");
+    }
+
+    // An add_weapon copy of a support weapon (Support Paint Bodies' Jump Pack card, a copy of the MG-43) inherits its base's
+    // paint package: the catalogue has no item to copy for it, as its base's entry is its stratagem's child, so it gets
+    // one of its own, its paints right after it, held with it. Without the vanilla base's owner a copy is still said.
+    static void AddWeaponSupportPaints(string file, Dictionary<string, JsonElement> fixtures, Action<bool, string> check)
+    {
+        const uint Stalwart = 14345846, Copy = 0x1F110FF2;
+        File.WriteAllText(file, $$"""{"format":1,"items":[{"mixId":{{Copy}},"copyOf":{{Stalwart}},"mod":"test","unit":"test/pack"}],"paintItems":[{{Stalwart}}]}""");
+        var log = new List<string>();
+        var items = new RegisteredItems(file) { Source = path => fixtures.TryGetValue(path, out var body) ? body : null, Log = log.Add };
+        var entries = ((JsonArray)JsonNode.Parse(items.Apply("/Progression/items", fixtures["/Progression/items"]).GetRawText())!).OfType<JsonObject>().ToList();
+        var at = entries.FindIndex(e => (uint?)e["mixId"] == Copy);
+        var paints = RegisteredItems.GamePaints.Select(p => RegisteredItems.WeaponChild(p, Copy)).ToList();
+        var run = at < 0 ? [] : entries.Skip(at + 1).Take(paints.Count).ToList();
+        check(at > 0 && entries[at]["parentId"] == null && (uint?)entries[at]["itemId"] == Copy &&
+            run.Select(e => (uint)e["mixId"]!).ToHashSet().SetEquals(paints) && run.All(e => (uint?)e["parentId"] == Copy),
+            "An add_weapon copy of a support weapon has no item of its own with its paints right after it.");
+        var packages = (JsonArray)JsonNode.Parse(items.Apply("/Progression/ProgressionPackages", fixtures["/Progression/ProgressionPackages"]).GetRawText())!;
+        check(packages.OfType<JsonObject>().Any(p => (uint?)p["id32"] == RegisteredItems.PaintPackage(Copy)),
+            "An add_weapon copy of a support weapon has no paint package.");
+        var none = JsonSerializer.SerializeToElement(new { items = Array.Empty<object>() });
+        var inventory = JsonNode.Parse(items.Apply("/Progression/inventory", none).GetRawText())!["items"]!.AsArray().Select(i => (uint)i!["mixId"]!).ToList();
+        check(inventory.Contains(Copy) && paints.All(inventory.Contains), "An add_weapon copy of a support weapon or its paints are not held.");
+        check(!log.Any(l => l.Contains($"weapon {Copy}")), $"An add_weapon copy of a support weapon is said to lose its paints: {string.Join(" | ", log)}");
     }
 
     // Patterns a mod adds (patterns.c): a weapon pattern, a copy of Arctic Camo (1561483157) offered on every weapon
