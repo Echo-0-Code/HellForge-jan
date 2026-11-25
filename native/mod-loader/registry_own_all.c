@@ -7,7 +7,7 @@
 static void PaintCopy(uint8_t* state, const uint8_t* records, uint8_t* index, const Weapon* w, uint64_t donor)
 {
     uint8_t* loadoutRow = FindRow(index, SlotsOf(REG_LOADOUT), 16, w->entity);
-    if (loadoutRow == NULL || g_paintCount >= REG_MAX_PAINTED) return;
+    if (loadoutRow == NULL) return;
     uint32_t r, id, type, package;
     memcpy(&r, loadoutRow + 8, 4);
     memcpy(&id, records + (size_t)r * REG_LOADOUT_STRIDE, 4);
@@ -18,6 +18,11 @@ static void PaintCopy(uint8_t* state, const uint8_t* records, uint8_t* index, co
     int painted = 0;
     for (int i = 0; i < g_paintCount && !painted; i++) painted = package == WeaponChild(REG_PAINT_PACKAGE_SEED, g_painted[i]);
     if (!painted) return;
+    if (g_paintCount >= REG_MAX_PAINTED)
+    {
+        ApiLog(w->mod, "%s: no paint package of its own: HellForge's paint table is full (%d)", w->name, REG_MAX_PAINTED);
+        return;
+    }
     package = WeaponChild(REG_PAINT_PACKAGE_SEED, w->id);
     memcpy(record + REG_MASTERY_PACKAGE_AT, &package, 4);
     g_painted[g_paintCount++] = w->id;

@@ -29,7 +29,8 @@ static uint8_t* OwnThrowablePaints(const WeaponLoad* L, const Weapon* w, uint64_
     uint8_t* slot = FindRow(table, slots, 16, w->entity) == NULL ? FreeRow(table, slots, 16, w->entity) : NULL;
     if (donorRow == NULL || slot == NULL || g_paintCount >= REG_MAX_PAINTED)
     {
-        ApiLog(w->mod, "%s: no paints (%s)", w->name, donorRow == NULL ? "no painted secondary to copy a record from" : "no room");
+        ApiLog(w->mod, "%s: no paints (%s)", w->name, donorRow == NULL ? "no painted secondary to copy a record from" :
+            slot == NULL ? "no free row in the customization table" : "HellForge's paint table is full");
         return NULL;
     }
     uint8_t entry[16];

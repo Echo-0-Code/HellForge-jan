@@ -10,7 +10,7 @@
 #define REG_PAINT_SLOT 3u
 #define REG_DEFAULT_PAINT 0x80FBE63Du      /* the Default paint, every primary's default in slot 3 */
 #define REG_PAINT_PACKAGE_SEED 0x5EC0DA27u /* RegisteredItems.Paints.cs PaintPackageSeed */
-#define REG_MAX_PAINTED 128
+#define REG_MAX_PAINTED 512 /* vanilla ones (70 in 25480438) and mods' painted copies; a full table is logged */
 
 static uint32_t g_painted[REG_MAX_PAINTED]; /* the loadout ids of the weapons given a paint package */
 static int g_paintCount;
@@ -55,6 +55,7 @@ static void PaintWeapons(uint8_t* state, const uint8_t* records, uint8_t* index,
         if (record != NULL && GivePaintSlot(record, id)) g_painted[g_paintCount++] = id;
     }
     Note("registry: %d vanilla secondaries and support weapons given the paint slot", g_paintCount);
+    if (g_paintCount >= REG_MAX_PAINTED) Note("ERROR: registry: the paint table is full (%d); later secondaries and support weapons have no paint slot", REG_MAX_PAINTED);
 }
 
 /* registered-items.json's "paintItems": the weapons given a paint package, for the backend to serve it. */

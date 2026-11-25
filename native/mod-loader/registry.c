@@ -481,7 +481,7 @@ static void WriteRegisteredItems(void)
     for (int size = 16384; size <= (1 << 24); size *= 2)
     {
         char* text = (char*)malloc((size_t)size);
-        if (text == NULL) return;
+        if (text == NULL) { Note("ERROR: registered-items.json not written: out of memory (%d bytes); the backend does not know the mods' items", size); return; }
         int n = RegisteredItemsText(text, size);
         if (n < size - REG_ITEM_ROOM)
         {
@@ -492,11 +492,13 @@ static void WriteRegisteredItems(void)
                 WriteFile(file, text, (DWORD)n, &written, NULL);
                 CloseHandle(file);
             }
+            else Note("ERROR: registered-items.json could not be created (%lu); the backend does not know the mods' items", GetLastError());
             free(text);
             return;
         }
         free(text);
     }
+    Note("ERROR: registered-items.json not written: its text is over 16 MiB; the backend does not know the mods' items");
 }
 
 /* The client's id of a weapon's child item (an attachment for that weapon), and its inverse (RegisteredItems.cs). */
