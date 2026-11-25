@@ -173,7 +173,10 @@
               <TextBlock x:Name="PlatformNote" Foreground="{StaticResource DangerBrush}" FontWeight="SemiBold" TextWrapping="Wrap" IsVisible="False" />
             </StackPanel>
             <StackPanel Grid.Column="1" Width="340" Spacing="10" VerticalAlignment="Bottom">
-              <TextBlock Text="PROFILE" Classes="h2" Margin="0" />
+              <!-- The Mods page's modpack chooser, here too (ModsPage.Modpacks.cs) -->
+              <TextBlock Text="MODPACK" Classes="h2" Margin="0" />
+              <ComboBox x:Name="PlayModpackChooser" HorizontalAlignment="Stretch" />
+              <TextBlock Text="PROFILE" Classes="h2" Margin="0,6,0,0" />
               <Grid ColumnDefinitions="*,8,Auto">
                 <ComboBox x:Name="ProfileCombo" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                   <ComboBox.ItemTemplate>
