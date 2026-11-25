@@ -245,6 +245,14 @@ SDK 47's `add_damage_zone` puts a sphere on a mover that takes the hits landing 
 - Zones see a hit before `HF_ON_DAMAGE_PRE` listeners, so listeners get the scaled amount.
 - `zone_state` reads a zone. `repair_zones` makes one, or all, whole again.
 
+A zone with `strike_damage` is a spinning disc, such as an open rotor, swept against the scenery every 0.1 s:
+
+- The ground and static objects such as trees strike it: each new contact, and each second one lasts, takes
+  `strike_damage` of its health.
+- A unit it touches, such as a building, is bumped when `strike_speed` is set. Slower than `strike_speed` toward it,
+  the mover is pushed back unharmed. Faster, the zone breaks and `strike_explosion` goes off where it touched.
+- `disc` is the disc's axis in the mover's frame, and `radius` its radius.
+
 ## Boats and submarines
 
 `HF_MOVE_BOAT` and `HF_MOVE_SUB` are vessels. A vessel is the game's physics body with seats, pushed like a hover.
