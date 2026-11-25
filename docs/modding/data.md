@@ -286,6 +286,7 @@ A xaml edit can instead put text into one of the game's views, such as a tab add
 ```
 
 - Each `after` is text of the view that occurs exactly once; `text` goes in right after it. Inserts apply in order.
+- Write line breaks as `\n`. Both `after` and `text` take the view's own line ending, which is CRLF in the game's views.
 - An anchor that is missing or repeated, as after a game update that changes the view, refuses the mod's data.
 - `insert` takes no `stages`, `bytes` or `gpu`, and it counts as an edit for mod sync, as other edits do.
 - Elements the game's code does not know do nothing on their own: the mod's code gives them their meaning.

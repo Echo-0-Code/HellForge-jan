@@ -20,6 +20,9 @@ typedef struct HfListRow
     uint32_t item;        /* the Armory row's item id; 0 for a stratagem */
     uint64_t entity;      /* the Armory row's entity; 0 for a stratagem */
     const char* name;     /* "AR-23 Liberator", "Orbital Precision Strike"; "" when it has none */
+    /* SDK 44: the heading the list shows the row under ("SHOTGUN", the picker's group); "" when it has none or the
+     * game's code is not the reviewed one. A filter "#text" matches it instead of the name. */
+    const char* category;
 } HfListRow;
 
 /* add_list_rule: 1 keeps the row, 0 hides it from this build. Runs on the game thread, inside the build; keep it quick

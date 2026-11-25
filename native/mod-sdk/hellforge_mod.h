@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 43
+#define HF_MOD_SDK_VERSION 44
 #define HF_WEAPON_PAINTS 1 /* HfWeapon.paints exists */
 #define HF_MOD_EXPORT __declspec(dllexport)
 
@@ -1775,7 +1775,8 @@ typedef struct HfApi
     int (*add_turret)(HfMod* mod, const HfTurretDef* def);
     /* ---- SDK 38: the game's item lists (hellforge_lists.h, docs/modding/lists.md; check hf->size) ------------------ */
     int (*add_list_rule)(HfMod* mod, uint32_t list, HfListRule rule, void* user); /* asked of each row per build. 0 done, 1 refused */
-    /* Text each listed row's name must contain, any case (NULL or "": none); the list rebuilds if up. Any thread. 0 done */
+    /* Text each listed row's name must contain, any case (NULL or "": none; SDK 44: "#text" its category); the list
+     * rebuilds if up. Any thread. 0 done */
     int (*set_list_filter)(HfMod* mod, uint32_t list, const char* text);
     int (*rebuild_list)(HfMod* mod, uint32_t list); /* built again on the next update. 0 asked, 1 refused or not up */
     uint32_t (*list_state)(HfMod* mod, uint32_t list, HfListState* state); /* its last build. 1 filled, 0 none seen */

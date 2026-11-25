@@ -108,7 +108,7 @@ public static partial class ModCatalog
         File.Exists(Path.Combine(folder, ManifestName)) ? Path.Combine(folder, ManifestName)
         : File.Exists(Path.Combine(folder, LegacyManifestName)) ? Path.Combine(folder, LegacyManifestName) : null;
     // The mod SDK version this HellForge provides (native/mod-sdk/hellforge_mod.h).
-    public const int SdkVersion = 43;
+    public const int SdkVersion = 44;
 
     [GeneratedRegex("^[A-Za-z0-9_.-]{1,64}\\.dll$")]
     private static partial Regex DllName();
@@ -1067,6 +1067,10 @@ public static partial class ModSettings
         public int? ForgeCreditChance { get; set; }
         // The Mods page's offer to bring over a kept version's mod list (KeptVersions.ImportSources) was taken or dismissed.
         public bool ImportDone { get; set; }
+        // The modpack whose switches Disabled holds (Modpacks.cs), or null for the default one. While a named pack is on,
+        // DefaultDisabled keeps the default pack's switches for the way back.
+        public string? Modpack { get; set; }
+        public HashSet<string>? DefaultDisabled { get; set; }
     }
 
     // HellForge's share of loot caches that hold Forge Credits: the game's 20 % for Super Credits, raised for a nicer
@@ -1090,6 +1094,7 @@ public static partial class ModSettings
             ReadOrder(root, state);
             ReadPacks(root, state);
             state.ImportDone = root.TryGetProperty("importDone", out var imported) && imported.ValueKind == JsonValueKind.True;
+            ReadModpack(root, state);
         }
         catch (Exception error) when (error is JsonException or IOException) { }
         return state;
@@ -1277,6 +1282,7 @@ public static partial class ModSettings
         if (state.StrangersWarned) root["strangersWarned"] = true;
         if (state.ForgeCreditChance is { } forgeCredits) root["forgeCreditChance"] = forgeCredits;
         if (state.ImportDone) root["importDone"] = true;
+        WriteModpack(modsFolder, root, state);
         var text = root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n";
         File.WriteAllText(path + ".tmp", text);
         LastWritten = text;

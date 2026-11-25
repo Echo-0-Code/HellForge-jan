@@ -152,7 +152,7 @@ public static partial class KeptVersions
 
     static List<string> ModEntries(InstallLayout install) => !Directory.Exists(install.Mods) ? [] :
         Directory.EnumerateFileSystemEntries(install.Mods).Select(Path.GetFileName).OfType<string>()
-            .Where(name => !name.StartsWith('.') && name != ModSettings.FileName && name != ModSettings.LegacyFileName).Order(StringComparer.Ordinal).ToList();
+            .Where(name => !name.StartsWith('.') && name != ModSettings.FileName && name != ModSettings.LegacyFileName && !ModSettings.IsModpackFile(name)).Order(StringComparer.Ordinal).ToList();
 
     // Each version has its own mod list (mods/hellforge-mods.json, swapped with its data); the mods themselves are shared.
     // A mod added to the mods folder since the version going in last ran is switched off in its list, so a mod turned on

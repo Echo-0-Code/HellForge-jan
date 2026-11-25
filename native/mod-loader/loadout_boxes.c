@@ -55,7 +55,7 @@ static const ActPin kLbPins[] = {
     {0, 0x178E020u, "40534883ec20488bd948b90000000004"}, {0, 0x585B80u, "83f90c771d4c8d0574a4a7ff8bc1418b"},
     {0, 0x18E1600u, "48895c241048896c2418565741574883"}, {0, 0x1327F50u, "48895c24084889742410574883ec2048"},
     {0, 0x1448AD0u, "40574883ec20f30f104144488bf90f2e"}, {0, 0x1943710u, "4c8b056996b30133c04c8bd1458b8880"},
-    {0, 0x13918E0u, "488bc455574881ecb800000041b8ffff"},
+    {0, 0x13918E0u, "488bc455574881ecb800000041b8ffff"}, {0, 0x1391890u, "4c8b05e9b40e028bc24869c818070000"},
     /* the screen update's box loop and the constructor's chain step, as traced */
     {0, 0x1456D40u, "0f28ce488bcfe885584800"}, {0, 0x18E1D15u, "48c78424a000000000006041"}};
 
@@ -82,6 +82,7 @@ typedef uint32_t (*LbActionFn)(uint64_t action);
 typedef void (*LbSoundFn)(uint64_t unused, uint32_t event);
 typedef void (*LbAlphaFn)(uintptr_t widget, float alpha);
 typedef void (*LbFreeFn)(uintptr_t renderer, uint32_t slot);
+typedef void (*LbSubmitFn)(uint64_t unused, uint32_t slot);
 
 typedef struct LbBox { HfMod* mod; HfLoadoutBoxItem itemFn; void* user; uint32_t tab, text, handle; } LbBox;
 
@@ -247,6 +248,8 @@ static void LbSetUp(uintptr_t o)
         LB_CALL(LbAlphaFn, 0x1448AD0u)(LbBoxAt(k), g_lbShown ? 1.0f : 0.0f);
         if (g_lbShown) LbSetUpBox(o, k, slot);
     }
+    /* The renderer draws a slot only once it is queued, as the game's set-up queues its own after placing. */
+    if (g_lbShown && slot != LB_NONE && g_lbCount) LB_CALL(LbSubmitFn, 0x1391890u)(0, slot);
     if (o == g_lbO) LbLayoutSizes(o, g_lbShown);
     if (!g_lbShown) g_lbSel = -1;
     else if (g_lbSel >= 0)

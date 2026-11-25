@@ -82,6 +82,12 @@ and for a mod folder Mod notices says which file changed, so you can reinstall t
 Every mod is a row with a switch, in two groups: GAMEPLAY mods first, then CLIENT ONLY ones. Client-only mods are
 cosmetic packs, Lua mods and mods that say they are not gameplay mods; friends need not have the same ones.
 
+- **Modpack** picks a named set of mod switches, for example one for testing and one for playing. New modpack...
+  makes one with every mod on and puts it in use; Delete removes the one in use and goes back to Default. `hellforge-mods.json`
+  holds the switches in use and Default's, and each other pack keeps its own in `hellforge-mods-<name>.json`. The order, pack
+  options and trust are shared by all modpacks. Modpacks switch only between sessions.
+- The search box above the list stays in view while it scrolls. It shows only the mods whose name, id, file or tags hold
+  every word typed. Ctrl+F jumps to it and Esc clears it. Drag ordering waits until the search is cleared.
 - Click a row's name for what the mod changes. Its ⋮ menu (or a right click) has Details, Move up and Move down, and
   Open folder. It also has Build now for a mod with sources, Prepare for sharing for your own folder mods, and Remove... for
   your own mods (not the bundled mods or Local Stats). Remove asks before it deletes the mod's files.

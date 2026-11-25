@@ -47,6 +47,7 @@ hf->add_list_rule(mod, HF_LIST_ARMORY_WEAPONS, MeleeOnly, NULL);
 | `item` | the row's item id | 0 |
 | `entity` | the row's entity | 0 |
 | `name` | "AR-23 Liberator" | "Orbital Precision Strike" |
+| `category` (SDK 44) | the section heading, such as "SHOTGUN" | the group heading, such as "Eagles" |
 
 Names are UTF-8 in the player's language, as the list shows them, and include mod texts.
 
@@ -63,6 +64,8 @@ hf->set_list_filter(mod, HF_LIST_STRATAGEMS, "");         /* the mod's filter ta
 - A filter that matches no row is set aside for that build: the list shows what the rules keep. An empty grid is not a
   state the game's pages handle. `list_state` tells you that nothing matched.
 - Clear your filter when the list closes or `opened` changes, or the next list is still narrowed.
+- SDK 44: a filter that starts with `#` matches the row's `category` instead of its name. `"#shotgun"` keeps the
+  SHOTGUN section. A category is `""` when the game's code is not the reviewed one; modloader.log says so.
 
 ## Read what the list shows
 

@@ -12,6 +12,8 @@ On `dev`, since 0.4.0-beta.
 
 ### Added
 
+- **Search lists by category (SDK 44).** A list filter that starts with `#` matches the heading a row is listed under,
+  and `HfListRow.category` gives that heading ([lists.md](docs/modding/lists.md#filter-by-name)).
 - **WEAPONRY boxes (SDK 42).** `add_loadout_box` adds a box of a mod's own after THROWABLE on ARMORY > WEAPONRY that
   opens its armory tab; `set_loadout_layout` sets the boxes' sizes and a second row ([ui.md](docs/modding/ui.md)).
 - **Vehicle Customization categories (SDK 41).** `add_hangar_category` shows a mod's cards in a 6th category of Ship

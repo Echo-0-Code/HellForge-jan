@@ -59,7 +59,7 @@ public sealed class ModsHold : IDisposable
         var name = Path.GetFileName(path);
         var bare = Bare(name);
         var folder = Path.GetDirectoryName(path)?.Replace('\\', '/') ?? "";
-        if (folder.Length == 0) return bare is ModSettings.FileName or ModSettings.LegacyFileName or ".hellforge-stats-editor.lock"; // ModSettings deletes the legacy file
+        if (folder.Length == 0) return bare is ModSettings.FileName or ModSettings.LegacyFileName or ".hellforge-stats-editor.lock" || ModSettings.IsModpackFile(bare); // ModSettings deletes the legacy file
         if (folder.Equals(ModCatalog.LocalStatsId, StringComparison.OrdinalIgnoreCase)) return bare == StatsData.FileName;
         if (folder.Equals(BundledMods.EditorFolder, StringComparison.OrdinalIgnoreCase))
             return bare is "editor-settings.json" or "mod-stats.json" or "host-stats.json" or "host-mod-stats.json" or "host-mounts.json";

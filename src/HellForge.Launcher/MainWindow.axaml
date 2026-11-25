@@ -353,7 +353,24 @@
               </StackPanel>
             </StackPanel>
           </Border>
-          <ScrollViewer>
+          <!-- Modpacks (ModsPage.Modpacks.cs): named sets of mod switches -->
+          <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,Auto,Auto,*" Margin="0,0,18,12">
+            <TextBlock Text="Modpack" Classes="muted" VerticalAlignment="Center" Margin="0,0,10,0" />
+            <ComboBox x:Name="ModpackChooser" Grid.Column="1" MinWidth="200" />
+            <Button x:Name="NewModpackButton" Grid.Column="2" Classes="ghost" Content="New modpack..." Margin="10,0,0,0" />
+            <Button x:Name="DeleteModpackButton" Grid.Column="3" Classes="ghost" Content="Delete" Margin="10,0,0,0" />
+            <TextBlock x:Name="ModpackHint" Grid.Column="4" Classes="muted" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" Margin="16,0,0,0" />
+          </Grid>
+          <StackPanel x:Name="NewModpackPanel" DockPanel.Dock="Top" Orientation="Horizontal" Spacing="10" IsVisible="False" Margin="0,0,18,12">
+            <TextBox x:Name="NewModpackName" Width="240" MaxLength="32" VerticalContentAlignment="Center" Watermark="Name, e.g. Testing" />
+            <Button x:Name="CreateModpackButton" Classes="primary" Content="Create" />
+            <Button x:Name="CancelModpackButton" Classes="ghost" Content="Cancel" />
+            <TextBlock x:Name="NewModpackError" Foreground="#FF6054" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" />
+          </StackPanel>
+          <!-- Outside the list's scroller, so it stays at the top (ModsPage.Search.cs) -->
+          <TextBox x:Name="ModSearchBox" DockPanel.Dock="Top" Classes="clearButton" Margin="0,0,18,12" MaxLength="128"
+                   VerticalContentAlignment="Center" Watermark="Search mods by name, id or tag (Ctrl+F; Esc clears)" />
+          <ScrollViewer x:Name="ModsScroll">
             <StackPanel x:Name="ModsList" Spacing="12" Margin="0,0,18,0" />
           </ScrollViewer>
         </DockPanel>

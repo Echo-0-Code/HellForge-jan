@@ -25,6 +25,13 @@
 #define LF_OPACITY 0x44u        /* a widget's opacity (0x1448AD0 sets it; 0 hidden) */
 #define LF_SCROLL_MAX 0xF90u    /* the grid's scroll range in units: the scroll offset (+0x93030) stays in 0 .. it */
 #define LF_BAND_MAX 200.0f       /* units: the list keeps at least two rows of cards below the band */
+#define LF_KIND 0x508E90u         /* EquipmentTypeRecord(entity): +0x80 the weapon's kind, the Armory's section */
+#define LF_KIND_CHECK 0x18D7911u  /* the builder's cmp [rax+0x80], 0x20: 0x20 is no kind */
+#define LF_KIND_TEXTS 0x18D7CCBu  /* the builder's heading: kind < 0x21 reads its text id from LF_KIND_TABLE */
+#define LF_KIND_TABLE 0x32E25E0u
+#define LF_GROUP_READ 0x18D8BFDu  /* the picker's read of a stratagem row's group, +0xB8 */
+#define LF_GROUP_TEXTS 0x18D8D27u /* the picker's heading: group < 5 reads its text id from LF_GROUP_TABLE */
+#define LF_GROUP_TABLE 0x32A8EC8u
 #define LF_ROWS_MAX 1024u
 #define LF_TYPES_MAX 4096u
 #define LF_NAME 160u
@@ -41,6 +48,11 @@ static const uint8_t kLfPosPin[] = {0x48, 0x89, 0x5C, 0x24, 0x18, 0x48, 0x89, 0x
 static const uint8_t kLfSizePin[] = {0x48, 0x89, 0x5C, 0x24, 0x18, 0x48, 0x89, 0x6C, 0x24, 0x20, 0x48, 0x89, 0x54, 0x24, 0x10, 0x56, 0x57, 0x41, 0x57, 0x48, 0x83, 0xEC, 0x20, 0xF3, 0x0F, 0x10, 0x41, 0x0C};
 static const uint8_t kLfRecordPin[] = {0x48, 0x85, 0xC9, 0x74, 0x71, 0x48, 0x8B, 0x05};
 static const uint8_t kLfTextPin[] = {0x40, 0x53, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x8B, 0x05};
+static const uint8_t kLfKindPin[] = {0x48, 0x85, 0xC9, 0x74, 0x71, 0x48, 0x8B, 0x05, 0xFC, 0x30, 0xF6, 0x02};
+static const uint8_t kLfKindCheckPin[] = {0x83, 0xB8, 0x80, 0x00, 0x00, 0x00, 0x20};
+static const uint8_t kLfKindTextsPin[] = {0x83, 0xF8, 0x21, 0x73, 0x0C, 0x4C, 0x8D, 0x2D, 0x09, 0xA9, 0xA0, 0x01};
+static const uint8_t kLfGroupReadPin[] = {0x8B, 0x83, 0xB8, 0x00, 0x00, 0x00};
+static const uint8_t kLfGroupTextsPin[] = {0x83, 0xF8, 0x05, 0x73, 0x0F, 0x48, 0x8D, 0x15, 0xCD, 0x72, 0x72, 0xFE, 0x44, 0x8B, 0xA4, 0x82, 0xC8, 0x8E, 0x2A, 0x03};
 
 typedef void (*LfBuildFn)(uintptr_t grid, uint32_t type);
 typedef void (*LfTabFn)(uintptr_t screen, uint32_t tab);
@@ -68,6 +80,7 @@ static int g_lfOwnBuild;              /* inside LfRebuildNow: a build HellForge 
 static HfListState g_lfState[LF_LISTS] = {{sizeof(HfListState)}, {sizeof(HfListState)}}; /* open follows the screen */
 static volatile LONG g_lfRebuild[LF_LISTS], g_lfTicking;
 static int g_lfArmory, g_lfPicker; /* 0 not yet, 1 on, -1 off (modloader.log says why) */
+static int g_lfKinds, g_lfGroups;  /* the section reads match: rows get their category */
 static ULONGLONG g_lfWaitSince;
 static uintptr_t g_lfGame;
 static HfMod g_lfMod;
@@ -113,17 +126,45 @@ static void LfStratagemName(uint32_t type, char* out, size_t size)
     if (name != NULL) snprintf(out, size, "%s", name);
 }
 
+/* The heading a row is listed under, as the list's own heading shows it: the Armory's by the weapon's kind, the
+ * picker's by the stratagem's group. "" when the reads did not match or the row has none. */
+static void LfWeaponCategory(uint64_t entity, char* out, size_t size)
+{
+    uint8_t* record = g_lfKinds && entity ? ((LfRecordFn)(g_lfGame + LF_KIND))(entity) : NULL;
+    uint32_t kind = 0x20, id = 0;
+    out[0] = 0;
+    if (record == NULL || SafeRead((uintptr_t)record + 0x80, &kind, 4) || kind > 0x20 || SafeRead(g_lfGame + LF_KIND_TABLE + kind * 4u, &id, 4)) return;
+    const char* text = LfText(id);
+    if (text != NULL) snprintf(out, size, "%s", text);
+}
+
+static void LfStratagemCategory(uint32_t type, char* out, size_t size)
+{
+    uintptr_t table = g_stratagemTable ? (uintptr_t)g_stratagemTable : g_lfGame + STR_TABLE, row = 0;
+    uint32_t group = 0, id = 0;
+    out[0] = 0;
+    if (!g_lfGroups || SafeRead(table + (uintptr_t)type * 8u, &row, 8) || !row || SafeRead(row + 0xB8, &group, 4) || group >= 5 ||
+        SafeRead(g_lfGame + LF_GROUP_TABLE + group * 4u, &id, 4)) return;
+    const char* text = LfText(id);
+    if (text != NULL) snprintf(out, size, "%s", text);
+}
+
 /* Whether a row is kept by every rule, and (*match) whether every filter matches it. Under g_lfLock, shared. */
 static int LfKeep(const HfListRow* row, int* match)
 {
     for (uint32_t i = 0; i < g_lfRuleCount; i++)
         if (g_lfRules[i].list == row->list && !g_lfRules[i].rule(g_lfRules[i].mod, row, g_lfRules[i].user)) return 0;
-    char lower[LF_NAME];
-    snprintf(lower, sizeof lower, "%s", row->name);
-    LfLower(lower);
+    char name[LF_NAME], category[LF_NAME];
+    snprintf(name, sizeof name, "%s", row->name);
+    snprintf(category, sizeof category, "%s", row->category);
+    LfLower(name), LfLower(category);
     *match = 1;
     for (uint32_t i = 0; i < g_lfFilterCount && *match; i++)
-        if (g_lfFilters[i].list == row->list && g_lfFilters[i].text[0] && strstr(lower, g_lfFilters[i].text) == NULL) *match = 0;
+    {
+        const char* text = g_lfFilters[i].text;
+        if (g_lfFilters[i].list != row->list || !text[0]) continue;
+        if (text[0] == '#' ? strstr(category, text + 1) == NULL : strstr(name, text) == NULL) *match = 0;
+    }
     return 1;
 }
 
@@ -158,10 +199,11 @@ static void LfGridBuild(uintptr_t grid, uint32_t type)
     {
         uint32_t id = 0;
         uint64_t entity = 0;
-        char name[LF_NAME];
+        char name[LF_NAME], category[LF_NAME];
         if (SafeRead(rows + i * 0x20u, &id, 4) || !id || SafeRead(rows + i * 0x20u + 8u, &entity, 8)) continue; /* listed by no one */
         LfWeaponName(entity, name, sizeof name);
-        HfListRow row = {sizeof row, HF_LIST_ARMORY_WEAPONS, type, id, entity, name};
+        LfWeaponCategory(entity, category, sizeof category);
+        HfListRow row = {sizeof row, HF_LIST_ARMORY_WEAPONS, type, id, entity, name, category};
         int m = 0;
         at[n] = rows + i * 0x20u, item[n] = id, keep[n] = (uint8_t)LfKeep(&row, &m), match[n] = (uint8_t)m;
         total += keep[n], matched += keep[n] && m;
@@ -291,9 +333,10 @@ static void LfPickerDecide(void)
     for (uint32_t type = 1; type < bound; type++)
     {
         if (!((LfHeldFn)(g_lfGame + LF_HELD))(account, type)) continue;
-        char name[LF_NAME];
+        char name[LF_NAME], category[LF_NAME];
         LfStratagemName(type, name, sizeof name);
-        HfListRow row = {sizeof row, HF_LIST_STRATAGEMS, type, 0, 0, name};
+        LfStratagemCategory(type, category, sizeof category);
+        HfListRow row = {sizeof row, HF_LIST_STRATAGEMS, type, 0, 0, name, category};
         int m = 0;
         if (!LfKeep(&row, &m)) { g_lfHidden[type / 8] |= (uint8_t)(1u << (type % 8)); continue; }
         total++;
@@ -333,6 +376,8 @@ static const char* LfArmoryInstall(uintptr_t game)
         !PinMatches(game + LF_TAB_SELECT, kLfTabPin, sizeof kLfTabPin) || !PinMatches(game + LF_RECORD, kLfRecordPin, sizeof kLfRecordPin) ||
         !PinMatches(game + LF_TEXT, kLfTextPin, sizeof kLfTextPin))
         return "the Armory grid's code is not the reviewed one";
+    g_lfKinds = PinMatches(game + LF_KIND, kLfKindPin, sizeof kLfKindPin) && PinMatches(game + LF_KIND_CHECK, kLfKindCheckPin, sizeof kLfKindCheckPin) &&
+                PinMatches(game + LF_KIND_TEXTS, kLfKindTextsPin, sizeof kLfKindTextsPin);
     return LoaderHook("lists: the Armory weapon grid", game + LF_GRID_BUILD, (void*)LfGridBuild, (void**)&g_lfBuild) ? "its builder could not be hooked" : NULL;
 }
 
@@ -341,6 +386,7 @@ static const char* LfPickerInstall(uintptr_t game)
     if (!PinMatches(game + LF_PICKER, kLfPickerPin, sizeof kLfPickerPin) || !PinMatches(game + LF_PICKER_BOUND - 1, kLfWalkPin, sizeof kLfWalkPin) ||
         !PinMatches(game + LF_PICKER_HELD - sizeof kLfWalkArgs, kLfWalkArgs, sizeof kLfWalkArgs) || !ItCallsTo(game + LF_PICKER_HELD, game + LF_HELD))
         return "the picker's walk is not the reviewed one";
+    g_lfGroups = PinMatches(game + LF_GROUP_READ, kLfGroupReadPin, sizeof kLfGroupReadPin) && PinMatches(game + LF_GROUP_TEXTS, kLfGroupTextsPin, sizeof kLfGroupTextsPin);
     uint8_t* stub = AllocateNearGame(game, 64);
     if (stub == NULL) return "no memory within 2 GB of game.dll";
     ItStub(stub, (void*)LfHeld, 0);
@@ -369,7 +415,8 @@ static void LfRebuildNow(void)
 
 static void LfNoteInstall(const char* armory, const char* picker)
 {
-    Note("lists: Armory weapon grids %s%s; stratagem picker %s%s", armory ? "off: " : "on", armory ? armory : "", picker ? "off: " : "on", picker ? picker : "");
+    Note("lists: Armory weapon grids %s%s; stratagem picker %s%s; categories: weapons %s, stratagems %s", armory ? "off: " : "on", armory ? armory : "",
+         picker ? "off: " : "on", picker ? picker : "", g_lfKinds ? "on" : "off", g_lfGroups ? "on" : "off");
 }
 
 /* game.dll's code is decoded a while after it loads: tried each update for a minute. 1 when tried. */
@@ -442,7 +489,8 @@ static int ApiAddListRule(HfMod* mod, uint32_t list, HfListRule rule, void* user
     return 0;
 }
 
-/* SDK 38, set_list_filter: text every listed row's name must contain, any case; NULL or "" takes the mod's away. */
+/* SDK 38, set_list_filter: text every listed row's name must contain, any case; NULL or "" takes the mod's away.
+ * SDK 44: "#text" is text the row's category must contain instead. */
 static int ApiSetListFilter(HfMod* mod, uint32_t list, const char* text)
 {
     if (!LfListOk(mod, list, "set_list_filter")) return 1;
