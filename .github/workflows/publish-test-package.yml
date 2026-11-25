@@ -16,10 +16,10 @@ jobs:
       - name: Download the artifact and publish it
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: "45598318185"
-          TAG: "test-03a7372"
-          TARGET: "03a7372ad5d27cb40a433f5976ac1edc3ecf1893"
-          TITLE: "Test build 03a7372, 438a152 + support copy paints, xaml base fix, hangar retired, SKINS page (SDK 45) (run 45598318185)"
+          RUN_ID: "45606821973"
+          TAG: "test-344b083"
+          TARGET: "344b083ed61f03f2c34498c628b868c4b510a2d1"
+          TITLE: "Test build 344b083, 03a7372 + SKINS title, overlay wheel routing, lint fixes (run 45606821973)"
         run: |
           gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n test-package -D pkg
           find pkg -type f -exec ls -la {} \;
