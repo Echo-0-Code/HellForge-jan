@@ -6,6 +6,7 @@
 
 #define AT_SET 0x17AAC50u  /* (bar, ids, count): the bar's labels, up to 8 text ids (detoured by the Megapack: not hooked) */
 #define AT_PICK 0x17ABFC0u /* (bar, index, u8, u8): the bar's selected label */
+#define AT_TITLE 0x17AB370u /* (bar, text): the title over the bar (the page's name), as the page open sets it */
 #define AT_BAR_IDS 0xDFE8u
 #define AT_BAR_COUNT 0xE068u
 #define AT_BAR_INDEX 0xE06Cu
@@ -48,7 +49,7 @@ static const ActPin kAtPins[] = {
     {0, 0x1457A75u, "8b97dce50000488bcfe8"}, {0, 0x14573AFu, "488d9f70050000"},
     {0, 0x145740Du, "41b805000000488d156eb2e801"}, {0, 0x145764Du, "41b803000000488d155692eb01"},
     {0, 0x145747Eu, "41b803000000488d15659deb01"}, {0, 0x14573BEu, "41b806000000488d155ddae701"},
-    {0, 0x17AAC85u, "4489a968e00000"}, {0, 0x17AAC99u, "4881c1e8df0000"}, {0, 0x17ABFD4u, "4863816ce00000"},
+    {0, AT_TITLE, "40534883ec30488d9910010000488bcb"}, {0, 0x17AAC85u, "4489a968e00000"}, {0, 0x17AAC99u, "4881c1e8df0000"}, {0, 0x17ABFD4u, "4863816ce00000"},
     /* The Loadout (menu +0xB0): its bar's update reads the index into its select; its labels. */
     {0, 0x14ACE0Cu, "488b89b0000000"}, {0, 0x146D503u, "488d8f50f90000"}, {0, 0x146D519u, "8b9fbcd90100"},
     {0, 0x146D53Eu, "8bd3488bcfe848380000"}, {0, AT_LOADOUT_SELECT, "4c8bdc55535641544157498d6ba84881"},
@@ -69,6 +70,7 @@ typedef void (*AtOpenFn)(uintptr_t screen, uint8_t open);
 typedef uint64_t (*AtInputFn)(uintptr_t screen, void* input, void* a, void* b);
 typedef void (*AtSetFn)(uintptr_t bar, const uint32_t* ids, uint32_t count);
 typedef void (*AtPickFn)(uintptr_t bar, uint32_t index, uint8_t a, uint8_t b);
+typedef void (*AtTitleFn)(uintptr_t bar, uint32_t text);
 
 static AtTab g_atTabs[AT_TABS];
 static uint32_t g_atCount;
@@ -87,6 +89,7 @@ static AtInputFn g_atInput;
 #define AT_PAGE_OPEN 0x34u  /* in the screen: 1 a page shows, 0 the overview (0x1457350 keeps it) */
 #define AT_CATEGORY 0x30u   /* in the screen: the category the overview shows and the page opens (0 weapons) */
 static uint32_t g_atSkinsTab;     /* the handle of HellForge's SKINS label on the categories, 0 none */
+static uint32_t g_atSkinsText;    /* its text id, also the page's title */
 static int g_atSkins;             /* 0 not shown, 1 SKINS picked on the overview (the page opens next), 2 the page */
 static uint32_t g_atSkinsIndex;   /* the SKINS page's tab picked last, kept while the Armory is up */
 static volatile LONG g_atCalls;   /* inside a mod's callback: a select it makes reaches the game */
@@ -198,6 +201,7 @@ static void AtSkinsLabels(uintptr_t screen)
     for (uint32_t i = 0; i < n; i++) ids[i] = tabs[i].text;
     ((AtSetFn)(g_atGame + AT_SET))(at, ids, n);
     ((AtPickFn)(g_atGame + AT_PICK))(at, g_atSkinsIndex < n ? g_atSkinsIndex : 0, 1, 1);
+    ((AtTitleFn)(g_atGame + AT_TITLE))(at, g_atSkinsText); /* the weapons page's open titled it WEAPONRY */
 }
 
 /* SKINS picked on the overview: the weapons category is chosen as the game would (its page's records and grid), then
@@ -328,6 +332,7 @@ static uint32_t AtSkinsCategory(void)
     {
         g_atTabs[g_atCount] = (AtTab){&g_atMod, AtSkinsPicked, NULL, HF_MENU_TABS_ARMORY_CATEGORIES, text, g_atCount + 1};
         g_atSkinsTab = ++g_atCount;
+        g_atSkinsText = text;
     }
     ReleaseSRWLockExclusive(&g_atLock);
     if (g_atSkinsTab) Note("menu tabs: SKINS on the Armory's categories (tab %u)", g_atSkinsTab);
