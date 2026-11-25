@@ -23,6 +23,9 @@ typedef struct HfListRow
     /* SDK 44: the heading the list shows the row under ("SHOTGUN", the picker's group); "" when it has none or the
      * game's code is not the reviewed one. A filter "#text" matches it instead of the name. */
     const char* category;
+    /* SDK 50: the trait lines its card shows ("CRYO, LIGHT ARMOR PENETRATING"), joined by ", "; "" when it has none.
+     * A filter "@text" matches them instead of the name. */
+    const char* traits;
 } HfListRow;
 
 /* add_list_rule: 1 keeps the row, 0 hides it from this build. Runs on the game thread, inside the build; keep it quick
