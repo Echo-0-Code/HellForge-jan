@@ -25,8 +25,9 @@ public static class ResourceEdits
     // A particle effect's colours are curves over the particle's life: 10 key times on 0..1 (unused keys 10000, after
     // the used ones) followed by 10 RGB keys on a 0..255 scale (up to 1024 for HDR; artifacts/projectile-registry/
     // colour_curves.py). Each warm key of such a curve (red >= green >= blue, red > blue, brightest channel >= 2) is
-    // recoloured; white and every other key stay as they are. Returns the number of keys changed.
-    public static int RecolourCurves(byte[] effect, Func<float, float, float, (float R, float G, float B)> recolour)
+    // recoloured; white and every other key stay as they are. With any, every key at least 2 bright is (a green gas,
+    // a white smoke). Returns the number of keys changed.
+    public static int RecolourCurves(byte[] effect, Func<float, float, float, (float R, float G, float B)> recolour, bool any = false)
     {
         var n = effect.Length / 4;
         var f = new float[n];
@@ -38,7 +39,7 @@ public static class ResourceEdits
             for (var k = 0; k < used; k++)
             {
                 float r = f[i + 10 + 3 * k], g = f[i + 11 + 3 * k], b = f[i + 12 + 3 * k];
-                if (Math.Max(r, Math.Max(g, b)) < 2f || !(r >= g && g >= b && r > b)) continue;
+                if (Math.Max(r, Math.Max(g, b)) < 2f || (!any && !(r >= g && g >= b && r > b))) continue;
                 var (nr, ng, nb) = recolour(r, g, b);
                 var at = effect.AsSpan(4 * (i + 10 + 3 * k));
                 BinaryPrimitives.WriteSingleLittleEndian(at, nr);

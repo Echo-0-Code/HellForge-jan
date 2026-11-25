@@ -110,7 +110,8 @@ mod, never a game resource's name. The copy can then be changed, in this order:
   type than its own.
 - `curves`: a particle effect's colour curves (10 key times, then 10 RGB keys on 0..255). Each warm key (red >= green
   >= blue, red above blue, brightest channel at least 2) is recoloured, either with `"preset": "warm-to-blue"` or with
-  `"colour": "#3070FF"` (that hue and saturation at the key's brightness). `"keys": n` requires exactly n keys to
+  `"colour": "#3070FF"` (that hue and saturation at the key's brightness). `"match": "any"` recolours every key at least 2
+  bright instead of only the warm ones, for an effect of another colour (a green gas turned to an icy mist). `"keys": n` requires exactly n keys to
   change; without it, at least one must.
 - `colours`: a material's RGB parameters by name (`0x<IdString32>` or the name): `{"0xB4138578": [0, 0.35, 1]}`.
 - `textures`: a material's textures by slot (the slot's name or `0x<IdString32>`): `{"base_data":
