@@ -848,6 +848,13 @@ static const char* MvHoverRefusal(const HfMoverHover* h, int flier)
     return NULL;
 }
 
+/* stall_speed only matters to a plane: its default, 0.45 x speed, is under 1 for a slow ground mover. */
+static int MvSpeedsIn(const HfMoverDef* d)
+{
+    return AiIn(d->speed, 0.1f, MvFlier(d->mode) ? 120.0f : 40.0f) && (d->mode != HF_MOVE_PLANE || AiIn(d->stall_speed, 1, d->speed)) &&
+        AiIn(d->bank_max, 5, 80) && AiIn(d->dive_depth, 0.5f, 30);
+}
+
 static const char* MvRefusal(const HfMoverDef* in, HfMoverDef* d)
 {
     if (in == NULL || in->size < HF_MOVER_DEF_SIZE_39 || in->entity == 0) return "no HfMoverDef, its size (build against SDK 39's header or later) or its entity";
@@ -856,8 +863,7 @@ static const char* MvRefusal(const HfMoverDef* in, HfMoverDef* d)
     MvDefaults(d);
     if (d->mode > HF_MOVE_TRACKS || d->water > HF_WATER_SINK) return "mode WALK, DRIVE (_FWD, _RWD, _4WD), HOVER, HELI, PLANE, BOAT, SUB, RAIL or TRACKS, water WADE, DRY, FLOAT or SINK";
     if (d->rail > MV_RAILS) return "rail: an id add_rail gave, or 0 for the nearest";
-    if (!AiIn(d->speed, 0.1f, MvFlier(d->mode) ? 120.0f : 40.0f) || !AiIn(d->stall_speed, 1, d->speed) || !AiIn(d->bank_max, 5, 80) || !AiIn(d->dive_depth, 0.5f, 30))
-        return "speed 0.1 .. 40 (a flier 120), stall_speed 1 .. speed, bank_max 5 .. 80, dive_depth 0.5 .. 30";
+    if (!MvSpeedsIn(d)) return "speed 0.1 .. 40 (a flier 120), a plane's stall_speed 1 .. speed, bank_max 5 .. 80, dive_depth 0.5 .. 30";
     if (!AiIn(d->thrust_max, 1.05f, 3)) return "thrust_max 1.05 .. 3";
     if (d->mouse_steer > 1) return "mouse_steer 0 or 1";
     if (!AiIn(d->reverse_speed, 0, 40) || !AiIn(d->acceleration, 0.1f, 200) || !AiIn(d->brake, 0.1f, 200) ||

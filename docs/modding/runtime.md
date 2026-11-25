@@ -334,7 +334,8 @@ session. Pass the hash of the package's name. It takes:
 
 It answers `HF_PACKAGE_LOADING` until the engine has all of it (call again to see), then `HF_PACKAGE_RESIDENT`, or 0 when
 refused. At most 256 packages are held, counting the ones HellForge loads for references and abilities; a package not
-resident within 90 seconds fails.
+resident within 90 seconds fails. The session's mods may name up to 2,048 packages of their own and patched ones;
+any past that are logged as an error and refused.
 
 Loading is per machine:
 what your mod loads is not told to other players. In co-op HellForge does share the packages it holds for each player's
