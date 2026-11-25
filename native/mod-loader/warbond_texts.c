@@ -167,3 +167,5 @@ static const char* InstallWarbondTexts(uintptr_t game)
         return "game.dll could not be rewritten";
     return NULL;
 }
+
+#include "loading_tips.c" /* SDK 51: add_tip and set_text, game texts by id like the ones above */

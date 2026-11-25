@@ -17,6 +17,7 @@ For a screen drawn with HellForge's own drawing calls (a map, a graph), see [Scr
 - [Changing a screen from code](#changing-a-screen-from-code)
 - [Clicks and closing](#clicks-and-closing)
 - [Texts for the game's own widgets](#texts-for-the-games-own-widgets)
+- [Game texts and loading screen tips](#game-texts-and-loading-screen-tips)
 - [Tabs on the game's tab bars](#tabs-on-the-games-tab-bars)
 - [A category in Vehicle Customization](#a-category-in-vehicle-customization)
 - [Boxes on the WEAPONRY overview](#boxes-on-the-weaponry-overview)
@@ -131,6 +132,35 @@ uint32_t label = HAS(hf, add_text) ? hf->add_text(mod, "support_tab", "SUPPORT")
 
 - The key is unique within the mod. The same key gives the same id in every session.
 - The id is served from the call on, on any thread. It returns 0 when refused, and the mod's log says why.
+
+## Game texts and loading screen tips
+
+`set_text` (SDK 51) answers one of the game's own text ids with the mod's text, in every language, from the call on:
+
+```c
+if (HAS(hf, set_text)) hf->set_text(mod, 0x38157F13, "Panic responsibly."); /* the tip "Don't panic." */
+```
+
+A text id is the 32-bit id the game's `strings` resources file each text under (the same in every language). Find one
+by dumping those resources with a game data reader and searching the text; matching on the English text instead would
+break when the game rewords it. The newest `set_text` of an id wins.
+
+`add_tip` (SDK 51, `hellforge_tips.h`) works on the tips of the transition screens (TRAINING MANUAL TIPS). They show
+one at a time, a new one every 15 s, each tip equally likely and never the same twice in a row:
+
+```c
+HfTipDef tip = {sizeof tip, "Clean your rifle. It is watching you."};
+hf->add_tip(mod, &tip);                                           /* a new tip; returns its text id */
+HfTipDef change = {sizeof change, "Panic, but tactically.", 0x38157F13};
+hf->add_tip(mod, &change);                                        /* a vanilla tip's new text (as set_text) */
+HfTipDef out = {sizeof out, NULL, 0xE12238EC};
+hf->add_tip(mod, &out);                                           /* a vanilla tip taken out */
+```
+
+- The game has 82 tips; their ids are in game.dll at +0x3317D60 (build 25480438).
+- Any time. New tips and taken-out ones make HellForge pick the tip itself (`modloader.log`: "tips: ..."); changed
+  texts alone need no hook.
+- 1,024 new tips across all mods. Only the reviewed game build: on another, new and taken-out tips are refused.
 
 ## Tabs on the game's tab bars
 

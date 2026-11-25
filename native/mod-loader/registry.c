@@ -1127,21 +1127,26 @@ static void HookText(void)
     Note("registry: engine text function hooked (%d mod text(s), exe+0x%llx)", g_textCount, (unsigned long long)(current - exe));
 }
 
-static uint32_t AddText(const char* text, const char* key, uint32_t salt)
+/* A mod text served under the given id (a game text's id: that text is the mod's from then on). 0 refused. */
+static uint32_t AddTextAs(const char* text, uint32_t id)
 {
-    if (text == NULL || text[0] == 0 || !StableRoom(&g_textStore, (size_t)g_textCount + 1)) return 0;
+    if (text == NULL || text[0] == 0 || id == 0 || !StableRoom(&g_textStore, (size_t)g_textCount + 1)) return 0;
     g_texts = (ModText*)g_textStore.base;
     size_t length = strlen(text);
     char* copy = (char*)malloc(length + 1);
     if (copy == NULL) return 0;
     memcpy(copy, text, length + 1);
-    uint32_t id = (uint32_t)(Murmur64A(key, strlen(key)) >> 32) ^ salt;
-    if (id == 0) id = salt;
     g_texts[g_textCount] = (ModText){id, copy};
     MemoryBarrier(); /* the game thread looks texts up while a live change adds them (TextDetour) */
     g_textCount++;
     if (!g_textsHeld) TextsPublish();
     return id;
+}
+
+static uint32_t AddText(const char* text, const char* key, uint32_t salt)
+{
+    uint32_t id = (uint32_t)(Murmur64A(key, strlen(key)) >> 32) ^ salt;
+    return AddTextAs(text, id == 0 ? salt : id);
 }
 
 /* SDK 22, add_text: a mod's own text under its key, for the game's UI where it takes a text id (a tab bar's labels). */

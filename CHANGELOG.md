@@ -43,6 +43,8 @@ packs, and the launcher says when a newer HellForge is out.
   game does not ([overlay.md](docs/modding/overlay.md#click-boxes)).
 - **The Armory's SKINS page (SDK 45).** `add_armory_tab(mod, HF_ARMORY_TABS_SKINS, ...)` puts a mod's tab on a SKINS
   page that HellForge adds to the Armory's categories, so skin tabs leave the weapons bar ([ui.md](docs/modding/ui.md#the-skins-page-sdk-45)).
+- **Loading screen tips and game texts (SDK 51).** `add_tip` adds a tip to the transition screens, gives a vanilla tip
+  new text or takes one out; `set_text` gives any game text id a mod's own text ([ui.md](docs/modding/ui.md#game-texts-and-loading-screen-tips)).
 - **Search lists by trait (SDK 50).** A list filter that starts with `@` matches the trait lines a row's card shows,
   such as `"@cryo"`, and `HfListRow.traits` gives them ([lists.md](docs/modding/lists.md#filter-by-name)).
 - **Search lists by category (SDK 44).** A list filter that starts with `#` matches the heading a row is listed under,

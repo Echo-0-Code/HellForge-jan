@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 50
+#define HF_MOD_SDK_VERSION 51
 #define HF_WEAPON_PAINTS 1 /* HfWeapon.paints exists */
 #define HF_MOD_EXPORT __declspec(dllexport)
 
@@ -1191,6 +1191,7 @@ typedef struct HfEditDef
 #include "hellforge_generation.h" /* HfGenerationCapacity: room in the map generator's arrays (generation_capacity) */
 
 #include "hellforge_preview.h" /* SDK 46: HfPreviewFit, an item's size and place in the Armory's 3D preview */
+#include "hellforge_tips.h" /* SDK 51: HfTipDef, a loading screen tip (add_tip) */
 
 typedef struct HfApi
 {
@@ -1807,6 +1808,10 @@ typedef struct HfApi
      * frame rendered it (HfView; docs/modding/world.md). Any thread, in a mission or on the ship. 1 read, 0 not (another
      * build, or no frame yet). */
     uint32_t (*zone_state)(HfMod* mod, uint32_t entity, uint32_t zone, HfZoneState* state); int (*repair_zones)(HfMod* mod, uint32_t entity, uint32_t zone); int (*view_pose)(HfMod* mod, HfView* out);
+    /* ---- SDK 51: game texts by id and loading screen tips (hellforge_tips.h, docs/modding/ui.md; check hf->size) -- */
+    /* set_text: the game's text id answered with text (UTF-8, every language) from now on; any thread. 0 done, 1 refused.
+     * add_tip: a new tip (its text id), a vanilla tip's new text or one taken out (replaces); any time. 0 refused. */
+    int (*set_text)(HfMod* mod, uint32_t id, const char* text); uint32_t (*add_tip)(HfMod* mod, const HfTipDef* def);
 } HfApi;
 
 /* SDK 6: an HfMod starts with the API, so these need only the mod. */
