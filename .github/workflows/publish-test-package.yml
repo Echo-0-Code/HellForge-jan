@@ -16,10 +16,10 @@ jobs:
       - name: Download the artifact and publish it
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: "45693249483"
-          TAG: "test-fb85745"
-          TARGET: "fb85745f69cf909c55667e3852f5100344ee77d5"
-          TITLE: "Test build fb85745, 3a26614 + overlay releases mouse capture after a modal closes on a click (run 45693249483)"
+          RUN_ID: "45697546738"
+          TAG: "test-2d07ec2"
+          TARGET: "2d07ec2c4e273b09b52882440ec01ee79567162a"
+          TITLE: "Test build 2d07ec2, fb85745 + contact guard: contact points stop at 64 a tick (Leviathan call-in crash) (run 45697546738)"
         run: |
           gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n test-package -D pkg
           find pkg -type f -exec ls -la {} \;
