@@ -41,5 +41,14 @@ crash.
   workers had stopped, where it used to crash. HellForge ended it with exit code 0, as a normal quit (#332).
 - `still full after 10 s`: the wait ran out during play. The game crashes next: please attach the crash report.
 
+## Contact points of very large vehicles
+
+`game.dll+0x6F795A` crashes when a unit makes more than 64 contact points in one tick, as a 155 m Leviathan hull does
+against terrain. The game appends each point to a 64-entry list without checking it is full. The 65th overwrites the
+count and the next point reads past the unit's record.
+
+From the game's load, `contact_guard.c` drops a point that finds the list full, so the count stays at 64. The game folds
+at most 64 points a tick anyway. `contact guard: ... dropped so far` in `modloader.log` counts them.
+
 The analysis behind each guard is in the comments of `render_guards.c`. Its test,
 `native/mod-loader/test/render_guards_test.c`, runs every guard on a synthetic image.

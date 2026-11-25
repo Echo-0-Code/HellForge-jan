@@ -113,3 +113,5 @@ static void CustomizeGuardsWatch(void)
     Note("customize guards: %ld card(s) with no type skipped in the scene pass and %ld sorted last with no item or type so far",
         (long)skipped, (long)sorted);
 }
+
+#include "contact_guard.c" /* a unit's contact points past 64 in one tick (CgJump) */
