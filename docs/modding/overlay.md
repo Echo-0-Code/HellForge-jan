@@ -169,7 +169,8 @@ frame the button is drawn, with the button's box in units.
 |---|---|
 | A press inside a box, while no modal screen is open | The screen: `pressed` and `down` in its input. The game gets nothing. |
 | The release of that press, anywhere | The screen: `released`. The game gets nothing. |
-| Mouse moves, the wheel, keys, clicks outside every box | The game, as before. The screen gets the mouse position. |
+| The wheel over a box | The screen: `wheel` in its input. The game gets nothing. |
+| Mouse moves, keys, the wheel and clicks outside every box | The game, as before. The screen gets the mouse position. |
 | A modal screen opened by the click | It has all input from then on, as usual. |
 
 The game is kept from the press in its window messages, its raw input and `GetKeyState` / `GetAsyncKeyState`. A box

@@ -12,6 +12,8 @@ On `dev`, since 0.4.0-beta.
 
 ### Added
 
+- **The wheel over a click box.** A screen that is not modal gets the mouse wheel over its `take_clicks` boxes, and the
+  game does not ([overlay.md](docs/modding/overlay.md#click-boxes)).
 - **The Armory's SKINS page (SDK 45).** `add_armory_tab(mod, HF_ARMORY_TABS_SKINS, ...)` puts a mod's tab on a SKINS
   page that HellForge adds to the Armory's categories, so skin tabs leave the weapons bar ([ui.md](docs/modding/ui.md#the-skins-page-sdk-45)).
 - **Search lists by category (SDK 44).** A list filter that starts with `#` matches the heading a row is listed under,
