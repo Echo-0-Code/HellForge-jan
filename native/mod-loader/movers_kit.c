@@ -118,20 +118,92 @@ static int KitShot(MvUnit* m, const KitGun* g, const float w[16], float period)
     return 1;
 }
 
-static void KitFire(MvUnit* m, const KitGun* g, const float w[16], float dt)
+/* Co-op: only the host may spawn projectiles, so a joiner's Helldiver in a gun's seat sends its trigger to the host under
+ * "@hellforge.guns" (the unit's network id, the gun's slot, held), on a change and every KIT_ASK_S while held; the host
+ * fires that gun as if its own player held it, for KIT_ASK_HOLD unless told again. Fliers are physics bodies the engine
+ * replicates, so both machines have the unit and the seat in the same place. */
+#define KIT_CHANNEL "@hellforge.guns"
+#define KIT_ASK_VERSION 1u
+#define KIT_ASK_S 0.2f
+#define KIT_ASK_HOLD 0.5f
+#define KIT_INBOX 64
+typedef struct KitAsk { uint8_t version, slot, held, pad; uint32_t network; } KitAsk;
+static KitAsk g_kitInbox[KIT_INBOX];
+static uint32_t g_kitInboxCount;
+static SRWLOCK g_kitInboxLock = SRWLOCK_INIT;
+
+/* A joiner: this machine's trigger on the gun, to the host. */
+static void KitAskHost(MvUnit* m, uint32_t slot, int held, float dt)
+{
+    if (held == m->gunSentHeld[slot] && (!held || (m->gunSent[slot] -= dt) > 0)) return;
+    uint32_t unit = 0, network = WC_NO_NETWORK;
+    if (!WcEntity(m->entity, &unit, &network) || network == WC_NO_NETWORK) return; /* no network id yet: asked again next update */
+    const KitAsk ask = {KIT_ASK_VERSION, (uint8_t)slot, (uint8_t)(held != 0), 0, network};
+    char hex[sizeof ask * 2 + 1], line[64 + sizeof hex];
+    ChannelHex((const uint8_t*)&ask, sizeof ask, hex);
+    snprintf(line, sizeof line, "send\t%s\thost\t%s", KIT_CHANNEL, hex);
+    LiveQueue(line);
+    m->gunSentHeld[slot] = (uint8_t)(held != 0);
+    m->gunSent[slot] = KIT_ASK_S;
+}
+
+/* The live pipe's thread: a joiner's trigger, kept for the host's next update. */
+static void KitReceive(uint64_t from, const uint8_t* data, uint32_t bytes)
+{
+    (void)from;
+    KitAsk ask;
+    if (bytes != sizeof ask) return;
+    memcpy(&ask, data, sizeof ask);
+    if (ask.version != KIT_ASK_VERSION || ask.slot >= MV_KIT_SLOTS) return;
+    AcquireSRWLockExclusive(&g_kitInboxLock);
+    if (g_kitInboxCount < KIT_INBOX) g_kitInbox[g_kitInboxCount++] = ask;
+    ReleaseSRWLockExclusive(&g_kitInboxLock);
+}
+
+/* The host's update, g_mvLock held: the joiners' triggers onto their units. */
+static void KitTake(void)
+{
+    if (g_kitGunCount == 0) return;
+    KitAsk in[KIT_INBOX];
+    AcquireSRWLockExclusive(&g_kitInboxLock);
+    const uint32_t n = g_kitInboxCount;
+    memcpy(in, g_kitInbox, sizeof in[0] * n);
+    g_kitInboxCount = 0;
+    ReleaseSRWLockExclusive(&g_kitInboxLock);
+    for (uint32_t k = 0; k < n; k++)
+    {
+        MvUnit* m = MvUnitOf(ApiEntityOfNetwork(NULL, in[k].network));
+        if (m != NULL) m->gunRemote[in[k].slot] = in[k].held ? KIT_ASK_HOLD : 0;
+    }
+}
+
+/* One gun, one update. The host fires for its own player and for a joiner's (KitTake); a joiner only asks the host and
+ * counts its rounds down at the same rate, so fixed_gun_state reads about what the host has. */
+/* Whether the gun's trigger is held this update: by this machine's Helldiver in its seat, or (host) by a joiner's. */
+static int KitHeld(MvUnit* m, const KitGun* g, const float w[16], float dt, int joiner)
+{
+    const uint32_t s = g->slot;
+    const int seated = KitSeated(&g->def, w), mine = seated && KitTrigger(g->def.trigger);
+    if (joiner) KitAskHost(m, s, mine, dt);
+    const int theirs = !joiner && m->gunRemote[s] > 0;
+    if (theirs) m->gunRemote[s] -= dt;
+    m->gunSeated[s] = seated || theirs;
+    return mine || theirs;
+}
+
+static void KitFire(MvUnit* m, const KitGun* g, const float w[16], float dt, int joiner)
 {
     const HfFixedGunDef* d = &g->def;
     const uint32_t s = g->slot;
     m->gunWait[s] = fmaxf(m->gunWait[s] - dt, -dt);
-    m->gunSeated[s] = KitSeated(d, w);
-    const int held = m->gunSeated[s] && KitTrigger(d->trigger);
+    const int held = KitHeld(m, g, w, dt, joiner);
     if (held && !m->gunHeld[s]) m->gunBurst[s] = d->burst ? d->burst : 0xFFFFFFFFu; /* a new press */
     m->gunHeld[s] = (uint8_t)held;
     m->gunFiring[s] = held && m->gunBurst[s] > 0 && m->gunRounds[s] > 0;
     const float period = 60.0f / d->fire_rate;
     for (int shots = 0; m->gunFiring[s] && shots < KIT_MAX_SHOTS && m->gunWait[s] <= 0 && m->gunRounds[s] > 0 && m->gunBurst[s] > 0; shots++)
     {
-        if (!KitShot(m, g, w, period)) { m->gunWait[s] = 1.0f; return; }
+        if (!joiner && !KitShot(m, g, w, period)) { m->gunWait[s] = 1.0f; return; }
         m->gunRounds[s]--;
         if (m->gunBurst[s] != 0xFFFFFFFFu) m->gunBurst[s]--;
         m->gunWait[s] += period;
@@ -229,16 +301,19 @@ static void ZnStrikes(MvUnit* m, const float w[16], float dt)
     }
 }
 
-/* Each update, under g_mvLock: the unit's guns on the host. */
+/* Each update, under g_mvLock: the unit's zones where it is moved, its guns on every machine (KitFire: a joiner asks). */
 static void KitTick(MvUnit* m, float dt)
 {
-    if (m->remote || !m->unit || (g_kitGunCount == 0 && g_kitZoneCount == 0)) return;
+    if (!m->unit || (g_kitGunCount == 0 && g_kitZoneCount == 0)) return;
     KitInit(m);
     float w[16];
     if (!ApiJointPose(&g_mvMod, m->unit, 0, HF_POSE_WORLD, w) || !isfinite(w[12])) return;
-    if (g_kitZoneCount > 0) ZnStrikes(m, w, dt);
+    if (g_kitZoneCount > 0 && !m->remote) ZnStrikes(m, w, dt);
+    if (g_kitGunCount == 0) return;
+    const int joiner = MvRole() == HF_SESSION_JOINER;
+    if (m->remote && !joiner) return; /* a host's copy of a joiner's walker: its guns are asked for, never this machine's */
     const uint64_t resource = g_mvDefs[m->def - 1].def.entity;
-    for (LONG i = 0; i < g_kitGunCount; i++) if (g_kitGuns[i].def.entity == resource) KitFire(m, &g_kitGuns[i], w, dt);
+    for (LONG i = 0; i < g_kitGunCount; i++) if (g_kitGuns[i].def.entity == resource) KitFire(m, &g_kitGuns[i], w, dt, joiner);
 }
 
 /* A zone broke: its effect on the unit (the slowest sink of all broken zones, their spins added). */

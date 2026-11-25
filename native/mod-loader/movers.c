@@ -64,6 +64,9 @@ typedef struct MvUnit
     uint32_t kitInit, gunRounds[MV_KIT_SLOTS], gunBurst[MV_KIT_SLOTS], gunFiring[MV_KIT_SLOTS], gunSeated[MV_KIT_SLOTS];
     float gunWait[MV_KIT_SLOTS], znSink, znSpin, znSweep, znContact[MV_ZONE_SLOTS]; /* znSink, znSpin: m/s, rad/s a broken zone forces */
     uint8_t gunHeld[MV_KIT_SLOTS];
+    /* co-op (movers_kit.c "@hellforge.guns"): a joiner's trigger on the host (seconds it holds), and what a joiner last sent */
+    float gunRemote[MV_KIT_SLOTS], gunSent[MV_KIT_SLOTS];
+    uint8_t gunSentHeld[MV_KIT_SLOTS];
     int32_t znHealth[MV_ZONE_SLOTS];
     /* SDK 48 (movers_view.c): mouse_steer's throttle lever, whether this machine's Helldiver drives it, and A/D */
     float seatLever, seatKeys, viewSteer, viewLift; /* viewSteer, viewLift: the view's asks, eased in */
@@ -610,6 +613,7 @@ static int MvBodyModes(MvUnit* m, const MvDef* def, float dt)
 }
 
 static void KitTick(MvUnit* m, float dt); /* movers_kit.c */
+static void KitTake(void);               /* movers_kit.c */
 
 static void MvUnitTick(MvUnit* m, float dt)
 {
@@ -671,6 +675,7 @@ static void MvTick(HfMod* mod, float dt, void* user)
     if (!MvCalls(dt)) return;
     AcquireSRWLockExclusive(&g_mvLock);
     MvSyncTake();
+    KitTake(); /* joiners' fixed-gun triggers (movers_kit.c) */
     for (int i = 0; i < MV_UNITS; i++)
     {
         MvUnit* m = &g_mvUnits[i];
