@@ -30,6 +30,8 @@ static const uint8_t kLoadoutPreviewFallback[] = {
     0x48,0x8b,0x44,0x24,0x78,0x48,0x8d,0x4d,0x90,0x44,0x8b,0x44,0x24,0x60,0x45,0x8b,0xcb,0xb2,0x01,
     0x48,0x89,0x44,0x24,0x20,0xe8,0xf8,0xf5,0xff,0xff};
 
+static void PreviewFitThumbBox(void* box); /* preview_fit.c: a thumbnail's set_preview_fit */
+
 static void* LoadoutPreviewDetour(void* out, uint8_t alternate, uint32_t slot, uint32_t mode, void* context)
 {
     for (LoadoutPreviewCall* call = g_loadoutPreviewCall; call; call = call->previous)
@@ -43,6 +45,7 @@ static void* LoadoutPreviewDetour(void* out, uint8_t alternate, uint32_t slot, u
     LoadoutPreviewCall call = {g_loadoutPreviewCall, context, slot, mode, alternate};
     g_loadoutPreviewCall = &call;
     void* result = g_loadoutPreviewOriginal(out, alternate, slot, mode, context);
+    PreviewFitThumbBox(result);
     g_loadoutPreviewCall = call.previous;
     return result;
 }
