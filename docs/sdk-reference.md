@@ -249,7 +249,7 @@ for changing and adding content; [Hooks and game memory](modding/hooks.md) for `
 
 ### SDK 26: a mod's tab on the Armory's tab bar (hellforge_world.h, docs/modding/ui.md; check hf->size)
 
-- `add_armory_tab`: `uint32_t (HfMod* mod, uint32_t list, const char* label, HfArmoryTabCallback on_select, void* user)`. Adds label after the vanilla labels of one of the Armory's tab lists (HF_ARMORY_TABS_...); a click or Q/E reaches it as the game's own. The game's select is not run for it: the page keeps what it showed, for the mod to change. on_select runs on the game thread, selected 1 when picked, 0 when another tab is or the Armory closes. Any thread. Its handle (1 and up), or 0 refused (the mod's log says why: no room on the bar, or another game build).
+- `add_armory_tab`: `uint32_t (HfMod* mod, uint32_t list, const char* label, HfArmoryTabCallback on_select, void* user)`. Adds label after the vanilla labels of one of the Armory's tab lists (HF_ARMORY_TABS_...); a click or Q/E reaches it as the game's own. The game's select is not run for it: the page keeps what it showed, for the mod to change. on_select runs on the game thread, selected 1 when picked, 0 when another tab is or the Armory closes. Any thread. Its handle (1 and up), or 0 refused (the mod's log says why: no room on the bar, or another game build). SDK 45: HF_ARMORY_TABS_SKINS puts it on the SKINS page (an older HellForge refuses it: fall back to WEAPONS).
 
 ### SDK 27: a mod's tab on any of the game's tab bars (hellforge_world.h, docs/modding/ui.md; check hf->size)
 
