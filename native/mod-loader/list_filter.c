@@ -23,19 +23,9 @@
 #define LF_POS 0x14476A0u        /* (widget, packed x, y): a widget's position, +y up */
 #define LF_SIZE 0x1447160u       /* (widget, packed w, h): a widget's size */
 #define LF_OPACITY 0x44u        /* a widget's opacity (0x1448AD0 sets it; 0 hidden) */
-#define LF_COLUMN 0x6D0u        /* the grid's list column, which the fit below takes as its own */
-#define LF_FIT 0x18D4589u        /* the column's fit: content (+0x92968) + pad over the visible height scrolls */
-#define LF_FIT_CONTENT 0x92968u
-#define LF_FIT_PICKER 0x92FD1u   /* 1 in the picker: its visible height is LF_FIT_PICKER_H */
-#define LF_FIT_SHOWN 0x928F9u    /* the scroll bar is up */
-#define LF_FIT_ARMORY_H 0x23C7C64u
-#define LF_FIT_PICKER_H 0x23C7B98u
-#define LF_FIT_PAD 0x23C75E8u
-#define LF_FIT_ONE 0x23C6D70u    /* 1.0f, the bar's opacity */
-#define LF_BAR 0x110u            /* the column's scroll bar: +0x7B0 its range */
-#define LF_BAR_OPACITY 0x1448AD0u
-#define LF_BAR_RATIO 0x1793F60u
-#define LF_BAR_RANGE 0x1794600u
+#define LF_CLEAR 0x18D27B0u       /* (column): every builder of the Armory's and picker's list column empties it first */
+#define LF_ARMORY_H 0x23C7C64u    /* 738.0f: the column's visible height, Armory (the picker's, below, when +0x92FD1 is 1) */
+#define LF_PICKER_H 0x23C7B98u    /* 528.0f */
 #define LF_BAND_MAX 200.0f       /* units: the list keeps at least two rows of cards below the band */
 #define LF_KIND 0x508E90u         /* EquipmentTypeRecord(entity): +0x80 the weapon's kind, the Armory's section */
 #define LF_KIND_CHECK 0x18D7911u  /* the builder's cmp [rax+0x80], 0x20: 0x20 is no kind */
@@ -60,10 +50,12 @@ static const uint8_t kLfPosPin[] = {0x48, 0x89, 0x5C, 0x24, 0x18, 0x48, 0x89, 0x
 static const uint8_t kLfSizePin[] = {0x48, 0x89, 0x5C, 0x24, 0x18, 0x48, 0x89, 0x6C, 0x24, 0x20, 0x48, 0x89, 0x54, 0x24, 0x10, 0x56, 0x57, 0x41, 0x57, 0x48, 0x83, 0xEC, 0x20, 0xF3, 0x0F, 0x10, 0x41, 0x0C};
 static const uint8_t kLfRecordPin[] = {0x48, 0x85, 0xC9, 0x74, 0x71, 0x48, 0x8B, 0x05};
 static const uint8_t kLfTextPin[] = {0x40, 0x53, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x8B, 0x05};
-static const uint8_t kLfFitPin[] = {0x80, 0xBB, 0xD1, 0x2F, 0x09, 0x00, 0x00, 0x74, 0x0A, 0xF3, 0x0F, 0x10, 0x3D, 0xFE, 0x35, 0xAF, 0x00, 0xEB,
-    0x08, 0xF3, 0x0F, 0x10, 0x3D, 0xC0, 0x36, 0xAF, 0x00, 0x0F, 0x2F, 0xC7, 0x48, 0x8D, 0x8B, 0x10, 0x01, 0x00, 0x00, 0x76, 0x59, 0xF3, 0x0F, 0x10,
-    0x0D, 0xB8, 0x27, 0xAF, 0x00, 0xC6, 0x83, 0xF9, 0x28, 0x09, 0x00, 0x01, 0xE8, 0x0C, 0x45, 0xB7, 0xFF, 0xF3, 0x0F, 0x10, 0x93, 0x68, 0x29, 0x09,
-    0x00, 0x48, 0x8D, 0x8B, 0x10, 0x01, 0x00, 0x00, 0xF3, 0x0F, 0x58, 0x15, 0x0D, 0x30, 0xAF, 0x00, 0x0F, 0x28, 0xCF, 0xF3, 0x0F, 0x5E, 0xCA};
+static const uint8_t kLfClearPin[] = {0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x6C, 0x24, 0x18, 0x48, 0x89, 0x74, 0x24, 0x20, 0x57, 0x48, 0x83, 0xEC, 0x70, 0x48, 0x8B, 0xF9};
+/* The column's reads of its visible height: its fit (scroll bar and range), its rows' layout, its scroll into view and
+ * its fade. Not its sizing (0x18D1076, 0x18D0F80): the band sizes the widgets itself. {site, length, picker} */
+typedef struct LfHeightRead { uint32_t at; uint8_t length, picker; } LfHeightRead;
+static const LfHeightRead kLfHeightReads[] = {{0x18D1C67u, 8, 1}, {0x18D1C71u, 8, 0}, {0x18D1E39u, 8, 1}, {0x18D1E43u, 8, 0}, {0x18D2D38u, 9, 1},
+    {0x18D2D4Bu, 9, 0}, {0x18D4074u, 8, 1}, {0x18D407Eu, 8, 0}, {0x18D4592u, 8, 1}, {0x18D459Cu, 8, 0}};
 static const uint8_t kLfKindPin[] = {0x48, 0x85, 0xC9, 0x74, 0x71, 0x48, 0x8B, 0x05, 0xFC, 0x30, 0xF6, 0x02};
 static const uint8_t kLfKindCheckPin[] = {0x83, 0xB8, 0x80, 0x00, 0x00, 0x00, 0x20};
 static const uint8_t kLfKindTextsPin[] = {0x83, 0xF8, 0x21, 0x73, 0x0C, 0x4C, 0x8D, 0x2D, 0x09, 0xA9, 0xA0, 0x01};
@@ -77,7 +69,7 @@ typedef uint8_t (*LfHeldFn)(uintptr_t account, uint32_t type);
 typedef uint8_t* (*LfRecordFn)(uint64_t entity);
 typedef const char* (*LfTextFn)(uint32_t id);
 typedef void (*LfSetFn)(uintptr_t widget, uint64_t packed);
-typedef void (*LfBarFn)(uintptr_t bar, float value);
+typedef void (*LfClearFn)(uintptr_t column);
 
 typedef struct LfRule { HfMod* mod; uint32_t list; HfListRule rule; void* user; } LfRule;
 typedef struct LfBand { HfMod* mod; uint32_t list; float height; } LfBand;
@@ -92,7 +84,9 @@ static LfBand g_lfBands[16];
 static LfBandAt g_lfBandAt[LF_LISTS];
 static uint32_t g_lfRuleCount, g_lfFilterCount, g_lfBandCount;
 static int g_lfWidgets; /* the widget setters match: bands can be given */
-static int g_lfFit;     /* the column's fit matches: the scroll range follows the band */
+static volatile float* g_lfHeights; /* [0] Armory, [1] picker: the visible heights the column reads; NULL: the game's */
+static LfClearFn g_lfClear;
+static int g_lfWeaponBuild;        /* inside the weapon grid's build: its column is the one with the band */
 static uint32_t g_lfOpened[LF_LISTS]; /* the game's own builds of each list (HfListState.opened) */
 static int g_lfOwnBuild;              /* inside LfRebuildNow: a build HellForge asked for */
 static HfListState g_lfState[LF_LISTS] = {{sizeof(HfListState)}, {sizeof(HfListState)}}; /* open follows the screen */
@@ -200,9 +194,8 @@ static int LfUsed(uint32_t list)
 
 /* ---- the Armory's weapon grids ---- */
 
-static void LfGridBuild(uintptr_t grid, uint32_t type)
+static void LfGridBuildRows(uintptr_t grid, uint32_t type)
 {
-    if (!g_lfOwnBuild) g_lfOpened[0]++;
     static uintptr_t at[LF_ROWS_MAX];
     static uint32_t item[LF_ROWS_MAX];
     static uint8_t keep[LF_ROWS_MAX], match[LF_ROWS_MAX];
@@ -298,26 +291,6 @@ static float LfBandTotal(uint32_t list)
 }
 
 /* Moves the heading and the list down by the bands of the list, and the list's bottom stays. Game thread. */
-/* The game fits the column (scroll bar, range) to a fixed visible height on every build, the rules' and filters' too,
- * which do not move the heading. The band takes its top, so the range is set again for the shorter column whenever it
- * is not the one the band needs: else the last row stays below the bottom. */
-static void LfBandFit(uintptr_t root, float band)
-{
-    const uintptr_t column = root + LF_COLUMN, bar = column + LF_BAR;
-    float content = 0, height = 0, pad = 0, one = 0, range = 0;
-    uint8_t picker = 0;
-    if (!g_lfFit || band <= 0 || SafeRead(column + LF_FIT_CONTENT, &content, 4) || SafeRead(column + LF_FIT_PICKER, &picker, 1) ||
-        SafeRead(g_lfGame + (picker ? LF_FIT_PICKER_H : LF_FIT_ARMORY_H), &height, 4) || SafeRead(g_lfGame + LF_FIT_PAD, &pad, 4) ||
-        SafeRead(g_lfGame + LF_FIT_ONE, &one, 4) || SafeRead(bar + 0x7B0, &range, 4))
-        return;
-    const float visible = height - band, want = content + pad - visible;
-    if (want <= 0 || visible <= 0 || fabsf(range - want) < 0.5f) return;
-    *(volatile uint8_t*)(column + LF_FIT_SHOWN) = 1;
-    ((LfBarFn)(g_lfGame + LF_BAR_OPACITY))(bar, one);
-    ((LfBarFn)(g_lfGame + LF_BAR_RATIO))(bar, visible / (content + pad));
-    ((LfBarFn)(g_lfGame + LF_BAR_RANGE))(bar, want);
-}
-
 static void LfBandApply(uint32_t list, uintptr_t root)
 {
     LfBandAt* at = &g_lfBandAt[list - 1];
@@ -333,12 +306,10 @@ static void LfBandApply(uint32_t list, uintptr_t root)
     {
         LfShift(heading, dy, 1), LfShift(column, dy, 1);
         LfShift(column, dy, 0), LfShift(track, dy, 0), LfShift(LfChild(track, 0), dy, 0), LfShift(LfChild(column, 1), dy, 0);
-        /* the builder sets the scroll range for the full height, so the band's rows would stay below the bottom */
         at->applied += dy;
         SafeRead(heading + 4, h, 16);
     }
     at->headY = h[1], at->x = h[0], at->w = h[2], at->top = -h[1] - h[3] - at->applied;
-    LfBandFit(root, at->applied);
 }
 
 /* Whether a grid is on screen: its screen keeps it, and its state, while it is hidden (the loadout card under the
@@ -361,6 +332,61 @@ static uint8_t LfHeld(uintptr_t account, uint32_t type)
 }
 
 /* Which held types this build hides, decided before the walk so a filter that matches nothing can step aside. */
+/* The column's visible height is a constant the game reads in its fit, layout and scrolling; a band takes its top, so
+ * the column reads a height less the band instead, set by each build: the Armory's other pages share the column. */
+static void LfClear(uintptr_t column)
+{
+    if (g_lfHeights != NULL)
+    {
+        g_lfHeights[0] = 738.0f - (g_lfWeaponBuild && g_lfWidgets ? LfBandTotal(HF_LIST_ARMORY_WEAPONS) : 0);
+        g_lfHeights[1] = 528.0f - (g_lfWidgets ? LfBandTotal(HF_LIST_STRATAGEMS) : 0);
+    }
+    g_lfClear(column);
+}
+
+static void LfGridBuild(uintptr_t grid, uint32_t type)
+{
+    if (!g_lfOwnBuild) g_lfOpened[0]++;
+    g_lfWeaponBuild = 1;
+    LfGridBuildRows(grid, type);
+    g_lfWeaponBuild = 0;
+}
+
+/* The heights the column reads pointed at HellForge's, near game.dll: each read is a movss from a rip-relative address. */
+static const char* LfHeightsInstall(uintptr_t game)
+{
+    float values[2] = {0};
+    if (SafeRead(game + LF_ARMORY_H, &values[0], 4) || SafeRead(game + LF_PICKER_H, &values[1], 4) || values[0] != 738.0f || values[1] != 528.0f)
+        return "its heights are not the reviewed ones";
+    for (size_t i = 0; i < sizeof kLfHeightReads / sizeof kLfHeightReads[0]; i++)
+    {
+        const LfHeightRead* r = &kLfHeightReads[i];
+        int32_t disp = 0;
+        uint8_t op[2] = {0};
+        if (SafeRead(game + r->at + r->length - 4, &disp, 4) || SafeRead(game + r->at + r->length - 6, op, 2) || op[0] != 0x0F || op[1] != 0x10 ||
+            game + r->at + r->length + disp != game + (r->picker ? LF_PICKER_H : LF_ARMORY_H))
+            return "its height reads are not the reviewed ones";
+    }
+    if (!PinMatches(game + LF_CLEAR, kLfClearPin, sizeof kLfClearPin)) return "its column's clear is not the reviewed one";
+    float* heights = (float*)AllocateNearGame(game, 64);
+    if (heights == NULL) return "no memory within 2 GB of game.dll";
+    heights[0] = values[0], heights[1] = values[1];
+    if (LoaderHook("lists: the list column's clear", game + LF_CLEAR, (void*)LfClear, (void**)&g_lfClear)) return "its clear could not be hooked";
+    for (size_t i = 0; i < sizeof kLfHeightReads / sizeof kLfHeightReads[0]; i++)
+    {
+        const LfHeightRead* r = &kLfHeightReads[i];
+        uint8_t* field = (uint8_t*)(game + r->at + r->length - 4);
+        const int32_t disp = (int32_t)((intptr_t)&heights[r->picker] - (intptr_t)(game + r->at + r->length));
+        DWORD was;
+        VirtualProtect(field, 4, PAGE_EXECUTE_READWRITE, &was);
+        memcpy(field, &disp, 4);
+        VirtualProtect(field, 4, was, &was);
+    }
+    FlushInstructionCache(GetCurrentProcess(), (void*)(game + LF_CLEAR - 0x2000), 0x4000);
+    g_lfHeights = heights;
+    return NULL;
+}
+
 static void LfPickerDecide(void)
 {
     uintptr_t account = 0;
@@ -413,7 +439,8 @@ static int LfPickerOpen(void)
 static const char* LfArmoryInstall(uintptr_t game)
 {
     g_lfWidgets = PinMatches(game + LF_POS, kLfPosPin, sizeof kLfPosPin) && PinMatches(game + LF_SIZE, kLfSizePin, sizeof kLfSizePin);
-    g_lfFit = PinMatches(game + LF_FIT, kLfFitPin, sizeof kLfFitPin);
+    const char* heights = g_lfWidgets ? LfHeightsInstall(game) : "the widget setters are not the reviewed ones";
+    if (heights != NULL) Note("lists: bands keep the list's full height (%s): its bottom rows can stay below the edge", heights);
     if (!PinMatches(game + LF_GRID_BUILD, kLfBuildPin, sizeof kLfBuildPin) || !PinMatches(game + LF_ROWS_READ, kLfRowsPin, sizeof kLfRowsPin) ||
         !PinMatches(game + LF_TAB_SELECT, kLfTabPin, sizeof kLfTabPin) || !PinMatches(game + LF_RECORD, kLfRecordPin, sizeof kLfRecordPin) ||
         !PinMatches(game + LF_TEXT, kLfTextPin, sizeof kLfTextPin))
