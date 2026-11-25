@@ -650,13 +650,13 @@ More on headings: [stratagem-categories.md](../stratagem-categories.md).
 
 ## Behaviours
 
-A behaviour is the logic an entity runs, such as a Pelican's flight or a turret's choice of target. An entity's
-`BehaviorComponentData` names it. `add_behaviour` (SDK 4) adds a vanilla behaviour that HellForge extends, under an id of
-its own (694 and up). There are two bases so far:
+A behaviour is the logic an entity runs, such as a Pelican's flight. An entity's `BehaviorComponentData` names it.
+`add_behaviour` (SDK 4) adds a vanilla behaviour that HellForge extends, under its own id (694 and up). Two bases:
 
-- `HF_BEHAVIOUR_PELICAN_TRANSPORT` flies to the beacon and hovers. HellForge's version holds there for
+- `HF_BEHAVIOUR_PELICAN_TRANSPORT` flies to the beacon and hovers. HellForge's holds for
   `hold_seconds` (0 to 600), circling the beacon (`orbit_radius` 0 to 200 m, `orbit_height` 0 to 200 m) and turning
-  toward its turret's target (`face_target`).
+  toward its turret's target (`face_target`). `depart` `HF_DEPART_REMOVE` (SDK 52) removes it as it drops a cargo
+  larger than itself, which it would shove climbing out.
 - `HF_BEHAVIOUR_PELICAN_TURRET` is the chin turret, choosing what it sees and can hurt. `burst_seconds` (0 to 60; 0
   fires as long as it keeps a target), `reserve_rounds` (0 to 100000, refilled into its magazine; it never reloads) and
   `aim_height` (0 to 5 m above the target's feet).
@@ -681,8 +681,8 @@ static const HfBehaviour fullAuto = {
 };
 ```
 
-An entity block names one with `.behaviour = &pelicanSupport`. There is room for 8 new behaviours across all mods. If
-HellForge cannot install its behaviours, entities given one run their base's.
+An entity block names one with `.behaviour = &pelicanSupport`. All mods together have room for 8. If HellForge cannot
+install them, entities run their base's.
 
 ## Abilities
 

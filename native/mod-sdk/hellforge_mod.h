@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 51
+#define HF_MOD_SDK_VERSION 52
 #define HF_WEAPON_PAINTS 1 /* HfWeapon.paints exists */
 #define HF_MOD_EXPORT __declspec(dllexport)
 
@@ -213,7 +213,12 @@ typedef struct HfBehaviour
                               * reloads): its magazine's capacity (at most 2047, the game's network limit) + this */
     float aim_height;        /* a turret aims this high above its target's feet (0: at the game's aim point for that
                               * enemy, about 1.5 m up; from above, rounds aimed there overshoot) */
+    uint32_t depart;         /* SDK 52, a transport: HF_DEPART_FLY (0) flies away after it lets its cargo go;
+                              * HF_DEPART_REMOVE is removed then, for a cargo larger than the Pelican, which hangs
+                              * inside it and would shove it as it climbs out */
 } HfBehaviour;
+
+enum { HF_DEPART_FLY = 0, HF_DEPART_REMOVE = 1 }; /* HfBehaviour.depart */
 
 /* A new damage type (SDK 3, add_damage): a copy of a vanilla DamageInfo row (standard and durable damage, armour
  * penetration, status effects) under an id of its own. Zero-initialize it and set `size`:

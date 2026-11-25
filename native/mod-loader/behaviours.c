@@ -57,6 +57,7 @@
 #define BHV_INVALID_ENTITY 0x3483C20u /* u32: the invalid entity id */
 #define BHV_PERCEPTION 0x3326548u     /* perceivers: map +0x30, records +0x50, stride 0x13F8 */
 #define BHV_FACTIONS 0x3326CB8u       /* factions: map +0x12050, masks +0x12078 (u32 per index) */
+#define BHV_ENTITIES 0x346BF98u      /* the entity manager, RemoveEntity's first argument */
 #define BHV_FLAGS 0x3326430u          /* entity flags: map +0x18, values +0x38 (u64 per index); bit 35: never targeted */
 #define BHV_HEALTH 0x3326688u         /* health: map +0x1030, count +0x1020, records +0x1058 stride 0x1B8 */
 #define BHV_ROUNDS 0x3326660u         /* the magazines 0x742900 counts */
@@ -66,6 +67,7 @@
 
 typedef struct BehaviourCtx { uint8_t* entity; uint8_t* p; } BehaviourCtx;
 typedef void (*BhvCtxFn)(BehaviourCtx* ctx);
+typedef void (*BhvRemoveFn)(void* entities, uint32_t entity);
 typedef void (*BhvCtxIntFn)(BehaviourCtx* ctx, int value);
 typedef void (*BhvCtxHashFn)(BehaviourCtx* ctx, uint32_t hash);
 typedef void (*BhvCtxTimeFn)(BehaviourCtx* ctx, float dt);
@@ -80,7 +82,7 @@ enum
 {
     F_667_UPDATE, F_667_STAGE, F_667_EVENT, F_POSITION, F_ORBIT, F_MOVE, F_FACE, F_TARGET,
     F_645_IDLE, F_645_AIM, F_645_ACTIVE, F_645_AMMO, F_645_STAGE, F_SET_TARGET, F_DEGREES, F_VALID, F_FIND_ENTRY,
-    F_NEAR_PLAYER, F_ROUNDS, F_REFILL, F_CAPACITY, F_FIRE_GATE, F_DESCRIPTOR, F_MARK, F_COUNT
+    F_NEAR_PLAYER, F_ROUNDS, F_REFILL, F_CAPACITY, F_FIRE_GATE, F_DESCRIPTOR, F_MARK, F_REMOVE, F_COUNT
 };
 static const GameFunction kBhvFunctions[F_COUNT] = {
     {0x45C760u, {0x48, 0x89, 0x5c, 0x24, 0x18, 0x55, 0x48, 0x8b, 0xec, 0x48, 0x83, 0xec, 0x60, 0x48, 0x8b, 0x05, 0x9c, 0xf8, 0x1d, 0x02, 0x48, 0x33, 0xc4, 0x48, 0x89, 0x45, 0xf0, 0x48, 0x8b, 0x51, 0x08, 0x48}}, /* 667 update */
@@ -107,6 +109,7 @@ static const GameFunction kBhvFunctions[F_COUNT] = {
     {0x4B54D0u, {0x48, 0x89, 0x6c, 0x24, 0x18, 0x56, 0x48, 0x83, 0xec, 0x40, 0x48, 0x8b, 0x31, 0x48, 0x8b, 0xea, 0x0f, 0x29, 0x74, 0x24, 0x30, 0x0f, 0x28, 0xf2, 0x8b, 0x46, 0x08, 0x3b, 0x05, 0x2f, 0xe7, 0xfc}}, /* the weapon within maxDeg of a point (645's fire gate) */
     {0xFD9D40u, {0x48, 0x83, 0xec, 0x08, 0x3b, 0x0d, 0x02, 0x9f, 0x4a, 0x02, 0x0f, 0x84, 0x9b, 0x00, 0x00, 0x00, 0x4c, 0x8b, 0x15, 0x41, 0x22, 0x49, 0x02, 0x45, 0x33, 0xc0, 0x48, 0x89, 0x5c, 0x24, 0x10, 0x48}}, /* an entity's descriptor (+0 its type) */
     {0x8449B0u, {0x41, 0x56, 0x3b, 0x15, 0x68, 0xf2, 0xc3, 0x02, 0x45, 0x8b, 0xf0, 0x4c, 0x8b, 0x0d, 0x7e, 0x1d, 0xae, 0x02, 0x0f, 0x84, 0xd3, 0x00, 0x00, 0x00, 0x45, 0x8b, 0x51, 0x48, 0x45, 0x33, 0xc0, 0x48}}, /* mark a record's fields replicated (no-op without authority) */
+    {0xFDC310u, {0x48, 0x89, 0x5c, 0x24, 0x08, 0x57, 0x48, 0x83, 0xec, 0x30, 0x3b, 0x15, 0x4c, 0x82, 0x4a, 0x02, 0x8b, 0xda, 0x48, 0x8b, 0xf9, 0x0f, 0x84, 0xd4, 0x00, 0x00, 0x00, 0x8b, 0xca, 0xe8, 0xbe, 0xd7}}, /* remove an entity (deferred; 667's own end at stage 10) */
 };
 
 /* The six branches HellForge retargets: {rva of the `ja` (0F 87 rel32), its original target}. */
@@ -143,6 +146,7 @@ typedef struct Behaviour
     int face;
     int32_t reserveRounds;
     float aimHeight;
+    uint32_t depart;
 } Behaviour;
 
 static Behaviour g_behaviours[BHV_MAX];
@@ -167,8 +171,10 @@ static const BhvBase* BhvBaseOf(uint32_t id)
 
 /* The HfBehaviour members newer than face_target (0 when the mod's struct has none), checked with the hold and orbit:
  * 1 if all are in range (else logged). */
-static int BehaviourValues(HfMod* mod, const HfBehaviour* def, float* burst, int32_t* reserve, float* aimHeight)
+static int BehaviourValues(HfMod* mod, const HfBehaviour* def, float* burst, int32_t* reserve, float* aimHeight, uint32_t* depart)
 {
+    *depart = def->size >= offsetof(HfBehaviour, depart) + sizeof def->depart ? def->depart : HF_DEPART_FLY;
+    if (*depart > HF_DEPART_REMOVE) { ApiLog(mod, "add_behaviour: depart HF_DEPART_FLY or HF_DEPART_REMOVE"); return 0; }
     *burst = def->size >= offsetof(HfBehaviour, burst_seconds) + sizeof def->burst_seconds ? def->burst_seconds : 0.0f;
     *reserve = def->size >= offsetof(HfBehaviour, reserve_rounds) + sizeof def->reserve_rounds ? (int32_t)def->reserve_rounds : 0;
     if (*reserve < 0 || *reserve > 100000) { ApiLog(mod, "add_behaviour: reserve_rounds 0 to 100000"); return 0; }
@@ -182,6 +188,8 @@ static int BehaviourValues(HfMod* mod, const HfBehaviour* def, float* burst, int
     }
     return 1;
 }
+
+static const char* DepartNote(uint32_t depart) { return depart == HF_DEPART_REMOVE ? ", removed when it lets its cargo go" : ""; }
 
 static uint32_t ApiAddBehaviour(HfMod* mod, const HfBehaviour* def)
 {
@@ -197,7 +205,8 @@ static uint32_t ApiAddBehaviour(HfMod* mod, const HfBehaviour* def)
     if (base == NULL) { ApiLog(mod, "add_behaviour: base %u is not one HellForge extends (HF_BEHAVIOUR_PELICAN_...)", def->base); return 0; }
     float burst, aimHeight;
     int32_t reserve;
-    if (!BehaviourValues(mod, def, &burst, &reserve, &aimHeight)) return 0;
+    uint32_t depart;
+    if (!BehaviourValues(mod, def, &burst, &reserve, &aimHeight, &depart)) return 0;
     uint32_t index = g_behaviourCount;
     Behaviour* b = live ? (Behaviour*)LiveEntry(LC_BEHAVIOUR, mod, NULL, &index) : &g_behaviours[index];
     if (b == NULL) return 0;
@@ -212,11 +221,13 @@ static uint32_t ApiAddBehaviour(HfMod* mod, const HfBehaviour* def)
     b->face = def->face_target != 0;
     b->reserveRounds = reserve;
     b->aimHeight = aimHeight;
+    b->depart = depart;
     MemoryBarrier(); /* the entry is whole before the count shows it */
     if (index == g_behaviourCount) g_behaviourCount++;
     if (base->id == BHV_PELICAN_TRANSPORT)
-        ApiLog(mod, "adding behaviour %u: %u holding %.0f s, orbit %.0f m at %.0f m%s", b->id, base->id, (double)def->hold_seconds,
-            (double)b->radius, (double)b->height, b->face ? ", facing its turret's target" : "");
+        ApiLog(mod, "adding behaviour %u: %u holding %.0f s, orbit %.0f m at %.0f m%s%s", b->id, base->id, (double)def->hold_seconds,
+            (double)b->radius, (double)b->height, b->face ? ", facing its turret's target" : "",
+            DepartNote(b->depart));
     else
         ApiLog(mod, "adding behaviour %u: %u firing %s", b->id, base->id, burst > 0.0f ? "in bursts" : "while it has an aimed target");
     return b->id;
@@ -360,6 +371,15 @@ static void TransportUpdate(BehaviourCtx* ctx, const Behaviour* b)
     uint64_t hover = *(uint64_t*)(ctx->p + 0x180);
     if (stage == 6 && b->holdMicroseconds != 0 && BhvNow() < hover + b->holdMicroseconds) { HoldTick(ctx, b); return; }
     ((BhvCtxFn)BhvFn(F_667_UPDATE))(ctx); /* 667: approach, hover, release (at once after the hold), depart, removal */
+    /* Leaving stage 7 lets the cargo go (0x9D0260 clears its slot); a Pelican inside a larger cargo would then climb out
+     * through it, so it goes the way 667's stage 10 removes it, at once. */
+    if (b->depart == HF_DEPART_REMOVE && stage == 7 && *(int32_t*)ctx->p == 8)
+    {
+        void* entities = *(void**)(g_bhvGame + BHV_ENTITIES);
+        if (entities == NULL) return;
+        ((BhvRemoveFn)BhvFn(F_REMOVE))(entities, EntityOf(ctx));
+        ApiLog(b->mod, "behaviour %u: transport %u let its cargo go and was removed (depart HF_DEPART_REMOVE)", b->id, EntityOf(ctx));
+    }
 }
 
 static void TurretUpdate(BehaviourCtx* ctx, const Behaviour* b, float dt); /* behaviour_turret.c: 645 with HellForge choosing the target */

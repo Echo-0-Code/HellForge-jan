@@ -43,6 +43,8 @@ packs, and the launcher says when a newer HellForge is out.
   game does not ([overlay.md](docs/modding/overlay.md#click-boxes)).
 - **The Armory's SKINS page (SDK 45).** `add_armory_tab(mod, HF_ARMORY_TABS_SKINS, ...)` puts a mod's tab on a SKINS
   page that HellForge adds to the Armory's categories, so skin tabs leave the weapons bar ([ui.md](docs/modding/ui.md#the-skins-page-sdk-45)).
+- **A transport Pelican that leaves no wake (SDK 52).** `HfBehaviour.depart = HF_DEPART_REMOVE` removes a transport
+  Pelican as it lets its cargo go, so a cargo larger than the Pelican is not shoved by it climbing out ([content.md](docs/modding/content.md#behaviours)).
 - **Loading screen tips and game texts (SDK 51).** `add_tip` adds a tip to the transition screens, gives a vanilla tip
   new text or takes one out; `set_text` gives any game text id a mod's own text ([ui.md](docs/modding/ui.md#game-texts-and-loading-screen-tips)).
 - **Search lists by trait (SDK 50).** A list filter that starts with `@` matches the trait lines a row's card shows,
