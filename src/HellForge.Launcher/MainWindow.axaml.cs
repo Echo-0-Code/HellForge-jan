@@ -910,6 +910,7 @@ public partial class MainWindow : Window
         if (running && NewProfileForm.IsVisible) ShowNewProfileForm(false);
         if (!running) SetLiveBackend(null);
         SetModsLocked(running);
+        DrawPlayModpacks();
         SetWeaponLevelsLocked(running);
         UpdateSettingsImport();
         UpdateLanguages();
@@ -1026,7 +1027,7 @@ public partial class MainWindow : Window
         Control[] pages = [PlayPage, ProfilePage, ModsPage, PlanetsPage, ConsolePage, SettingsPage];
         for (var i = 0; i < pages.Length; i++) pages[i].IsVisible = i == index;
         SetupPage.IsVisible = false;
-        if (index == 0) UpdateSyncStatus();  // Steam may have signed in to another account since
+        if (index == 0) { UpdateSyncStatus(); DrawPlayModpacks(); } // Steam may have signed in since; a pack may have changed
         if (index == 2) RefreshMods(onlyIfChanged: true); // shows the page as drawn, then what changed
 
         if (index == 3) ShowPlanets(); // the file and the war as they are now
