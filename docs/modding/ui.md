@@ -156,6 +156,7 @@ uint32_t tab = HAS(hf, add_menu_tab) ? hf->add_menu_tab(mod, HF_MENU_TABS_ARMORY
 | `HF_MENU_TABS_SPACE_STATION` | the Democracy Space Station | 3 |
 | `HF_MENU_TABS_CUSTOMIZE` | the armory's customize screen of one weapon | 2 |
 | `HF_MENU_TABS_INFO_TERMINAL` | the ship's Info Terminal | 1 |
+| `HF_MENU_TABS_ARMORY_SKINS` | the Armory's SKINS page (SDK 45) | 0 |
 
 - The Armory's four values are `HF_ARMORY_TABS_...`, so `add_armory_tab` takes them too.
 - The Escape menu's and Change Bindings' bars are left out: the Vanilla Plus Megapack puts its MODS tabs there and
@@ -165,6 +166,23 @@ uint32_t tab = HAS(hf, add_menu_tab) ? hf->add_menu_tab(mod, HF_MENU_TABS_ARMORY
 - The callback runs on the game thread, also from inside the game's own tab change. It is called with 0 when the
   screen closes. It may call the game's code.
 - The label is the mod's own text, made as `add_text` makes one.
+
+### The SKINS page (SDK 45)
+
+`HF_ARMORY_TABS_SKINS` (`HF_MENU_TABS_ARMORY_SKINS`) puts a tab on a page of HellForge's own. The first such tab adds a
+SKINS label to the Armory's categories, which takes one of that bar's 3 free places. Picking SKINS opens the weapons
+page with the mods' SKINS tabs alone on its bar, in the order the mods asked, up to 8:
+
+```c
+uint32_t tab = hf->add_armory_tab(mod, HF_ARMORY_TABS_SKINS, "SUPPORT", OnSupport, NULL);
+if (tab == 0) tab = hf->add_armory_tab(mod, HF_ARMORY_TABS_WEAPONS, "SUPPORT", OnSupport, NULL); /* before SDK 45 */
+```
+
+- The page is the weapons page underneath: its grid and tab records are PRIMARY, SECONDARY and THROWABLE's, as the
+  game built them. The picked tab's callback rebuilds the grid or covers it.
+- A select the callback makes (the game's 0x14570B0 with a weapons index) reaches the game.
+- Each time the game sets the weapons labels again (its input after the grid, the way back from CUSTOMIZE), the SKINS
+  labels go back, with the tab picked last. Back or Esc closes the page to the overview with WEAPONRY picked.
 
 ## A category in Vehicle Customization (retired)
 

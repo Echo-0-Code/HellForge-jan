@@ -185,6 +185,10 @@ typedef struct HfHoming
 #define HF_MENU_TABS_SPACE_STATION 5u /* the Democracy Space Station (3 vanilla labels) */
 #define HF_MENU_TABS_CUSTOMIZE 6u     /* the armory's customize screen of one weapon (2 vanilla labels) */
 #define HF_MENU_TABS_INFO_TERMINAL 7u /* the ship's Info Terminal (1 vanilla label) */
+/* SDK 45: the Armory's SKINS page. Its first tab adds a SKINS label to the categories; picking that opens a page whose
+ * bar holds the mods' SKINS tabs alone (8 at most), over the weapons page's grid. add_armory_tab takes it too. */
+#define HF_ARMORY_TABS_SKINS 8u
+#define HF_MENU_TABS_ARMORY_SKINS HF_ARMORY_TABS_SKINS
 typedef void (*HfArmoryTabCallback)(HfMod* mod, uint32_t tab, int selected, void* user);
 
 /* A new ability (SDK 7, add_ability), moved here from hellforge_mod.h: a vanilla ability HellForge holds hold_seconds
