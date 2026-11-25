@@ -90,7 +90,5 @@ public partial class MainWindow
         if (modpackDeleteAsked != data?.Settings.Modpack) modpackDeleteAsked = null;
         DeleteModpackButton.Content = modpackDeleteAsked != null ? $"Delete {modpackDeleteAsked}? Click again" : "Delete";
         if (!usable) NewModpackPanel.IsVisible = false;
-        ModpackHint.Text = modsLocked ? "Modpacks switch between sessions."
-            : "A modpack keeps which mods are on. New ones start with every mod on; the order stays shared.";
     }
 }
