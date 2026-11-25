@@ -16,10 +16,10 @@ jobs:
       - name: Download the artifact and publish it
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: "45702018891"
-          TAG: "test-0f421d1"
-          TARGET: "0f421d16e1650e38906b9c7c1b547bd4186d41e1"
-          TITLE: "Test build 0f421d1, 2d07ec2 + Armory bar width + search by trait (SDK 50) + list height fix (run 45702018891)"
+          RUN_ID: "45707204310"
+          TAG: "test-2047b57"
+          TARGET: "2047b579b2aeb9b25f693e1887593173f3607eb1"
+          TITLE: "Test build 2047b57, 0f421d1 + tips (SDK 51) + plane altitude + modpack chooser + unnamed joint effects (run 45707204310)"
         run: |
           gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n test-package -D pkg
           find pkg -type f -exec ls -la {} \;
