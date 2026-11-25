@@ -46,6 +46,7 @@ typedef struct MvUnit
     uint32_t body, engaged, told;
     float lost, lastSurface, seatThrottle, seatSteer, seatLift;
     float flWant, flIdle; /* a flier: the height it climbs toward, and how long nobody has flown it (movers_fly.c) */
+    float flDatum;        /* a helicopter: the ground under it when it first sat down, where its altitude is 0 */
     uint32_t rail;        /* a rail mover's rail, once it is on it (movers_rail.c) */
     float railS, railDir; /* how far along it, and +1 or -1: the way along it its heading points */
     uint32_t loggedDriver;

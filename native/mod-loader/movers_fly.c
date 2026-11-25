@@ -26,6 +26,8 @@ static float FlGap(MvUnit* m, const MvDef* def, const float p[3], float dt)
     {
         m->engaged = 1;
         m->targetHeight = m->flWant = h->height_min;
+        m->flDatum = surface;
+        if (def->def.mode == HF_MOVE_HELI) m->flWant = -2.0f; /* collective down: it sits */
         ApiLog(def->mod, "mover: unit %u is on the ground (%.2f m): it flies when driven", m->entity, (double)gap);
     }
     return gap;
@@ -53,6 +55,25 @@ static float FlHeave(const MvUnit* m, const HfMoverHover* h, float gap, float vz
     if (vz > climbMax) lift = fminf(lift, -2.0f * (vz - climbMax));
     if (vz < -dropMax) lift = fmaxf(lift, 2.0f * (-dropMax - vz));
     return ((1.0f - h->carried) * MV_G + MvClamp(lift, -0.5f * MV_G, 0.8f * MV_G)) * authority;
+}
+
+/* A helicopter's collective (Jan's design): the keys move the altitude where its thrust equals its weight, and it stays
+ * there when they let go. Thrust falls with air density, exp(-alt / H). Real air's H is 8.4 km; H = height_max / ln 1.3
+ * gives a 1.3 thrust-to-weight rotor its ceiling at height_max over flDatum. No ground effect: at this H its real 10 %
+ * would hold it 15 m up. */
+#define FL_HELI_TW 1.3f /* a utility helicopter's thrust over its weight, its engine's limit */
+
+static float FlHeliHeave(MvUnit* m, const HfMoverHover* h, const float p[3], float gap, float vz, float dt)
+{
+    const float scale = h->height_max / logf(FL_HELI_TW), alt = p[2] - m->flDatum, groundAlt = alt - gap;
+    const float wn = sqrtf(MV_G / scale); /* thinning air acts as a spring of g / H, damped by damping x critical */
+    m->flIdle = m->driver != HF_DRIVER_NONE ? 0 : m->flIdle + dt;
+    if (m->flIdle > FL_LAND_S) m->flWant -= 0.5f * h->climb_rate * dt; /* nobody flies it: it lowers the collective */
+    else m->flWant += m->lift * h->climb_rate * dt;
+    m->flWant = MvClamp(m->flWant, groundAlt - 2.0f, h->height_max); /* 2 m under the ground: it sits on its gear */
+    m->targetHeight = m->flWant - groundAlt;
+    const float thrust = fminf(expf((m->flWant - alt) / scale), FL_HELI_TW); /* times its weight */
+    return (1.0f - h->carried) * MV_G * thrust - 2 * h->damping * wn * vz;
 }
 
 /* A plane's horizontal push: thrust up to speed against quadratic drag, throttle below 0 brakes (air brakes aloft,
@@ -107,13 +128,17 @@ static void FlControl(MvUnit* m, const MvDef* def, float dt)
     float fl[2] = {-sinf(m->yaw), cosf(m->yaw)}, a[2] = {0, 0}, yawRate = 0, n[3];
     const int plane = d->mode == HF_MOVE_PLANE, onGround = gap < d->hover.height_min + FL_GEAR;
     const float vf = v[0] * fl[0] + v[1] * fl[1], wing = plane ? MvClamp(vf * vf / (d->stall_speed * d->stall_speed), 0, 1) : 1.0f;
-    FlTarget(m, &d->hover, dt, !plane || vf >= d->stall_speed);
-    const float az = FlHeave(m, &d->hover, gap, v[2], plane && !onGround ? wing : 1.0f);
-    if (plane) FlPlaneDrive(m, def, fl, v, dt, a, &yawRate);
-    else HvDrive(m, def, fl, v, dt, a, &yawRate);
+    float az;
+    if (plane)
+    {
+        FlTarget(m, &d->hover, dt, vf >= d->stall_speed);
+        az = FlHeave(m, &d->hover, gap, v[2], onGround ? 1.0f : wing);
+        FlPlaneDrive(m, def, fl, v, dt, a, &yawRate);
+    }
+    else { az = FlHeliHeave(m, &d->hover, w + 12, gap, v[2], dt); HvDrive(m, def, fl, v, dt, a, &yawRate); }
     const float j[3] = {a[0] * mass * dt, a[1] * mass * dt, az * mass * dt};
     g_hvImpulse(m->body, j, NULL);
-    if (onGround && m->targetHeight <= d->hover.height_min + 0.05f) HvTargetUp(m, d, w, n);
+    if (onGround && m->targetHeight <= (plane ? d->hover.height_min + 0.05f : FL_GEAR)) HvTargetUp(m, d, w, n);
     else FlUp(d, fl, v, a, yawRate, n);
     HvAttitude(m, d, w, om, n, yawRate, dt);
     m->speed = vf;

@@ -149,7 +149,7 @@ and the seat over `ai_drive` while its driver gave input in the last 2 s. `mover
 ## Helicopters and planes
 
 `HF_MOVE_HELI` and `HF_MOVE_PLANE` are fliers. Like a hover, a flier is the game's physics body with seats, and HellForge
-pushes its chassis. It uses the same `hover` block, with heights up to 500 m over the ground.
+pushes its chassis. It uses the same `hover` block, with heights up to 500 m.
 
 ```c
 HfMoverDef heli = {sizeof heli};
@@ -161,10 +161,22 @@ heli.hover.height_max = 60.0f;
 api->add_mover(mod, &heli);
 ```
 
-How a flier takes off and lands:
+Both wait until they sit on the ground, such as after a Pelican drop.
 
-- It waits until it sits on the ground, such as after a Pelican drop. Then it holds `hover.height_min` there.
-- Once anyone drives it, it climbs to `hover.height` at `hover.climb_rate`. The `lift` input moves it between the heights.
+How a helicopter climbs:
+
+- `lift` moves its collective: the altitude where its thrust equals its weight moves at `hover.climb_rate`. Let go and
+  that altitude stays, so it settles there.
+- Altitude counts from the ground where it first sat down, not from the ground under it. Hills don't lift it: fly
+  around them or climb over them.
+- Thrust thins with altitude like air, which slows the climb near `hover.height_max` (its ceiling).
+- `hover.damping` sets how fast it settles. `hover.height` and `stiffness` don't apply.
+- When nobody has driven it for 3 s, it lowers the collective at half `climb_rate` and lands.
+
+How a plane takes off and lands:
+
+- It holds `hover.height_min` on its gear. Once anyone drives it, it climbs to `hover.height` at `hover.climb_rate`.
+  The `lift` input moves it between the heights.
 - When nobody has driven it for 3 s, it lands: it sinks to `height_min`.
 - With no ground in reach, it holds its height over the last ground it saw.
 
