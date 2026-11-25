@@ -43,7 +43,8 @@ A backpack that vents steam, as a Coolant Pack does, needs three things:
 1. Particles that are loaded. Load their package with `load_package`, or put them in a session package of your mod's
    data ([packages](runtime.md#packages)). Unloaded particles are refused.
 2. The entity to hang them on, such as the player's entity from `HfPlayerEvent`.
-3. Which node of its unit they hang from. `""` is the unit's root. A node the unit lacks is refused.
+3. Which node of its unit they hang from. `""` is the unit's root, and `"#1a2b3c4d"` names an unnamed joint by its
+   id. A node the unit lacks is refused.
 
 ```c
 static uint32_t g_steam;

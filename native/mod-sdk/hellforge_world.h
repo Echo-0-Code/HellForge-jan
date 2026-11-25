@@ -32,7 +32,7 @@ typedef struct HfEffect
     /* The entity it follows (its unit carries it, and it goes when the unit goes), or 0: it stays at `position`. */
     uint32_t entity;
     uint32_t reserved;
-    const char* node;   /* the unit's node it hangs from ("" or NULL: the root) */
+    const char* node;   /* the unit's node it hangs from ("" or NULL: the root; "#1a2b3c4d": an unnamed joint by its id) */
     /* With an entity: its offset from the node, in the node's own axes (metres). Without: where it plays in the world. */
     float position[3];
 } HfEffect;
