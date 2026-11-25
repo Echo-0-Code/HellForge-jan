@@ -18,6 +18,7 @@ SDK 47 adds a helicopter's `thrust_max`, fixed weapons its driver fires, and dam
 - [Drivetrains and your own drive code](#drivetrains-and-your-own-drive-code)
 - [Hover vehicles](#hover-vehicles)
 - [Helicopters and planes](#helicopters-and-planes)
+- [Mouse steering](#mouse-steering)
 - [Fixed weapons](#fixed-weapons)
 - [Damage zones](#damage-zones)
 - [Boats and submarines](#boats-and-submarines)
@@ -69,6 +70,7 @@ api->add_mover(mod, &walker);
 | `stall_speed`, `bank_max` | 0.45 × `speed`, 40° | [Helicopters and planes](#helicopters-and-planes) |
 | `dive_depth` | 3 m | [Boats and submarines](#boats-and-submarines) |
 | `rail` | 0: the nearest | [Rail vehicles](#rail-vehicles) |
+| `mouse_steer` | 0: the keys | [Mouse steering](#mouse-steering) |
 
 ## Water
 
@@ -205,6 +207,20 @@ A plane needs airspeed:
 
 Set its physics data as for a hover: `VRA` extraGravity at `hover.carried`, wheels at low friction, and `VRD` word 11 at 0.
 A seated driver gives throttle and steer, and `lift` with Space (up) and Control (down).
+
+## Mouse steering
+
+SDK 48's `mouse_steer` 1 lets a seated driver fly with the mouse. The mover turns and climbs toward where the camera looks.
+
+- A plane aloft banks into the turn, up to `bank_max`. On its gear, or below `stall_speed`, it steers like a car.
+- A flier's `lift` follows the camera's pitch: a plane climbs or dives along it, a helicopter moves its collective.
+  About 3° either side of level holds height.
+- A/D steer by hand while held, such as a roll. Space and Control still move `lift`.
+- W/S move a throttle lever that stays where it is left. S with the lever closed brakes, as throttle below 0 does.
+- It counts as driven while the lever is open, so a pilot can fly with the mouse alone.
+- Only this machine's driver steers by its camera. Another machine's driver drives with the keys.
+
+`view_pose` (docs/modding/world.md) reads the same camera, for a HUD that marks where the mover flies.
 
 ## Fixed weapons
 

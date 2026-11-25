@@ -134,6 +134,17 @@ static uintptr_t TcamPose(uintptr_t unit)
     return sg != 0 && !SafeRead(sg + 0x20, &poses, sizeof poses) ? poses : 0;
 }
 
+/* SDK 48, view_pose: the main world's last render pose (row-major 4x4: right, forward, up, position); 0 unread. */
+static int TcamView(float out[16])
+{
+    if (g_tcamState != 1 || g_tcamWorld == NULL) return 0;
+    const uintptr_t world = g_tcamWorld();
+    if (world == 0 || SafeRead(world + TCAM_WORLD_RENDER_POSE, out, 16 * sizeof(float))) return 0;
+    for (int i = 0; i < 16; i++) if (!isfinite(out[i])) return 0;
+    const float f = out[4] * out[4] + out[5] * out[5] + out[6] * out[6];
+    return f > 0.9f && f < 1.1f;
+}
+
 static float TcamEase(float t) { t = t < 0 ? 0 : t > 1 ? 1 : t; return t * t * (3 - 2 * t); }
 
 /* Where the blend should be this frame, moving the phase on when its time is up. */

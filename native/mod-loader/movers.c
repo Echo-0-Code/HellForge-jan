@@ -63,6 +63,9 @@ typedef struct MvUnit
     float gunWait[MV_KIT_SLOTS], znSink, znSpin, znSweep, znContact[MV_KIT_SLOTS]; /* znSink, znSpin: m/s, rad/s a broken zone forces */
     uint8_t gunHeld[MV_KIT_SLOTS];
     int32_t znHealth[MV_KIT_SLOTS];
+    /* SDK 48 (movers_view.c): mouse_steer's throttle lever, whether this machine's Helldiver drives it, and A/D */
+    float seatLever, seatKeys;
+    uint32_t seatLocal;
 } MvUnit;
 
 static MvDef g_mvDefs[MV_DEFS];
@@ -521,13 +524,17 @@ static void MvTrace(MvUnit* m, const MvDef* def, float dt)
 
 #define HV_SEAT_S 2.0 /* a hover's seated driver's last throttle or steer drives it this long */
 
+static void ViewSteer(MvUnit* m, const MvDef* def); /* movers_view.c (SDK 48) */
 /* Who drives it now: a mod's input while it holds, a hover's seated driver, the custom AI, or nobody. */
 static void MvDriver(MvUnit* m, const MvDef* def)
 {
     if (m->inputAge < MV_INPUT_S) { m->driver = HF_DRIVER_MOD; return; }
     m->strafe = m->lift = m->boost = 0; /* a mod's input has them, and a seat's lift keys */
     if (m->seatAge < HV_SEAT_S) /* any mover whose unit has a driver's seat, read where it is moved */
-    { m->driver = HF_DRIVER_SEAT; m->throttle = m->seatThrottle; m->steer = m->seatSteer; m->lift = m->seatLift; }
+    {
+        m->driver = HF_DRIVER_SEAT; m->throttle = m->seatThrottle; m->steer = m->seatSteer; m->lift = m->seatLift;
+        if (def->def.mouse_steer && m->seatLocal) ViewSteer(m, def); /* SDK 48: toward where the camera looks */
+    }
     else if (def->ai) { m->driver = HF_DRIVER_AI; MvAiInputs(m, def); }
     else { m->driver = HF_DRIVER_NONE; m->throttle = 0; m->steer = 0; }
 }
@@ -850,6 +857,7 @@ static const char* MvRefusal(const HfMoverDef* in, HfMoverDef* d)
     if (!AiIn(d->speed, 0.1f, MvFlier(d->mode) ? 120.0f : 40.0f) || !AiIn(d->stall_speed, 1, d->speed) || !AiIn(d->bank_max, 5, 80) || !AiIn(d->dive_depth, 0.5f, 30))
         return "speed 0.1 .. 40 (a flier 120), stall_speed 1 .. speed, bank_max 5 .. 80, dive_depth 0.5 .. 30";
     if (!AiIn(d->thrust_max, 1.05f, 3)) return "thrust_max 1.05 .. 3";
+    if (d->mouse_steer > 1) return "mouse_steer 0 or 1";
     if (!AiIn(d->reverse_speed, 0, 40) || !AiIn(d->acceleration, 0.1f, 200) || !AiIn(d->brake, 0.1f, 200) ||
         !AiIn(d->turn_rate, 1, 1440) || !AiIn(d->turn_radius, 0, 100) || !AiIn(d->step_up, 0, 10) || !AiIn(d->step_down, 0, 50) ||
         !AiIn(d->reach, 0, 20) || !AiIn(d->start_delay, 0, 120))
@@ -957,6 +965,7 @@ static int ApiAiDrive(HfMod* mod, uint64_t entity, const HfAiDrive* in)
 }
 
 #include "movers_kit.c" /* SDK 47: fixed guns and damage zones (MvUnitOf, g_hvImpulse, ActLocalAvatar) */
+#include "movers_view.c" /* SDK 48: mouse_steer (TcamView, KitLocalRoot) */
 
 /* The table's entries from SDK 35 on (ApiInit). */
 #define MV_API ApiAddMover, ApiMoverInput, ApiMoverState, ApiAiDrive

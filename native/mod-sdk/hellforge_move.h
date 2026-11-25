@@ -120,10 +120,15 @@ typedef struct HfMoverDef
     /* SDK 47 (an SDK 43 size moves with the fields above) */
     float thrust_max;     /* HF_MOVE_HELI: its rotor's most thrust over its weight, 1.05 .. 3; its ceiling, where thinning
                            * air leaves only its weight, is hover.height_max (default 1.3, a utility helicopter's) */
+    /* SDK 48 (an SDK 47 size moves with the fields above) */
+    uint32_t mouse_steer; /* 1: a seated driver flies it with the mouse: it turns and climbs toward where the camera looks
+                           * (a plane banks, at most bank_max), A/D steer it by hand while held, and W/S move a throttle
+                           * that stays where it is left. 0: the keys drive it (default) */
 } HfMoverDef;
 
 #define HF_MOVER_DEF_SIZE_39 ((uint32_t)offsetof(HfMoverDef, stall_speed))
 #define HF_MOVER_DEF_SIZE_43 ((uint32_t)offsetof(HfMoverDef, thrust_max))
+#define HF_MOVER_DEF_SIZE_47 ((uint32_t)offsetof(HfMoverDef, mouse_steer))
 
 /* SDK 47: fixed forward weapons a mover's driver fires (add_fixed_gun): gun pods and rocket pods locked to the nose,
  * aimed by pointing the vehicle. They fire on the host, while this machine's Helldiver sits in the driver's seat

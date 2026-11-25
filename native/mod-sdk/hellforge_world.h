@@ -128,6 +128,19 @@ typedef struct HfJointPose
     float reserved;    /* 0 */
 } HfJointPose;
 
+/* view_pose (SDK 48): where this machine's camera is and where it looks, as the last frame rendered it. World space,
+ * metres, Z up. To put a world point p on an overlay screen (1080 units high, width wide): d = p - position; depth =
+ * d . forward; x = width / 2 + (d . right) / depth * k, y = 540 - (d . up) / depth * k, with k = 540 / tan(fov / 2). */
+typedef struct HfView
+{
+    uint32_t size;        /* sizeof(HfView) */
+    float right[3];       /* the camera's right, unit length */
+    float forward[3];     /* where it looks, unit length */
+    float up[3];          /* its up, unit length */
+    float position[3];    /* where it is */
+    float fov;            /* its vertical field of view, radians (the game's default view: 0.96) */
+} HfView;
+
 /* joint_pose's spaces */
 #define HF_POSE_WORLD 0u /* a 4x4 row-major matrix: the axis rows (with scale), then the position at [12..14] */
 #define HF_POSE_LOCAL 1u /* an HfJointPose */

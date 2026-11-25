@@ -123,6 +123,17 @@ static void JointPosesInstall(void)
 }
 
 /* SDK 28, on_render: 1 added, 0 refused (logged). */
+/* SDK 48, view_pose: where this machine's camera is and looks (terminal_camera.c reads the world's render pose). The
+ * fov is not read yet: 0. */
+static int ApiViewPose(HfMod* mod, HfView* out)
+{
+    float p[16];
+    if (mod == NULL || out == NULL || out->size < sizeof *out || !TcamView(p)) return 0;
+    memcpy(out->right, p, 12); memcpy(out->forward, p + 4, 12); memcpy(out->up, p + 8, 12); memcpy(out->position, p + 12, 12);
+    out->fov = 0;
+    return 1;
+}
+
 static int ApiOnRender(HfMod* mod, HfRenderCallback callback, void* user)
 {
     if (callback == NULL || ModGone(mod)) { ApiLog(mod, "on_render: refused: no callback"); return 0; }
