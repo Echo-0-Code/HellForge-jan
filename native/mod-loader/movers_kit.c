@@ -6,8 +6,8 @@
  * gun's `seat`, as the quad's rider fit tests. Zones run before HF_ON_DAMAGE_PRE's listeners (event_sources.c), so a
  * zone's scale is what the mods see; a broken engine or control zone sets m->znSink, which movers_fly.c obeys. */
 
-#define KIT_GUNS 64
-#define KIT_ZONES 64
+#define KIT_GUNS 256  /* all movers' guns: 8 a mover */
+#define KIT_ZONES 512 /* all movers' zones: 24 a mover (armour plates and rotors) */
 #define KIT_SEAT_R 1.2f   /* metres: a Helldiver's root this near the seat sits in it */
 #define KIT_MAX_SHOTS 4   /* rounds one update may fire (a 60 fps update at 3,000 rpm fires about 1) */
 #define ZN_RAYS 8         /* rays round a rotor's disc, hub to tip */
@@ -23,6 +23,10 @@ static volatile LONG g_kitGunCount;
 static KitZone g_kitZones[KIT_ZONES];
 static volatile LONG g_kitZoneCount;
 static uint32_t g_kitRandom = 0x9E3779B9u;
+/* add_fixed_gun and add_damage_zone: a mover's slot and the entry are taken together, and the entry is whole before the
+ * count shows it to the updates and the damage hook, which read the tables with no lock. */
+static SRWLOCK g_kitAddLock = SRWLOCK_INIT;
+static volatile LONG g_znMissed; /* damage events not checked against the zones while g_mvLock was busy */
 
 static float KitRandom(void) { g_kitRandom ^= g_kitRandom << 13; g_kitRandom ^= g_kitRandom >> 17; g_kitRandom ^= g_kitRandom << 5; return (g_kitRandom & 0xFFFFFF) / 16777216.0f; }
 
@@ -60,9 +64,11 @@ static void KitInit(MvUnit* m)
     for (LONG i = 0; i < g_kitZoneCount; i++) if (g_kitZones[i].def.entity == resource) m->znHealth[g_kitZones[i].slot] = g_kitZones[i].def.health;
 }
 
-/* The trigger's button, held while the game's window has the keyboard (HvLiftKeys's check). */
+/* The trigger's button, held while the game's window has the keyboard (HvLiftKeys's check) and no modal screen (a
+ * mod's map, the search box) has the mouse: a click there is the screen's, not a burst. */
 static int KitTrigger(uint32_t trigger)
 {
+    if (g_overlayModalOpen > 0) return 0;
     DWORD process = 0;
     const HWND w = GetForegroundWindow();
     if (w == NULL || !GetWindowThreadProcessId(w, &process) || process != GetCurrentProcessId()) return 0;
@@ -268,7 +274,16 @@ static const KitZone* ZnAt(const MvUnit* m, const float local[3])
 /* Before the mods' damage listeners (ConsumeDamageDetour), on the game thread: hits landing in a zone. */
 static void ZnDamage(uint8_t* event)
 {
-    if (g_kitZoneCount == 0 || !TryAcquireSRWLockExclusive(&g_mvLock)) return;
+    if (g_kitZoneCount == 0) return;
+    if (!TryAcquireSRWLockExclusive(&g_mvLock)) { InterlockedIncrement(&g_znMissed); return; } /* counted; a later hit reports the total */
+    static ULONGLONG told;
+    static LONG toldMissed;
+    if (g_znMissed != toldMissed && GetTickCount64() - told > 10000)
+    {
+        told = GetTickCount64();
+        toldMissed = g_znMissed;
+        Note("movers: %ld damage event(s) not checked against damage zones so far (the movers' lock was busy)", (long)g_znMissed);
+    }
     uint32_t target;
     int32_t amount;
     float p[3], w[16], local[3];
@@ -331,10 +346,19 @@ static uint32_t ApiAddFixedGun(HfMod* mod, const HfFixedGunDef* in)
     HfFixedGunDef d;
     const char* why = KitGunRefusal(in, &d);
     if (why) { ApiLog(mod, "add_fixed_gun: refused: %s", why); return 0; }
+    AcquireSRWLockExclusive(&g_kitAddLock);
     const uint32_t slot = KitSlot(d.entity, 0);
-    const LONG at = InterlockedIncrement(&g_kitGunCount) - 1;
-    if (at >= KIT_GUNS) { InterlockedDecrement(&g_kitGunCount); ApiLog(mod, "add_fixed_gun: refused: %d guns already", KIT_GUNS); return 0; }
-    g_kitGuns[at] = (KitGun){mod, d, slot};
+    const LONG at = g_kitGunCount;
+    const int full = at >= KIT_GUNS, taken = slot >= (0 ? MV_ZONE_SLOTS : MV_KIT_SLOTS);
+    if (!full && !taken)
+    {
+        g_kitGuns[at] = (KitGun){mod, d, slot};
+        MemoryBarrier();
+        InterlockedExchange(&g_kitGunCount, at + 1);
+    }
+    ReleaseSRWLockExclusive(&g_kitAddLock);
+    if (full) { ApiLog(mod, "add_fixed_gun: refused: %d guns already", KIT_GUNS); return 0; }
+    if (taken) { ApiLog(mod, "add_fixed_gun: refused: that mover has all its guns already"); return 0; }
     ApiLog(mod, "add_fixed_gun(%016llx): gun %u, projectile %u, %.0f rpm, %u rounds, %s, at %.2f %.2f %.2f", (unsigned long long)d.entity, slot + 1,
         d.projectile, (double)d.fire_rate, d.rounds, d.trigger == HF_TRIGGER_ALT ? "aim button" : "fire button", (double)d.muzzle[0], (double)d.muzzle[1], (double)d.muzzle[2]);
     return slot + 1;
@@ -403,10 +427,19 @@ static uint32_t ApiAddDamageZone(HfMod* mod, const HfDamageZoneDef* in)
     HfDamageZoneDef d;
     const char* why = ZnRefusal(in, &d);
     if (why) { ApiLog(mod, "add_damage_zone: refused: %s", why); return 0; }
+    AcquireSRWLockExclusive(&g_kitAddLock);
     const uint32_t slot = KitSlot(d.entity, 1);
-    const LONG at = InterlockedIncrement(&g_kitZoneCount) - 1;
-    if (at >= KIT_ZONES) { InterlockedDecrement(&g_kitZoneCount); ApiLog(mod, "add_damage_zone: refused: %d zones already", KIT_ZONES); return 0; }
-    g_kitZones[at] = (KitZone){mod, d, slot};
+    const LONG at = g_kitZoneCount;
+    const int full = at >= KIT_ZONES, taken = slot >= (1 ? MV_ZONE_SLOTS : MV_KIT_SLOTS);
+    if (!full && !taken)
+    {
+        g_kitZones[at] = (KitZone){mod, d, slot};
+        MemoryBarrier();
+        InterlockedExchange(&g_kitZoneCount, at + 1);
+    }
+    ReleaseSRWLockExclusive(&g_kitAddLock);
+    if (full) { ApiLog(mod, "add_damage_zone: refused: %d zones already", KIT_ZONES); return 0; }
+    if (taken) { ApiLog(mod, "add_damage_zone: refused: that mover has all its zones already"); return 0; }
     static const char* const kEffect[] = {"plain", "engine", "control"};
     ApiLog(mod, "add_damage_zone(%016llx): zone %u, %s, %.2f m at %.2f %.2f %.2f, %d health, x%.2f to the vehicle", (unsigned long long)d.entity, slot + 1,
         kEffect[d.effect], (double)d.radius, (double)d.center[0], (double)d.center[1], (double)d.center[2], d.health, (double)(d.scale < 0 ? 0 : d.scale));

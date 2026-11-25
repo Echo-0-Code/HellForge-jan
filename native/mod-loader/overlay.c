@@ -37,9 +37,17 @@ static int OverlayDraw(void* user, const HfDraw* draw, const HfInput* input, flo
     return OverlayOwner(s) != NULL ? s->def.draw(s->def.user, draw, input, dt) : 0;
 }
 
+/* Modal screens open now (they have the mouse and keys): input HellForge reads itself (movers' fixed guns) waits. */
+static volatile LONG g_overlayModalOpen;
+
 static void OverlayOpened(void* user, int open)
 {
     OverlayScreen* s = user;
+    if (s->def.flags & HF_SCREEN_MODAL)
+    {
+        const LONG now = InterlockedAdd(&g_overlayModalOpen, open ? 1 : -1);
+        if (now < 0) InterlockedExchange(&g_overlayModalOpen, 0);
+    }
     if (OverlayOwner(s) != NULL && s->def.opened != NULL) s->def.opened(s->def.user, open);
 }
 
