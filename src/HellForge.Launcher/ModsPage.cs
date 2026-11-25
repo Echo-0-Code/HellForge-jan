@@ -54,6 +54,7 @@ public partial class MainWindow
         OpenModsButton.IsEnabled = RefreshModsButton.IsEnabled = paths.ModsFolder != null;
         AddModsButton.IsEnabled = paths.InstallRoot != null;
         InitializeModSearch();
+        InitializeModpacks();
         WatchMods();
     }
 
@@ -80,6 +81,7 @@ public partial class MainWindow
                 var relative = Path.GetRelativePath(folder, path).Replace('\\', '/');
                 var name = Path.GetFileName(relative);
                 if (relative.Split('/').Any(p => p.StartsWith('.')) || name.StartsWith(ModSettings.LegacyFileName, StringComparison.OrdinalIgnoreCase)) return;
+                if (relative == name && ModSettings.IsModpackFile(name)) return; // a modpack's file: switching draws the page
                 // Office's lock and temporary files come and go as a document kept beside a mod is opened and saved
                 if (name.StartsWith("~$", StringComparison.Ordinal) || name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase)) return;
                 // the page's own saves are drawn already; another program's (HellForge.Cli, a mod manager) are loaded
@@ -142,6 +144,7 @@ public partial class MainWindow
         modGroupCounts.Clear();
         modRowPlaces.Clear();
         ModsList.MinHeight = 0;
+        DrawModpacks(modsData);
         if (paths.ModsFolder == null)
         {
             ModsSummary.Text = "Mods load in installations made with HellForge-Setup, from the installation's mods folder.";

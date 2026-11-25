@@ -20,7 +20,10 @@ public partial class MainWindow
     sealed record ModsPageData(List<ModManifest> Mods, List<string> Problems, string? Error, string Compared, ModSettings.State Settings,
         int Downloaded, long DownloadedBytes, Dictionary<string, string> Statuses, DateTime StatusesWritten, ModSdk? Sdk, bool ToolsReady,
         bool HasSourceMods, HashSet<string> Bundled, Dictionary<string, (string Text, IBrush Colour)?> Builds, PremiumContent? Premium,
-        bool PremiumAtSession, Dictionary<string, Bitmap?> Icons, string Fingerprint = "");
+        bool PremiumAtSession, Dictionary<string, Bitmap?> Icons, string Fingerprint = "")
+    {
+        public List<string> Modpacks { get; init; } = [];
+    }
 
     ModsPageData? modsData;
     bool modsLoading, modsLoadAgain, modsLoadAgainDraws, modsDrawAfterDrag;
@@ -108,7 +111,7 @@ public partial class MainWindow
             request.RunDirectory != null ? ModStatus.WrittenUtc(request.RunDirectory) : default, sdk, toolsReady,
             HasSourceMods(request.ModsFolder), [.. mods.Where(m => BundledMods.ShippedFiles(m.Folder) != null).Select(m => m.Id)],
             mods.Where(m => m.HasSource).ToDictionary(m => m.Id, m => BuildStateOf(m, request.InstallRoot, sdk, toolsReady)),
-            premium, atSession, Icons(mods));
+            premium, atSession, Icons(mods)) { Modpacks = ModSettings.Modpacks(request.ModsFolder) };
         return data with { Fingerprint = Fingerprint(data, request.ModsFolder) };
     }
 
@@ -120,6 +123,7 @@ public partial class MainWindow
         var text = new System.Text.StringBuilder();
         try { text.Append(File.ReadAllText(Path.Combine(modsFolder, ModSettings.FileName))); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { text.Append('-'); }
+        text.Append('\n').AppendJoin('|', data.Modpacks);
         foreach (var mod in data.Mods)
             text.Append('\n').Append(mod.Id).Append('|').Append(mod.Enabled).Append('|').Append(mod.Version).Append('|').Append(mod.Folder)
                 .Append('|').Append(Written(ModCatalog.ManifestIn(mod.Folder))).Append('|').Append(mod.Icon).Append('|').Append(Written(mod.Icon))
