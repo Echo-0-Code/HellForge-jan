@@ -18,6 +18,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      # Test builds run no tests (ci.yml runs on pull requests and dev only), so the cheap checks that caught real drift
+      # run here: the app's SDK version against hellforge_mod.h (SDK 51/52 mods were refused for it), and the lint.
+      - name: SDK version matches the header
+        shell: pwsh
+        run: |
+          $header = [regex]::Match((Get-Content -Raw native/mod-sdk/hellforge_mod.h), '#define HF_MOD_SDK_VERSION (\d+)').Groups[1].Value
+          $app = [regex]::Match((Get-Content -Raw src/HellForge.Core/Mods.cs), 'SdkVersion = (\d+);').Groups[1].Value
+          if (-not $header -or $header -ne $app) { throw "Mods.cs SdkVersion $app does not match hellforge_mod.h HF_MOD_SDK_VERSION $header." }
+          "SDK $header in both"
+      - name: Structure lint
+        shell: pwsh
+        run: python scripts/lint/lint.py check --warnings-as-errors
       - uses: ./.github/actions/build-tools
         with:
           native: 'true'
