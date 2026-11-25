@@ -17,6 +17,13 @@
 #define AT_ARMORY_OPEN 0x1457350u    /* (screen, open): opens or closes a category's page and sets the bar's labels */
 #define AT_ARMORY_INPUT 0x1457A10u   /* (screen, input, ...): the Armory's input; sets the weapon labels after the grid */
 #define AT_LOADOUT_SELECT 0x1470D90u /* (screen, index, u8): the Loadout's tab select; a mod's index never reaches it */
+/* The bar's layout (bar, animate): places the labels, Q/E and the clip in the bar's shown width (+0xE084, set to 1000
+ * each frame by the bar's visual 0x17AA5D0) and scrolls when the labels (+0xE080, their width) are wider. Not hooked
+ * by the Megapack (it detours the visual, which calls this). */
+#define AT_LAYOUT 0x17AC4B0u
+#define AT_BAR_WIDTH 0xE080u  /* float: the labels' width, set with the labels */
+#define AT_BAR_SHOWN 0xE084u  /* float: the shown width (1000 on the Armory), then the height */
+#define AT_BAR_MOST 1500.0f   /* the Armory bar at most this wide (1920 wide menu): 7 labels; more scroll as before */
 
 /* The screens with a bar: the menu state that shows it, where the menu object (WC_MENU) keeps the screen, and the bar
  * inside it (screen + sub + bar). */
@@ -49,7 +56,8 @@ static const ActPin kAtPins[] = {
     {0, 0x1457A75u, "8b97dce50000488bcfe8"}, {0, 0x14573AFu, "488d9f70050000"},
     {0, 0x145740Du, "41b805000000488d156eb2e801"}, {0, 0x145764Du, "41b803000000488d155692eb01"},
     {0, 0x145747Eu, "41b803000000488d15659deb01"}, {0, 0x14573BEu, "41b806000000488d155ddae701"},
-    {0, AT_TITLE, "40534883ec30488d9910010000488bcb"}, {0, 0x17AAC85u, "4489a968e00000"}, {0, 0x17AAC99u, "4881c1e8df0000"}, {0, 0x17ABFD4u, "4863816ce00000"},
+    {0, AT_TITLE, "40534883ec30488d9910010000488bcb"}, {0, AT_LAYOUT, "40534881ec9000000080b98ce0000000"},
+    {0, 0x17AA6CEu, "48898784e00000488bcfe8"}, {0, 0x17AAC85u, "4489a968e00000"}, {0, 0x17AAC99u, "4881c1e8df0000"}, {0, 0x17ABFD4u, "4863816ce00000"},
     /* The Loadout (menu +0xB0): its bar's update reads the index into its select; its labels. */
     {0, 0x14ACE0Cu, "488b89b0000000"}, {0, 0x146D503u, "488d8f50f90000"}, {0, 0x146D519u, "8b9fbcd90100"},
     {0, 0x146D53Eu, "8bd3488bcfe848380000"}, {0, AT_LOADOUT_SELECT, "4c8bdc55535641544157498d6ba84881"},
@@ -71,6 +79,7 @@ typedef uint64_t (*AtInputFn)(uintptr_t screen, void* input, void* a, void* b);
 typedef void (*AtSetFn)(uintptr_t bar, const uint32_t* ids, uint32_t count);
 typedef void (*AtPickFn)(uintptr_t bar, uint32_t index, uint8_t a, uint8_t b);
 typedef void (*AtTitleFn)(uintptr_t bar, uint32_t text);
+typedef void (*AtLayoutFn)(uintptr_t bar, uint8_t animate);
 
 static AtTab g_atTabs[AT_TABS];
 static uint32_t g_atCount;
@@ -84,6 +93,8 @@ static AtSelectFn g_atSelect;
 static AtLoadoutSelectFn g_atLoadoutSelect;
 static AtOpenFn g_atOpen;
 static AtInputFn g_atInput;
+static AtLayoutFn g_atLayout;
+static float g_atWide; /* the Armory bar's width last logged, 0 none */
 /* SDK 45, the SKINS page: HellForge's SKINS label on the categories; picked, the weapons page opens (its grid and
  * records, which the mods' tabs rebuild) with the SKINS tabs alone on the bar, until the page closes. */
 #define AT_PAGE_OPEN 0x34u  /* in the screen: 1 a page shows, 0 the overview (0x1457350 keeps it) */
@@ -263,6 +274,29 @@ static uint64_t AtInputDetour(uintptr_t screen, void* input, void* a, void* b)
     return result;
 }
 
+static int AtOnShow(uintptr_t* at);
+
+/* The Armory's bar as wide as its labels (up to AT_BAR_MOST), so all of them show (SKINS too) without scrolling. The
+ * visual sets 1000 again each frame and calls the layout, which widens it again: one layout a frame, not animated. */
+static void AtLayoutDetour(uintptr_t bar, uint8_t animate)
+{
+    uintptr_t at;
+    float width, shown;
+    if (AtOnShow(&at) == AT_ARMORY && at == bar && !SafeRead(bar + AT_BAR_WIDTH, &width, 4) && !SafeRead(bar + AT_BAR_SHOWN, &shown, 4) &&
+        width > shown && shown > 0.0f)
+    {
+        float wide = width + 2.0f < AT_BAR_MOST ? width + 2.0f : AT_BAR_MOST;
+        if (wide > shown)
+        {
+            *(volatile float*)(bar + AT_BAR_SHOWN) = wide;
+            animate = 0;
+            if (wide != g_atWide) Note("menu tabs: Armory bar %.0f wide for labels %.0f wide (game %.0f)", wide, width, shown);
+            g_atWide = wide;
+        }
+    }
+    g_atLayout(bar, animate);
+}
+
 /* The bar of the screen the menu shows, if it is one of ours: its kind (AT_...) and address, else -1. */
 static int AtOnShow(uintptr_t* at)
 {
@@ -289,7 +323,8 @@ static void AtInstall(void)
     else if (LoaderHook("menu tabs: armory select", g_atGame + AT_ARMORY_SELECT, (void*)AtSelectDetour, (void**)&g_atSelect) ||
              LoaderHook("menu tabs: armory page", g_atGame + AT_ARMORY_OPEN, (void*)AtOpenDetour, (void**)&g_atOpen) ||
              LoaderHook("menu tabs: armory input", g_atGame + AT_ARMORY_INPUT, (void*)AtInputDetour, (void**)&g_atInput) ||
-             LoaderHook("menu tabs: loadout select", g_atGame + AT_LOADOUT_SELECT, (void*)AtLoadoutSelectDetour, (void**)&g_atLoadoutSelect))
+             LoaderHook("menu tabs: loadout select", g_atGame + AT_LOADOUT_SELECT, (void*)AtLoadoutSelectDetour, (void**)&g_atLoadoutSelect) ||
+             LoaderHook("menu tabs: bar layout", g_atGame + AT_LAYOUT, (void*)AtLayoutDetour, (void**)&g_atLayout))
         why = "a hook could not be placed";
     g_atState = why ? -1 : 1;
     if (why) Note("menu tabs: off: %s; mods' tabs are not shown", why);
