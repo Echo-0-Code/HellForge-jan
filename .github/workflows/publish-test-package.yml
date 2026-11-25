@@ -16,13 +16,13 @@ jobs:
       - name: Download the artifact and publish it
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: '45516501986'
-          TAG: test-f5e6c24
+          RUN_ID: '45518071029'
+          TAG: test-4fbefa6
         run: |
           gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n test-package -D pkg
           find pkg -type f -exec ls -la {} \;
           cp "$(find pkg -name HellForge-Setup.exe | head -1)" HellForge-Setup.exe
           sha256sum HellForge-Setup.exe | tee SHA256SUMS
-          gh release create "$TAG" -R "$GITHUB_REPOSITORY" --prerelease --target f5e6c24a5b8c8cbbe85afa2b14f689a71a308e46 \
-            --title "Test build f5e6c24, Mods page jump fix, mod search, modpacks, category search (run $RUN_ID)" --notes "test-package artifact of run $RUN_ID, republished for download." \
+          gh release create "$TAG" -R "$GITHUB_REPOSITORY" --prerelease --target 4fbefa6c8001ab3bda4b3484f1f06f1a21c7e21c \
+            --title "Test build 4fbefa6, boats read the bed under the water, tracks pivot on wheeled bodies (+ 5fed914) (run $RUN_ID)" --notes "test-package artifact of run $RUN_ID, republished for download." \
             HellForge-Setup.exe SHA256SUMS
