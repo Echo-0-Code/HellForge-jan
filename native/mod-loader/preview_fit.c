@@ -1,7 +1,8 @@
 /* SDK 46, set_preview_fit (build 25480438; docs/modding/ui.md). Included after loadout_preview.c.
  * The Armory preview's update (0x18EA830) fits its camera to a box (+0x890 size, +0x87C centre; +0x88C/+0x83C the box
  * it blends from) only when the item's kind changes, so every support card kept the first one's fit. A new item (+0x7E4,
- * its loadout id) zeroes the size for a few updates, which makes the game fit that item's own box; fits then scale it. */
+ * its loadout id) zeroes the size for a few updates, which makes the game fit that item's own box; fits then scale it.
+ * Grid thumbnails (0x1392D10, a weapon or throwable request) fit to that same box query, so their box takes the fit too. */
 #define PREVIEW_FIT_UPDATE 0x18EA830u
 #define PREVIEW_FIT_ITEM 0x7E4u
 #define PREVIEW_FIT_UNIT 0x7F8u /* the item's row: +8 its unit resource */
@@ -11,6 +12,7 @@
 #define PREVIEW_FIT_PREV_SIZE 0x88Cu
 #define PREVIEW_FIT_SIZE 0x890u
 #define PREVIEW_FIT_REFITS 20 /* updates after a pick: the new unit spawns and streams in meanwhile */
+#define PREVIEW_FIT_THUMB 0x1392D10u
 #define PREVIEW_FIT_MAX 128u
 #define PREVIEW_FIT_LOGS 64
 
@@ -25,6 +27,9 @@ static uint8_t* g_previewFitObject;
 static uint32_t g_previewFitItem;
 static int g_previewFitRefits;
 static int g_previewFitLogs;
+typedef void (*PreviewFitThumbFn)(uintptr_t manager, int32_t* request, uint64_t target, uint32_t layer);
+static PreviewFitThumbFn g_previewFitThumbOriginal;
+static _Thread_local uint32_t g_previewFitThumbItem; /* the thumbnail being framed on this thread, or 0 */
 
 static const uint8_t kPreviewFitEntry[] = {
     0x48,0x8b,0xc4,0x48,0x89,0x58,0x18,0x48,0x89,0x78,0x20,0x55,0x48,0x8d,0xa8,0xe8,0xfe,0xff,0xff,0x48,0x81,0xec,0x10,0x02};
@@ -39,6 +44,11 @@ static const uint8_t kPreviewFitZero[] = {
     0xf3,0x0f,0x10,0x87,0x90,0x08,0x00,0x00,0x41,0x0f,0x2e,0xc5,0x0f,0x8a,0x9b,0x00,0x00,0x00,0x0f,0x85,0x95,0x00,0x00,0x00,
     0x44,0x8b,0x87,0xf0,0x07,0x00,0x00,0x48,0x8d,0x4d,0xe0,0x33,0xd2,0x48,0x89,0x74,0x24,0x20,0xe8,0x97,0xef,0xff,0xff};
 /* 0x18EBEAF in the preview's pick (0x18EBEA0): cmp/mov [rcx+0x7E4], edx (the picked item's loadout id). */
+/* 0x1392D10, the thumbnail camera, and its weapon/throwable case's box query at 0x1392EED (slot, kind 0, no context). */
+static const uint8_t kPreviewFitThumbEntry[] = {
+    0x40,0x55,0x41,0x54,0x41,0x56,0x41,0x57,0x48,0x8d,0xac,0x24,0xb8,0xfd,0xff,0xff,0x48,0x81,0xec,0x48,0x03,0x00,0x00,0x48};
+static const uint8_t kPreviewFitThumbQuery[] = {
+    0x45,0x33,0xc9,0x48,0x89,0x7c,0x24,0x20,0x33,0xd2,0x48,0x8d,0x4d,0xd0,0xe8,0x50,0x6e,0x55,0x00};
 static const uint8_t kPreviewFitItem[] = {0x39,0x91,0xe4,0x07,0x00,0x00,0x0f,0x84,0x7e,0x00,0x00,0x00,0x89,0x91,0xe4,0x07,0x00,0x00};
 
 static int PreviewFitFind(uint32_t item, PreviewFitRow* out)
@@ -97,6 +107,23 @@ static void PreviewFitDetour(uint8_t* preview, uint32_t unit, float dt)
     PreviewFitScale(preview, item);
 }
 
+/* Request: +0x18 the item's loadout id, +0x64 its kind (0 weapon, 1 throwable: the kinds that take the box query). */
+static void PreviewFitThumbDetour(uintptr_t manager, int32_t* request, uint64_t target, uint32_t layer)
+{
+    g_previewFitThumbItem = request && (uint32_t)request[0x19] <= 1 ? (uint32_t)request[6] : 0;
+    g_previewFitThumbOriginal(manager, request, target, layer);
+    g_previewFitThumbItem = 0;
+}
+
+/* The box query's record: +0x30 the centre, +0x40 the half extents (the thumbnail frames both). */
+static void PreviewFitThumbBox(void* box)
+{
+    PreviewFitRow fit;
+    if (!box || !g_previewFitThumbItem || !PreviewFitFind(g_previewFitThumbItem, &fit)) return;
+    float* f = (float*)box;
+    for (int k = 0; k < 3; k++) { f[12 + k] -= fit.offset[k]; f[16 + k] /= fit.scale; }
+}
+
 static void InstallPreviewFit(void)
 {
     if (g_previewFitState) return;
@@ -112,7 +139,11 @@ static void InstallPreviewFit(void)
     }
     g_previewFitState = LoaderHook("armory preview fit", game + PREVIEW_FIT_UPDATE, (void*)PreviewFitDetour,
         (void**)&g_previewFitOriginal) ? -1 : 1;
-    if (g_previewFitState != 1) Note("preview fit: could not hook the Armory preview's update");
+    if (g_previewFitState != 1) { Note("preview fit: could not hook the Armory preview's update"); return; }
+    if (!PinMatches(game + PREVIEW_FIT_THUMB, kPreviewFitThumbEntry, sizeof kPreviewFitThumbEntry) ||
+        !PinMatches(game + 0x1392EEDu, kPreviewFitThumbQuery, sizeof kPreviewFitThumbQuery) ||
+        LoaderHook("armory thumbnail fit", game + PREVIEW_FIT_THUMB, (void*)PreviewFitThumbDetour, (void**)&g_previewFitThumbOriginal))
+        Note("preview fit: grid thumbnails keep the game's fit (their camera does not match the reviewed build)");
 }
 
 static const char* PreviewFitInvalid(uint32_t weapon, const HfPreviewFit* fit)
