@@ -376,7 +376,11 @@ static void TransportUpdate(BehaviourCtx* ctx, const Behaviour* b)
     if (b->depart == HF_DEPART_REMOVE && stage == 7 && *(int32_t*)ctx->p == 8)
     {
         void* entities = *(void**)(g_bhvGame + BHV_ENTITIES);
-        if (entities == NULL) return;
+        if (entities == NULL)
+        {
+            ApiLog(b->mod, "behaviour %u: transport %u let its cargo go but could not be removed (no entity manager); it flies off", b->id, EntityOf(ctx));
+            return;
+        }
         ((BhvRemoveFn)BhvFn(F_REMOVE))(entities, EntityOf(ctx));
         ApiLog(b->mod, "behaviour %u: transport %u let its cargo go and was removed (depart HF_DEPART_REMOVE)", b->id, EntityOf(ctx));
     }

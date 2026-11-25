@@ -619,9 +619,9 @@ static int ApiAddEffectLooks(HfMod* mod, uint32_t effect, const HfEffectLook* ro
     if (e == NULL) return 1;
     if (rows == NULL || count == 0 || count > 65536) { ApiLog(mod, "add_effect_looks: refused: 1 .. 65536 rows"); return 1; }
     if (SeOnTickThread()) { ApiLog(mod, "add_effect_looks: refused: not from an on_level callback (call it from hellforge_mod_init)"); return 1; }
+    AcquireSRWLockExclusive(&g_seTargetLock); /* lookCount read under it: two calls at once would size from a stale count */
     HfEffectLook* all = malloc(sizeof *all * (e->lookCount + count));
-    if (all == NULL) { ApiLog(mod, "add_effect_looks: out of memory"); return 1; }
-    AcquireSRWLockExclusive(&g_seTargetLock);
+    if (all == NULL) { ReleaseSRWLockExclusive(&g_seTargetLock); ApiLog(mod, "add_effect_looks: out of memory"); return 1; }
     if (e->lookCount) memcpy(all, e->looks, sizeof *all * e->lookCount);
     memcpy(all + e->lookCount, rows, sizeof *all * count);
     HfEffectLook* old = e->looks;

@@ -90,15 +90,23 @@ public static partial class ModSettings
         File.Delete(ModpackFile(modsFolder, name));
     }
 
+    // A pack that cannot be read is refused, not taken as "every mod on": a broken gaming pack would otherwise switch
+    // every testing mod on with no word.
     static HashSet<string> ReadModpack(string path)
     {
         var disabled = new HashSet<string>(StringComparer.Ordinal);
         try
         {
             using var document = JsonDocument.Parse(File.ReadAllText(path));
-            if (document.RootElement.ValueKind == JsonValueKind.Object) AddTexts(document.RootElement, "disabled", disabled);
+            if (document.RootElement.ValueKind != JsonValueKind.Object || !document.RootElement.TryGetProperty("disabled", out var list) ||
+                list.ValueKind != JsonValueKind.Array)
+                throw new InvalidDataException($"The modpack file {Path.GetFileName(path)} has no \"disabled\" list; fix or delete it.");
+            AddTexts(document.RootElement, "disabled", disabled);
         }
-        catch (Exception error) when (error is JsonException or IOException) { }
+        catch (JsonException error)
+        {
+            throw new InvalidDataException($"The modpack file {Path.GetFileName(path)} is not valid JSON ({error.Message}); fix or delete it.", error);
+        }
         return disabled;
     }
 

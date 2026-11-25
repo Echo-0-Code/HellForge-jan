@@ -196,6 +196,10 @@ static class ModTests
             check(ModSettings.Modpacks(mods).SequenceEqual(["Gaming"]) && File.Exists(Path.Combine(mods, "hellforge-mods-Gaming.json")), "The modpack's file is missing.");
             reject(() => ModSettings.CreateModpack(mods, "default"));
             reject(() => ModSettings.CreateModpack(mods, "../x"));
+            File.WriteAllText(Path.Combine(mods, "hellforge-mods-Broken.json"), "{\"format\":1,\"disabled\":[");
+            reject(() => ModSettings.SwitchModpack(mods, "Broken"));
+            check(ModSettings.ActiveModpack(mods) == "Gaming" && ModSettings.Disabled(mods).SetEquals(["test.b"]), "A broken modpack changed the switches.");
+            File.Delete(Path.Combine(mods, "hellforge-mods-Broken.json"));
             ModSettings.DeleteModpack(mods, "Gaming");
             check(ModSettings.ActiveModpack(mods) == null && ModSettings.Modpacks(mods).Count == 0 && ModSettings.Disabled(mods).SetEquals(["test.a"]),
                 "Deleting the modpack in use did not bring the default one back.");
