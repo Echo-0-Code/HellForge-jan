@@ -45,8 +45,8 @@ static void* LoadoutPreviewDetour(void* out, uint8_t alternate, uint32_t slot, u
     LoadoutPreviewCall call = {g_loadoutPreviewCall, context, slot, mode, alternate};
     g_loadoutPreviewCall = &call;
     void* result = g_loadoutPreviewOriginal(out, alternate, slot, mode, context);
-    PreviewFitThumbBox(result);
     g_loadoutPreviewCall = call.previous;
+    if (!call.previous) PreviewFitThumbBox(result); /* the outer query only: it calls itself for a missing part */
     return result;
 }
 

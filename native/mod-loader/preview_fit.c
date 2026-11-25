@@ -14,7 +14,7 @@
 #define PREVIEW_FIT_REFITS 20 /* updates after a pick: the new unit spawns and streams in meanwhile */
 #define PREVIEW_FIT_THUMB 0x1392D10u
 #define PREVIEW_FIT_MAX 128u
-#define PREVIEW_FIT_LOGS 64
+#define PREVIEW_FIT_LOGS 160
 
 typedef void (*PreviewFitUpdateFn)(uint8_t* preview, uint32_t unit, float dt);
 typedef struct PreviewFitRow { uint32_t item; float scale; float offset[3]; } PreviewFitRow;
@@ -111,6 +111,13 @@ static void PreviewFitDetour(uint8_t* preview, uint32_t unit, float dt)
 static void PreviewFitThumbDetour(uintptr_t manager, int32_t* request, uint64_t target, uint32_t layer)
 {
     g_previewFitThumbItem = request && (uint32_t)request[0x19] <= 1 ? (uint32_t)request[6] : 0;
+    PreviewFitRow fit;
+    if (request && g_previewFitLogs < PREVIEW_FIT_LOGS)
+    {
+        g_previewFitLogs++;
+        Note("preview fit: thumbnail item %08x kind %u slot %u%s", (uint32_t)request[6], (uint32_t)request[0x19],
+            (uint32_t)request[0x1b], PreviewFitFind((uint32_t)request[6], &fit) ? ", has a fit" : "");
+    }
     g_previewFitThumbOriginal(manager, request, target, layer);
     g_previewFitThumbItem = 0;
 }
@@ -121,6 +128,12 @@ static void PreviewFitThumbBox(void* box)
     PreviewFitRow fit;
     if (!box || !g_previewFitThumbItem || !PreviewFitFind(g_previewFitThumbItem, &fit)) return;
     float* f = (float*)box;
+    if (g_previewFitLogs < PREVIEW_FIT_LOGS)
+    {
+        g_previewFitLogs++;
+        Note("preview fit: thumbnail item %08x box centre (%.3f, %.3f, %.3f), half extents (%.3f, %.3f, %.3f) take its fit",
+            g_previewFitThumbItem, (double)f[12], (double)f[13], (double)f[14], (double)f[16], (double)f[17], (double)f[18]);
+    }
     for (int k = 0; k < 3; k++) { f[12 + k] -= fit.offset[k]; f[16 + k] /= fit.scale; }
 }
 
