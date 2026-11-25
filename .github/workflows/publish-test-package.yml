@@ -16,10 +16,10 @@ jobs:
       - name: Download the artifact and publish it
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: "45657905199"
-          TAG: "test-2bd4f34"
-          TARGET: "2bd4f34e1f591900ce1df65fe4fb3d31157682fb"
-          TITLE: "Test build 2bd4f34, 71e23d0 + thumbnail item-id fix (run 45657905199)"
+          RUN_ID: "45666039701"
+          TAG: "test-df6fb59"
+          TARGET: "df6fb59ccbf7a009f5cab951bdb7c832e557a959"
+          TITLE: "Test build df6fb59, 2bd4f34 + upstream 0.5.0-beta dev, FRV packages, thumb scale, modpack text removed (run 45666039701)"
         run: |
           gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n test-package -D pkg
           find pkg -type f -exec ls -la {} \;
