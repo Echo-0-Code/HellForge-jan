@@ -166,32 +166,10 @@ uint32_t tab = HAS(hf, add_menu_tab) ? hf->add_menu_tab(mod, HF_MENU_TABS_ARMORY
   screen closes. It may call the game's code.
 - The label is the mod's own text, made as `add_text` makes one.
 
-## A category in Vehicle Customization
+## A category in Vehicle Customization (retired)
 
-`add_hangar_category` (SDK 41) shows a mod's cards in Ship Management > Vehicle Customization, as a 6th category
-after the game's five. The game's cards, EQUIP and the equipped mark work on them; the mod keeps the pick:
-
-```c
-static const uint32_t kCards[] = {0x80FBE63Du, 0xBD04CA8Cu};
-static const char* const kNames[] = {"DEFAULT", "VENUS"};
-
-static void OnPick(HfMod* mod, uint32_t category, uint32_t card, void* user)
-{
-    /* the player equipped card: save it, and use it where the mod paints its units */
-}
-
-HfHangarCategory c = {sizeof c, "EMPLACEMENTS", 2, kCards, kNames, kCards[0], OnPick, NULL};
-uint32_t category = HAS(hf, add_hangar_category) ? hf->add_hangar_category(mod, &c) : 0;
-```
-
-The tab itself comes from the mod's data spec: a [xaml edit](data.md#edit) of the Ship Management view
-(`0x4849ACD71BDAEECB`) that adds a `TabItem` after `Frvs` in `VehiclesCategoryTabs`, with a header template such as
-`ModuleRobotics`.
-
-- One category in all, from `hellforge_mod_init`. `set_hangar_equipped` sets the card shown as equipped.
-- The game keeps 12 unit skin picks, all in use, so it never saves or syncs the category's pick: the mod does.
-- Cards have no thumbnail or 3D preview yet.
-- `HF_HANGAR_CATEGORIES` is defined where the call exists.
+`add_hangar_category` and `set_hangar_equipped` (SDK 41) are retired: they refuse and return 0 and 1. Their places in
+`HfApi` stay.
 
 ## Boxes on the WEAPONRY overview
 

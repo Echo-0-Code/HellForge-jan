@@ -1782,7 +1782,7 @@ typedef struct HfApi
     uint32_t (*list_state)(HfMod* mod, uint32_t list, HfListState* state); /* its last build. 1 filled, 0 none seen */
     /* ---- SDK 40: a band at the top of a list (docs/modding/lists.md; check hf->size) -------------------------------- */
     int (*set_list_band)(HfMod* mod, uint32_t list, float height); /* room (0 .. 200 units) above its heading. 0 done */
-    uint32_t (*add_hangar_category)(HfMod* mod, const HfHangarCategory* category); /* SDK 41 (hellforge_hangar.h): handle or 0 */
+    uint32_t (*add_hangar_category)(HfMod* mod, const HfHangarCategory* category); /* SDK 41, retired: always 0 */
     int (*set_hangar_equipped)(HfMod* mod, uint32_t category, uint32_t card); /* shown as equipped; 0 done, 1 refused */
     uint32_t (*add_loadout_box)(HfMod* mod, const HfLoadoutBoxDef* def); /* SDK 42 (hellforge_loadout.h): handle or 0 */
     int (*set_loadout_layout)(HfMod* mod, const HfLoadoutLayout* layout); /* the WEAPONRY boxes' sizes and rows. 0 done */
