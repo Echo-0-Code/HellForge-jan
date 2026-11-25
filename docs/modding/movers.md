@@ -8,6 +8,8 @@ sounds. SDK 43 adds helicopters, planes, boats, submarines and rail vehicles. Yo
 gives it a throttle and a steer: your code with `mover_input`, the custom AI with `ai_drive`, or the player in its
 driver's seat, in any mode whose unit has one. The types are in `hellforge_move.h`, which `hellforge_mod.h` includes.
 
+SDK 47 adds a helicopter's `thrust_max`, fixed weapons its driver fires, and damage zones.
+
 ## Contents
 
 - [Before you call](#before-you-call)
@@ -16,6 +18,8 @@ driver's seat, in any mode whose unit has one. The types are in `hellforge_move.
 - [Drivetrains and your own drive code](#drivetrains-and-your-own-drive-code)
 - [Hover vehicles](#hover-vehicles)
 - [Helicopters and planes](#helicopters-and-planes)
+- [Fixed weapons](#fixed-weapons)
+- [Damage zones](#damage-zones)
 - [Boats and submarines](#boats-and-submarines)
 - [Rail vehicles](#rail-vehicles)
 - [Slopes, tilt, boost and sounds](#slopes-tilt-boost-and-sounds)
@@ -170,6 +174,8 @@ How a helicopter climbs:
 - Altitude counts from the ground where it first sat down, not from the ground under it. Hills don't lift it: fly
   around them or climb over them.
 - Thrust thins with altitude like air, which slows the climb near `hover.height_max` (its ceiling).
+- `thrust_max` (SDK 47) is its rotor's most thrust over its weight, 1.05 to 3 (default 1.3). A higher one climbs
+  harder at full lift.
 - `hover.damping` sets how fast it settles. `hover.height` and `stiffness` don't apply.
 - When nobody has driven it for 3 s, it lowers the collective at half `climb_rate` and lands.
 
@@ -199,6 +205,45 @@ A plane needs airspeed:
 
 Set its physics data as for a hover: `VRA` extraGravity at `hover.carried`, wheels at low friction, and `VRD` word 11 at 0.
 A seated driver gives throttle and steer, and `lift` with Space (up) and Control (down).
+
+## Fixed weapons
+
+SDK 47's `add_fixed_gun` gives a mover a gun or rocket pod locked to its nose. Its driver aims by pointing the vehicle.
+
+```c
+HfFixedGunDef gun = {sizeof gun};
+gun.entity = MY_GUNSHIP;
+gun.projectile = HF_PROJECTILE_MG43_MACHINE_GUN; /* or add_projectile's type */
+gun.rounds = 500;
+gun.fire_rate = 900;
+gun.muzzle[0] = -0.6f; gun.muzzle[1] = 1.4f; gun.muzzle[2] = 0.7f;
+gun.seat[1] = 0.2f; gun.seat[2] = 1.0f;
+uint32_t id = api->add_fixed_gun(mod, &gun);
+```
+
+- It fires on the host while that machine's Helldiver sits within 1.2 m of `seat` and holds `trigger`: the fire
+  button (left mouse) or the aim button (right mouse).
+- Each round is a `spawn_projectile` shot, credited to that Helldiver.
+- `burst` fires that many rounds a press; 0 fires while held. `spread`, `converge` and `recoil` shape the shots.
+- Points are metres in the mover's frame: x right, y forward, z up.
+- `fixed_gun_state` reads a unit's rounds. `fixed_gun_refill` adds rounds, 0 for full.
+
+## Damage zones
+
+SDK 47's `add_damage_zone` puts a sphere on a mover that takes the hits landing in it.
+
+| Field | Default | What it does |
+|---|---|---|
+| `effect` | `HF_ZONE_PLAIN` | `_ENGINE`: broken, it comes down at `sink`. `_CONTROL`: it also spins at `spin` |
+| `center`, `radius` | 0.5 m | Where the sphere is, in the mover's frame |
+| `health` | 500 | Damage, before armour, it takes before it breaks |
+| `scale` | 1 | × the damage the vehicle itself takes from a hit in it; negative: none |
+| `sink`, `spin` | 5 m/s, 60 °/s | The broken zone's descent and spin |
+
+- A broken engine or control zone lowers a helicopter's collective and holds its fall to `sink`, as autorotation
+  does. A plane glides down.
+- Zones see a hit before `HF_ON_DAMAGE_PRE` listeners, so listeners get the scaled amount.
+- `zone_state` reads a zone. `repair_zones` makes one, or all, whole again.
 
 ## Boats and submarines
 
