@@ -44,7 +44,7 @@ packs, and the launcher says when a newer HellForge is out.
 - **The Armory's SKINS page (SDK 45).** `add_armory_tab(mod, HF_ARMORY_TABS_SKINS, ...)` puts a mod's tab on a SKINS
   page that HellForge adds to the Armory's categories, so skin tabs leave the weapons bar ([ui.md](docs/modding/ui.md#the-skins-page-sdk-45)).
 - **Search lists by category (SDK 44).** A list filter that starts with `#` matches the heading a row is listed under,
-  and `HfListRow.category` gives that heading ([lists.md](docs/modding/lists.md#filter-by-name)).
+  a mod's stratagem heading included, and `HfListRow.category` gives it ([lists.md](docs/modding/lists.md#filter-by-name)).
 - **WEAPONRY boxes (SDK 42).** `add_loadout_box` adds a box of a mod's own after THROWABLE on ARMORY > WEAPONRY that
   opens its armory tab; `set_loadout_layout` sets the boxes' sizes and a second row ([ui.md](docs/modding/ui.md)).
 - **Vehicle Customization categories (SDK 41).** `add_hangar_category` shows a mod's cards in a 6th category of Ship
@@ -611,6 +611,8 @@ packs, and the launcher says when a newer HellForge is out.
 
 ### Fixed
 
+- **Last row under a list band.** A list with a band keeps its scroll range after a search or filter rebuilds it, so
+  its last row scrolls into view.
 - **Boats float in deep water.** A boat read the water's surface as its bed and sat aground; it now reads the bed
   under the surface. A tracked vehicle on a wheeled body pivots on the spot against its tyres' grip.
 - **Mouse free after a modal screen.** Closing a modal overlay screen gives back the cursor clip the game asked for, so
