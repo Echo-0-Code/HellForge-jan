@@ -312,7 +312,7 @@ for changing and adding content; [Hooks and game memory](modding/hooks.md) for `
 ### SDK 38: the game's item lists (hellforge_lists.h, docs/modding/lists.md; check hf->size)
 
 - `add_list_rule`: `int (HfMod* mod, uint32_t list, HfListRule rule, void* user)`
-- `set_list_filter`: `int (HfMod* mod, uint32_t list, const char* text)`. Text each listed row's name must contain, any case (NULL or "": none); the list rebuilds if up. Any thread. 0 done
+- `set_list_filter`: `int (HfMod* mod, uint32_t list, const char* text)`. Text each listed row's name must contain, any case (NULL or "": none; SDK 44: "#text" its category); the list rebuilds if up. Any thread. 0 done
 - `rebuild_list`: `int (HfMod* mod, uint32_t list)`
 - `list_state`: `uint32_t (HfMod* mod, uint32_t list, HfListState* state)`
 

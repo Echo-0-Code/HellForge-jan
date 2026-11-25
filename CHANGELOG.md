@@ -592,6 +592,7 @@ On `dev`, since 0.4.0-beta.
   now passes it instead of reading its missing record ([movers.md](docs/modding/movers.md)).
 - **Paints for an `add_weapon` copy of a support weapon.** The copy now gets a catalogue item of its own with its paints after it, so its CUSTOMIZE opens (Support Paint Bodies' Jump Pack card). It had none, as its base's entry is its stratagem's child. The backend log now also says when a weapon gets no paints, or a mod's item is not held, and why.
 - **`add_hangar_category` retired.** It and `set_hangar_equipped` now refuse; their `HfApi` places stay. The hangar hooks and the one-time hangar probe log are gone.
+- **A xaml edit starts from the view in its own archive.** A view that packages carry in several archives was read from the first in name order, which can be an older copy: the edited Ship Management view had old resource keys and the screen lost its icons.
 - **Copies of support weapons are held.** An `add_weapon` copy of a support weapon now has its paints and CUSTOMIZE. It was left out of the inventory, since its base's catalogue item is its stratagem's.
 - **Follow me after a death.** A unit that followed a Helldiver who died no longer holds for good. It follows that player's next Helldiver, or the nearest one standing ([AI orders](docs/modding/ai.md)).
 - **No nameless items in the armory.** The game ships a few unfinished items with no name: a secondary with the

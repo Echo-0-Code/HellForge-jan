@@ -238,6 +238,21 @@ static class DataBuilderTests
                 "A xaml insert written with plain newlines did not match and keep a CRLF view's line endings.");
             reject(() => XamlText.Insert(View("<a/><a/>"), [new XamlInsert("<a/>", "<b/>")]));
             reject(() => XamlText.Insert(View("<a/>"), [new XamlInsert("<c/>", "<b/>")]));
+            // A view in two archives, an older copy first in name order: the edit starts from the copy in its patch's archive.
+            var views = Path.Combine(root, "xaml-copies");
+            var older = ResourceArchive.Write(new Dictionary<ResourceKey, ResourceParts> { [new(ResourceTypes.Xaml, 0x4849)] = new(View("<T Key=\"Icon_Old\"><I/></T>"), [], []) });
+            var current = ResourceArchive.Write(new Dictionary<ResourceKey, ResourceParts> { [new(ResourceTypes.Xaml, 0x4849)] = new(View("<T Key=\"Icon.New\"><I/></T>"), [], []) });
+            WriteBundles(Path.Combine(views, "data"), new() { ["1111111111111111"] = older.Archive, ["2222222222222222"] = current.Archive });
+            var viewMod = Directory.CreateDirectory(Path.Combine(views, "mod")).FullName;
+            File.WriteAllText(Path.Combine(viewMod, DataSpecs.FileName), """{"format":1,"patches":[{"archives":["2222222222222222"],"resources":[{"type":"xaml","edit":"0x4849","insert":[{"after":"<I/>","text":"<J/>"}]}]}]}""");
+            using (var viewReader = new GameDataReader(Path.Combine(views, "data")))
+            {
+                var viewOut = Path.Combine(views, "out");
+                ModDataBuilder.Build(DataSpecs.Load(viewMod)!, viewMod, viewReader, viewOut);
+                var builtView = ResourceArchive.Read(File.ReadAllBytes(Path.Combine(viewOut, "2222222222222222.patch_0")), [], [])[new(ResourceTypes.Xaml, 0x4849)].Main;
+                check(System.Text.Encoding.UTF8.GetString(builtView, 16, builtView.Length - 16) == "<T Key=\"Icon.New\"><I/><J/></T>",
+                    "A xaml edit did not start from the view in its patch's archive.");
+            }
             File.WriteAllText(Path.Combine(folder, DataSpecs.FileName), """{"format":1,"patches":[{"archives":["1111111111111111"],"resources":[""" + copy +
                 "," + """{"icon":"icon.png","name":"test/mod/icon","prepare":"auto"}]}]}""");
             var spec = DataSpecs.Load(folder)!;

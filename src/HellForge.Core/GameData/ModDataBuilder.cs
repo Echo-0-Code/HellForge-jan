@@ -34,6 +34,7 @@ public static class ModDataBuilder
         var (found, foundSteam) = FindSources(spec, game, steam);
         var past = PastSources(spec, modFolder, game);
         var read = new Dictionary<(ResourceKey, string), ResourceParts>();
+        Dictionary<ResourceKey, List<GameDataReader.Location>>? everyCopy = null;
         var parents = new Dictionary<ulong, byte[]?>();
         // where a resource is read: the game copy ("game"), Steam's install ("steam") or a past build's label
         static string From(DataResource r) => r.Build ?? (r.Steam ? "steam" : "game");
@@ -90,7 +91,7 @@ public static class ModDataBuilder
                         AddSounds(resources, sounds, added);
                         break;
                     case EditResource edit:
-                        AddEdit(resources, edit);
+                        AddEdit(resources, edit, patch.Archives);
                         break;
                 }
             foreach (var animations in patch.Resources.OfType<AnimationsResource>())
@@ -98,8 +99,22 @@ public static class ModDataBuilder
             return resources;
         }
         // A game resource under its own key, so the patch takes its place; not in `added`: standing for the game's is its purpose.
-        void AddEdit(Dictionary<ResourceKey, ResourceParts> resources, EditResource edit) =>
-            AddResource(resources, edit.Where, new(edit.Type, edit.Id), Edited(edit, Read(new(edit.Type, edit.Id), From(edit)), modFolder));
+        void AddEdit(Dictionary<ResourceKey, ResourceParts> resources, EditResource edit, IReadOnlyList<string> archives) =>
+            AddResource(resources, edit.Where, new(edit.Type, edit.Id), Edited(edit, EditBase(new(edit.Type, edit.Id), From(edit), archives), modFolder));
+        // An edit of a game resource starts from the copy in the archive its patch replaces it in: packages carry their own
+        // copies, and the first in name order (Find) can be an older one (a view with the resource keys of an earlier build,
+        // whose edited copy lost the screen's icons). Without a copy there, the first.
+        ResourceParts EditBase(ResourceKey key, string from, IReadOnlyList<string> archives)
+        {
+            if (from != "game" || archives.Count == 0) return Read(key, from);
+            everyCopy ??= game.FindEvery(spec.Patches.SelectMany(p => p.Resources).OfType<EditResource>().Where(e => From(e) == "game")
+                .Select(e => new ResourceKey(e.Type, e.Id)));
+            var copies = everyCopy.GetValueOrDefault(key) ?? [];
+            if (archives.Select(a => copies.FirstOrDefault(c => c.Archive == a)).FirstOrDefault(c => c != null) is not { } at || at == found[key]) return Read(key, from);
+            var label = "game:" + at.Archive;
+            if (read.TryGetValue((key, label), out var parts)) return parts;
+            return read[(key, label)] = game.Read(at);
+        }
         // A unit copy's own animations: its bones and state machine under the unit's name, its clips beside it, and the
         // unit pointed at them (header +0x08 bones, +0x20 state machine).
         void AddAnimations(Dictionary<ResourceKey, ResourceParts> resources, AnimationsResource a, HashSet<ResourceKey> added)
