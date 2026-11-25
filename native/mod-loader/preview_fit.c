@@ -107,16 +107,17 @@ static void PreviewFitDetour(uint8_t* preview, uint32_t unit, float dt)
     PreviewFitScale(preview, item);
 }
 
-/* Request: +0x18 the item's loadout id, +0x64 its kind (0 weapon, 1 throwable: the kinds that take the box query). */
+/* Request: +0x18 the item's 64-bit id, whose high half is its loadout id; +0x64 its kind (0 weapon, 1 throwable: the
+ * kinds that take the box query). */
 static void PreviewFitThumbDetour(uintptr_t manager, int32_t* request, uint64_t target, uint32_t layer)
 {
-    g_previewFitThumbItem = request && (uint32_t)request[0x19] <= 1 ? (uint32_t)request[6] : 0;
+    g_previewFitThumbItem = request && (uint32_t)request[0x19] <= 1 ? (uint32_t)request[7] : 0;
     PreviewFitRow fit;
     if (request && g_previewFitLogs < PREVIEW_FIT_LOGS)
     {
         g_previewFitLogs++;
-        Note("preview fit: thumbnail item %08x kind %u slot %u%s", (uint32_t)request[6], (uint32_t)request[0x19],
-            (uint32_t)request[0x1b], PreviewFitFind((uint32_t)request[6], &fit) ? ", has a fit" : "");
+        Note("preview fit: thumbnail item %08x%08x kind %u slot %u%s", (uint32_t)request[7], (uint32_t)request[6],
+            (uint32_t)request[0x19], (uint32_t)request[0x1b], PreviewFitFind((uint32_t)request[7], &fit) ? ", has a fit" : "");
     }
     g_previewFitThumbOriginal(manager, request, target, layer);
     g_previewFitThumbItem = 0;
