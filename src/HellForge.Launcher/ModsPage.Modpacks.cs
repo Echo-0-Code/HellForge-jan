@@ -13,11 +13,13 @@ public partial class MainWindow
 
     void InitializeModpacks()
     {
-        ModpackChooser.SelectionChanged += (_, _) =>
-        {
-            if (modpacksFilling || paths.ModsFolder is not { } folder || ModpackChooser.SelectedItem is not string picked) return;
-            ModpackAction(() => ModSettings.SwitchModpack(folder, picked == ModSettings.DefaultModpack ? null : picked), "switch the modpack");
-        };
+        foreach (var chooser in new[] { ModpackChooser, PlayModpackChooser })
+            chooser.SelectionChanged += (_, _) =>
+            {
+                if (modpacksFilling || paths.ModsFolder is not { } folder || chooser.SelectedItem is not string picked) return;
+                ModpackAction(() => ModSettings.SwitchModpack(folder, picked == ModSettings.DefaultModpack ? null : picked), "switch the modpack");
+            };
+        DrawPlayModpacks();
         NewModpackButton.Click += (_, _) =>
         {
             NewModpackPanel.IsVisible = true;
@@ -71,7 +73,30 @@ public partial class MainWindow
         {
             Append($"Could not {what}: {error.Message}", Red);
         }
+        DrawPlayModpacks();
         RefreshMods();
+    }
+
+    // The Play page's chooser, read from the mods folder itself: the Mods page may not have loaded yet.
+    void DrawPlayModpacks()
+    {
+        if (paths.ModsFolder is not { } folder)
+        {
+            PlayModpackChooser.IsEnabled = false;
+            return;
+        }
+        string? active = null;
+        List<string> packs = [];
+        try { (active, packs) = (ModSettings.ActiveModpack(folder), ModSettings.Modpacks(folder)); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+        active ??= ModSettings.DefaultModpack;
+        List<string> names = [ModSettings.DefaultModpack, .. packs];
+        if (!names.Contains(active)) names.Add(active);
+        modpacksFilling = true;
+        PlayModpackChooser.ItemsSource = names;
+        PlayModpackChooser.SelectedItem = active;
+        modpacksFilling = false;
+        PlayModpackChooser.IsEnabled = !runner.IsRunning;
     }
 
     // The chooser as the last load found the packs; a session in progress keeps the mods it started with, so no switching.
