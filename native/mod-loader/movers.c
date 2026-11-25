@@ -826,7 +826,7 @@ static void MvDefaults(HfMoverDef* d)
     MvOr(&d->reach, 0.6f);
     MvOr(&d->max_slope, atanf(d->step_up) * 57.29578f); /* step_up risen over 1 m */
     MvOr(&d->boost_time, 3.0f);
-    MvOr(&d->strafe_speed, k[3] > 0 ? k[3] : d->speed * 0.5f);
+    MvOr(&d->strafe_speed, k[3] > 0 ? k[3] : fminf(d->speed * 0.5f, 40.0f)); /* the refusal's top: a fast plane's half would be over it */
     MvOr(&d->stall_speed, 0.45f * d->speed);
     MvOr(&d->bank_max, 40.0f);
     MvOr(&d->dive_depth, 3.0f);

@@ -108,7 +108,7 @@ typedef struct HfMoverDef
     float tilt_limit;     /* degrees it pitches and rolls with the ground under it, at most; 0 stays upright (a hover level) */
     float boost_speed;    /* top speed while boosting, m/s (default 0: no boost) */
     float boost_time;     /* seconds a full boost lasts; it refills in twice that (default 3) */
-    float strafe_speed;   /* walk or hover: top speed sideways at full strafe, m/s (default half of speed, hover 5) */
+    float strafe_speed;   /* walk or hover: top speed sideways at full strafe, m/s (default half of speed, at most 40; hover 5) */
     HfMoverSounds sounds;
     HfMoverHover hover;   /* HF_MOVE_HOVER, _HELI and _PLANE */
     uint32_t reserved[4]; /* 0; keeps this larger than SDK 37's layout, so that one is refused */

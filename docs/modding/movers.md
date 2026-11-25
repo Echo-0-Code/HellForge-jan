@@ -65,7 +65,7 @@ api->add_mover(mod, &walker);
 | `water`, `wade_depth` | wade, 0.8 m (drive 0.5) | [Water](#water) |
 | `grip`, `drive` | 0.7, none | [Drivetrains](#drivetrains-and-your-own-drive-code) |
 | `max_slope`, `tilt_limit` | from `step_up`, 0 (upright) | [Slopes, tilt, boost and sounds](#slopes-tilt-boost-and-sounds) |
-| `boost_speed`, `boost_time`, `strafe_speed`, `sounds` | none, 3 s, half of `speed`, none | The same section |
+| `boost_speed`, `boost_time`, `strafe_speed`, `sounds` | none, 3 s, half of `speed` (at most 40), none | The same section |
 | `hover` | | [Hover vehicles](#hover-vehicles) |
 | `stall_speed`, `bank_max` | 0.45 × `speed`, 40° | [Helicopters and planes](#helicopters-and-planes) |
 | `dive_depth` | 3 m | [Boats and submarines](#boats-and-submarines) |
