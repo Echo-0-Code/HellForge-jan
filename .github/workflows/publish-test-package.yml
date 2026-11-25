@@ -19,7 +19,7 @@ jobs:
           RUN_ID: "45649546869"
           TAG: "test-71e23d0"
           TARGET: "71e23d08b2550cc9f484acffdb5f44a286bf408c"
-          TITLE: "Test build 71e23d0, b3507fc + flier kit (SDK 47, 48) (run 45649546869)"
+          TITLE: "Test build 71e23d0, b3507fc + flier kit, SDK 47 and 48 (run 45649546869)"
         run: |
           gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n test-package -D pkg
           find pkg -type f -exec ls -la {} \;
