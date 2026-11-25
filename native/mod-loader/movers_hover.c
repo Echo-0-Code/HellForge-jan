@@ -273,7 +273,7 @@ static void HvUnitTick(MvUnit* m, const MvDef* def, float dt)
         if (!m->started) ApiLog(def->mod, "mover: unit %u hovers by HellForge (chassis actor %08x)", m->entity, m->body);
         m->started = 1;
     }
-    MvDriver(m, def);
+    MvDriver(m, def, dt);
     if (MvFlier(def->def.mode)) FlControl(m, def, dt);
     else if (MvVessel(def->def.mode)) BtControl(m, def, dt);
     else HvControl(m, def, dt);
