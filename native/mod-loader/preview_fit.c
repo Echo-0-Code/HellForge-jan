@@ -17,7 +17,7 @@
 #define PREVIEW_FIT_LOGS 160
 
 typedef void (*PreviewFitUpdateFn)(uint8_t* preview, uint32_t unit, float dt);
-typedef struct PreviewFitRow { uint32_t item; float scale; float offset[3]; } PreviewFitRow;
+typedef struct PreviewFitRow { uint32_t item; float scale; float offset[3]; float thumb; } PreviewFitRow;
 static PreviewFitRow g_previewFits[PREVIEW_FIT_MAX];
 static uint32_t g_previewFitCount;
 static SRWLOCK g_previewFitLock = SRWLOCK_INIT;
@@ -135,7 +135,7 @@ static void PreviewFitThumbBox(void* box)
         Note("preview fit: thumbnail item %08x box centre (%.3f, %.3f, %.3f), half extents (%.3f, %.3f, %.3f) take its fit",
             g_previewFitThumbItem, (double)f[12], (double)f[13], (double)f[14], (double)f[16], (double)f[17], (double)f[18]);
     }
-    for (int k = 0; k < 3; k++) { f[12 + k] -= fit.offset[k]; f[16 + k] /= fit.scale; }
+    for (int k = 0; k < 3; k++) { f[12 + k] -= fit.offset[k]; f[16 + k] /= fit.thumb; }
 }
 
 static void InstallPreviewFit(void)
@@ -164,7 +164,9 @@ static const char* PreviewFitInvalid(uint32_t weapon, const HfPreviewFit* fit)
 {
     if (!weapon) return "no weapon";
     if (!fit) return NULL;
-    if (fit->size < sizeof(HfPreviewFit)) return "an HfPreviewFit without its size";
+    if (fit->size < offsetof(HfPreviewFit, thumb_scale)) return "an HfPreviewFit without its size";
+    if (fit->size >= sizeof(HfPreviewFit) && fit->thumb_scale != 0 && !(fit->thumb_scale >= 0.05f && fit->thumb_scale <= 20))
+        return "a thumb_scale of 0 or 0.05 .. 20";
     if (fit->scale != 0 && !(fit->scale >= 0.05f && fit->scale <= 20)) return "a scale of 0 or 0.05 .. 20";
     for (int k = 0; k < 3; k++)
         if (!(fit->offset[k] >= -5 && fit->offset[k] <= 5)) return "offsets of -5 .. 5 m";
@@ -182,7 +184,8 @@ static int PreviewFitStore(uint32_t weapon, const HfPreviewFit* fit)
         return 0;
     }
     if (i == PREVIEW_FIT_MAX) return 1;
-    g_previewFits[i] = (PreviewFitRow){weapon, fit->scale, {fit->offset[0], fit->offset[1], fit->offset[2]}};
+    const float thumb = fit->size >= sizeof(HfPreviewFit) && fit->thumb_scale > 0 ? fit->thumb_scale : fit->scale;
+    g_previewFits[i] = (PreviewFitRow){weapon, fit->scale, {fit->offset[0], fit->offset[1], fit->offset[2]}, thumb};
     if (i == g_previewFitCount) g_previewFitCount++;
     return 0;
 }
