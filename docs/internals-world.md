@@ -35,6 +35,9 @@ bindings do. Each slot and the first bytes of its function are checked before th
 the same widget inside a menu screen, and each screen reacts to a tab change in its own code.
 
 - The bar takes up to 8 text ids through its label setter (0x17AAC50) and its selection through 0x17ABFC0.
+- The bar shows its labels in a fixed width (+0xE084, 1000 on the Armory, set each frame by the bar's visual 0x17AA5D0)
+  and scrolls when they are wider (+0xE080). HellForge hooks the bar's layout (0x17AC4B0) and widens the Armory's bar to
+  its labels' width, up to 1500, so the categories with SKINS all show.
 - The list on show is found by its labels: the bar's first ids match one of the game's lists. The mods' ids follow.
 - Each frame, HellForge finds the screen the menu shows (menu object +0, game.dll+0x347CE38) and puts the mods' labels
   back whenever the game set its list alone. The Armory also sets its lists inside a frame (0x1457350, 0x1457A10), so
