@@ -6,6 +6,7 @@
 
 #define MV_DEFS 32
 #define MV_UNITS 64
+#define MV_KIT_SLOTS 8 /* fixed guns, and damage zones, on one mover */
 #define MV_INPUT_S 0.5     /* a mod's input holds this long */
 #define MV_SOLID_S 0.5     /* how often the moving units near a mover are listed */
 #define MV_G 9.81f
@@ -57,6 +58,14 @@ typedef struct MvUnit
     float start[3];
     double syncAge;
     MvWire sync;
+    /* SDK 47 (movers_kit.c): its fixed guns and damage zones, by their slot on its mover */
+    uint32_t kitInit, gunRounds[MV_KIT_SLOTS], gunBurst[MV_KIT_SLOTS], gunFiring[MV_KIT_SLOTS], gunSeated[MV_KIT_SLOTS];
+    float gunWait[MV_KIT_SLOTS], znSink, znSpin, znSweep, znContact[MV_KIT_SLOTS]; /* znSink, znSpin: m/s, rad/s a broken zone forces */
+    uint8_t gunHeld[MV_KIT_SLOTS];
+    int32_t znHealth[MV_KIT_SLOTS];
+    /* SDK 48 (movers_view.c): mouse_steer's throttle lever, whether this machine's Helldiver drives it, and A/D */
+    float seatLever, seatKeys;
+    uint32_t seatLocal;
 } MvUnit;
 
 static MvDef g_mvDefs[MV_DEFS];
@@ -515,13 +524,17 @@ static void MvTrace(MvUnit* m, const MvDef* def, float dt)
 
 #define HV_SEAT_S 2.0 /* a hover's seated driver's last throttle or steer drives it this long */
 
+static void ViewSteer(MvUnit* m, const MvDef* def); /* movers_view.c (SDK 48) */
 /* Who drives it now: a mod's input while it holds, a hover's seated driver, the custom AI, or nobody. */
 static void MvDriver(MvUnit* m, const MvDef* def)
 {
     if (m->inputAge < MV_INPUT_S) { m->driver = HF_DRIVER_MOD; return; }
     m->strafe = m->lift = m->boost = 0; /* a mod's input has them, and a seat's lift keys */
     if (m->seatAge < HV_SEAT_S) /* any mover whose unit has a driver's seat, read where it is moved */
-    { m->driver = HF_DRIVER_SEAT; m->throttle = m->seatThrottle; m->steer = m->seatSteer; m->lift = m->seatLift; }
+    {
+        m->driver = HF_DRIVER_SEAT; m->throttle = m->seatThrottle; m->steer = m->seatSteer; m->lift = m->seatLift;
+        if (def->def.mouse_steer && m->seatLocal) ViewSteer(m, def); /* SDK 48: toward where the camera looks */
+    }
     else if (def->ai) { m->driver = HF_DRIVER_AI; MvAiInputs(m, def); }
     else { m->driver = HF_DRIVER_NONE; m->throttle = 0; m->steer = 0; }
 }
@@ -593,6 +606,8 @@ static int MvBodyModes(MvUnit* m, const MvDef* def, float dt)
     MvBodyTick(m, def, dt);
     return 1;
 }
+
+static void KitTick(MvUnit* m, float dt); /* movers_kit.c */
 
 static void MvUnitTick(MvUnit* m, float dt)
 {
@@ -666,6 +681,7 @@ static void MvTick(HfMod* mod, float dt, void* user)
             continue;
         }
         MvUnitTick(m, dt);
+        KitTick(m, dt);
     }
     MvSyncSend(dt);
     ReleaseSRWLockExclusive(&g_mvLock);
@@ -813,7 +829,8 @@ static void MvDefaults(HfMoverDef* d)
     MvOr(&d->strafe_speed, k[3] > 0 ? k[3] : d->speed * 0.5f);
     MvOr(&d->stall_speed, 0.45f * d->speed);
     MvOr(&d->bank_max, 40.0f);
-    MvOr(&d->dive_depth, 3.0f); /* periscope depth: the game draws nothing under water */
+    MvOr(&d->dive_depth, 3.0f);
+    MvOr(&d->thrust_max, 1.3f); /* a utility helicopter's, its engine's limit */ /* periscope depth: the game draws nothing under water */
     if (MvFlier(d->mode)) MvFlierDefaults(&d->hover, d->mode == HF_MOVE_PLANE);
     if (MvVessel(d->mode)) MvVesselDefaults(&d->hover, d->mode == HF_MOVE_SUB);
     MvHoverDefaults(&d->hover);
@@ -839,6 +856,8 @@ static const char* MvRefusal(const HfMoverDef* in, HfMoverDef* d)
     if (d->rail > MV_RAILS) return "rail: an id add_rail gave, or 0 for the nearest";
     if (!AiIn(d->speed, 0.1f, MvFlier(d->mode) ? 120.0f : 40.0f) || !AiIn(d->stall_speed, 1, d->speed) || !AiIn(d->bank_max, 5, 80) || !AiIn(d->dive_depth, 0.5f, 30))
         return "speed 0.1 .. 40 (a flier 120), stall_speed 1 .. speed, bank_max 5 .. 80, dive_depth 0.5 .. 30";
+    if (!AiIn(d->thrust_max, 1.05f, 3)) return "thrust_max 1.05 .. 3";
+    if (d->mouse_steer > 1) return "mouse_steer 0 or 1";
     if (!AiIn(d->reverse_speed, 0, 40) || !AiIn(d->acceleration, 0.1f, 200) || !AiIn(d->brake, 0.1f, 200) ||
         !AiIn(d->turn_rate, 1, 1440) || !AiIn(d->turn_radius, 0, 100) || !AiIn(d->step_up, 0, 10) || !AiIn(d->step_down, 0, 50) ||
         !AiIn(d->reach, 0, 20) || !AiIn(d->start_delay, 0, 120))
@@ -944,6 +963,9 @@ static int ApiAiDrive(HfMod* mod, uint64_t entity, const HfAiDrive* in)
     ApiLog(mod, "ai_drive(%016llx): the custom AI drives it (slows within %.1f m)", (unsigned long long)entity, (double)g_mvDefs[d].arrive);
     return 0;
 }
+
+#include "movers_kit.c" /* SDK 47: fixed guns and damage zones (MvUnitOf, g_hvImpulse, ActLocalAvatar) */
+#include "movers_view.c" /* SDK 48: mouse_steer (TcamView, KitLocalRoot) */
 
 /* The table's entries from SDK 35 on (ApiInit). */
 #define MV_API ApiAddMover, ApiMoverInput, ApiMoverState, ApiAiDrive

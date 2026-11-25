@@ -295,7 +295,8 @@ static float HvLiftKeys(void)
 }
 
 /* One vehicle's record, input and lever. */
-static void HvSeat(uintptr_t record, uintptr_t input, uintptr_t leverAt)
+static int ViewSeat(MvUnit* m, const float in[3], uint32_t lever, float dt); /* movers_view.c (SDK 48) */
+static void HvSeat(uintptr_t record, uintptr_t input, uintptr_t leverAt, float dt)
 {
     uintptr_t r;
     uint32_t entity, lever;
@@ -305,6 +306,7 @@ static void HvSeat(uintptr_t record, uintptr_t input, uintptr_t leverAt)
     if (m == NULL || m->remote || SafeRead(input, in, 12) || SafeRead(leverAt, &lever, 4) ||
         !AiIn(in[0], -1.01f, 1.01f) || !AiIn(in[1], -0.01f, 1.01f) || !AiIn(in[2], -0.01f, 1.01f))
         return;
+    if (ViewSeat(m, in, lever, dt)) return; /* mouse_steer: its throttle lever and A/D, while this machine's Helldiver drives */
     const float throttle = lever == 0 ? -fmaxf(in[1], in[2]) : lever == 1 ? 0.0f : in[1] - in[2];
     m->seatThrottle = MvClamp(throttle, -1, 1);
     m->seatSteer = MvClamp(-in[0], -1, 1);
@@ -312,20 +314,20 @@ static void HvSeat(uintptr_t record, uintptr_t input, uintptr_t leverAt)
     if (fabsf(throttle) > 0.02f || fabsf(in[0]) > 0.02f || m->seatLift != 0) m->seatAge = 0;
 }
 
-static void HvSeats(uintptr_t manager)
+static void HvSeats(uintptr_t manager, float dt)
 {
     uint32_t count;
     uintptr_t records, inputs, drive;
     if (SafeRead(manager + 0x34, &count, 4) || !EvpPtr(manager + 0x58, &records) || !EvpPtr(manager + 0x60, &inputs) || !EvpPtr(manager + 0x70, &drive))
         return;
-    for (uint32_t i = 0; i < count && i < 4096; i++) HvSeat(records + 8u * i, inputs + 0x10u * i, drive + 0x670u * i + 0x618);
+    for (uint32_t i = 0; i < count && i < 4096; i++) HvSeat(records + 8u * i, inputs + 0x10u * i, drive + 0x670u * i + 0x618, dt);
 }
 
 static void HvMotionDetour(void* manager, float dt)
 {
     if (manager != NULL && TryAcquireSRWLockExclusive(&g_mvLock))
     {
-        HvSeats((uintptr_t)manager);
+        HvSeats((uintptr_t)manager, dt > 0 && dt < 0.25f ? dt : 1.0f / 60);
         ReleaseSRWLockExclusive(&g_mvLock);
     }
     g_hvMotionNext(manager, dt);

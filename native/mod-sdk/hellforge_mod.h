@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 46
+#define HF_MOD_SDK_VERSION 48
 #define HF_WEAPON_PAINTS 1 /* HfWeapon.paints exists */
 #define HF_MOD_EXPORT __declspec(dllexport)
 
@@ -1801,6 +1801,16 @@ typedef struct HfApi
     /* ---- SDK 46: an item's size in the Armory's 3D preview (docs/modding/ui.md; check hf->size) ----------------- */
     /* weapon: a loadout id (add_weapon's or a vanilla one); fit NULL or scale 0: the game's fit. Any time. 0 done, 1 refused */
     int (*set_preview_fit)(HfMod* mod, uint32_t weapon, const HfPreviewFit* fit);
+    /* ---- SDK 47: fliers' fixed weapons and damage zones (hellforge_move.h, docs/modding/movers.md; check hf->size) -- */
+    /* add_fixed_gun, add_damage_zone: any time, the id (1 and up) or 0 refused (the log says why). The states: one gun or
+     * zone on one unit (an entity instance), 1 filled, 0 none; any thread. fixed_gun_refill adds rounds (0: full) to a
+     * gun (0: every gun) and repair_zones makes a zone (0: all) whole: host, 0 done, 1 not a mover's unit. */
+    uint32_t (*add_fixed_gun)(HfMod* mod, const HfFixedGunDef* def); uint32_t (*fixed_gun_state)(HfMod* mod, uint32_t entity, uint32_t gun, HfFixedGunState* state);
+    int (*fixed_gun_refill)(HfMod* mod, uint32_t entity, uint32_t gun, uint32_t rounds); uint32_t (*add_damage_zone)(HfMod* mod, const HfDamageZoneDef* def);
+    /* SDK 48, last on the next line (check hf->size): view_pose, where this machine's camera is and looks as the last
+     * frame rendered it (HfView; docs/modding/world.md). Any thread, in a mission or on the ship. 1 read, 0 not (another
+     * build, or no frame yet). */
+    uint32_t (*zone_state)(HfMod* mod, uint32_t entity, uint32_t zone, HfZoneState* state); int (*repair_zones)(HfMod* mod, uint32_t entity, uint32_t zone); int (*view_pose)(HfMod* mod, HfView* out);
 } HfApi;
 
 /* SDK 6: an HfMod starts with the API, so these need only the mod. */
