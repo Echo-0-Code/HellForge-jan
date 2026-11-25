@@ -486,12 +486,12 @@ public static class ModDataBuilder
         return new(meshMain, meshGpu, stream);
     }
 
-    // The warm colour curve keys recoloured, as many as the spec says when it says.
+    // The warm (or with match any, all) colour curve keys recoloured, as many as the spec says when it says.
     static void EditCurves(byte[] main, CurveEdit curves)
     {
-        var changed = ResourceEdits.RecolourCurves(main, curves.Preset == DataSpecs.WarmToBlue ? ResourceEdits.WarmToBlue : ResourceEdits.TowardsColour(curves.Colour!));
+        var changed = ResourceEdits.RecolourCurves(main, curves.Preset == DataSpecs.WarmToBlue ? ResourceEdits.WarmToBlue : ResourceEdits.TowardsColour(curves.Colour!), curves.Any);
         if (changed == 0 || (curves.Keys is { } keys && changed != keys))
-            throw new InvalidDataException($"{changed} warm colour curve keys found{(curves.Keys is { } k ? $", {k} expected" : "")}.");
+            throw new InvalidDataException($"{changed} {(curves.Any ? "" : "warm ")}colour curve keys found{(curves.Keys is { } k ? $", {k} expected" : "")}.");
     }
 
     static ulong Hash(string name) => EngineHash.Murmur64A(Encoding.UTF8.GetBytes(name));

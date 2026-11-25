@@ -89,8 +89,9 @@ public sealed record ModelResource(string Where, string Name, string File, IRead
 public sealed record SoundsResource(string Where, string Name, IReadOnlyList<SoundFile> Sounds, ulong MixerBank, uint Mixer) : DataResource(Where);
 public sealed record SoundFile(string Event, string Wav, double Gain);
 public sealed record Replacement(ulong From, ulong To, IReadOnlyList<int>? At);
-// Warm colour curve keys recoloured by a preset or towards a colour; Keys, if given, is how many keys must change.
-public sealed record CurveEdit(string? Preset, double[]? Colour, int? Keys);
+// Colour curve keys recoloured by a preset or towards a colour; Keys, if given, is how many keys must change. Any: every
+// key at least 2 bright (a green gas, a white smoke), not only the warm ones.
+public sealed record CurveEdit(string? Preset, double[]? Colour, int? Keys, bool Any = false);
 
 public static partial class DataSpecs
 {
@@ -480,14 +481,16 @@ public static partial class DataSpecs
     static CurveEdit? ReadCurves(JsonElement e, string at)
     {
         if (!e.TryGetProperty("curves", out var curveSpec)) return null;
-        Fields(curveSpec, $"{at}.curves", "preset", "colour", "keys");
+        Fields(curveSpec, $"{at}.curves", "preset", "colour", "keys", "match");
         var preset = curveSpec.TryGetProperty("preset", out _) ? Text(curveSpec, "preset", $"{at}.curves") : null;
         var colour = curveSpec.TryGetProperty("colour", out var c) ? Colour(c, $"{at}.curves") : null;
         if ((preset == null) == (colour == null)) throw new InvalidDataException($"{at}.curves: give a preset or a colour.");
         if (preset != null && preset != WarmToBlue) throw new InvalidDataException($"{at}.curves: the preset is \"{WarmToBlue}\".");
         if (colour != null && colour.Max() <= 0) throw new InvalidDataException($"{at}.curves: the colour cannot be black.");
         int? keys = curveSpec.TryGetProperty("keys", out var k) ? (k.ValueKind == JsonValueKind.Number && k.TryGetInt32(out var n) && n > 0 ? n : throw new InvalidDataException($"{at}.curves: keys is a positive count.")) : null;
-        return new(preset, colour, keys);
+        var match = curveSpec.TryGetProperty("match", out _) ? Text(curveSpec, "match", $"{at}.curves") : "warm";
+        if (match is not ("warm" or "any")) throw new InvalidDataException($"{at}.curves: match is \"warm\" or \"any\".");
+        return new(preset, colour, keys, match == "any");
     }
 
     // {slot: texture}: a slot by name (base_data) or 0x<8 hex digits>, a texture by resource name or 0x id.

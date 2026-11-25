@@ -39,6 +39,8 @@ packs, and the launcher says when a newer HellForge is out.
 
 ### Added
 
+- **Colour curves of any colour.** A particle copy's `curves` takes `"match": "any"` to recolour every key at least 2
+  bright, not only the warm ones: a green gas cloud can become an icy mist.
 - **The wheel over a click box.** A screen that is not modal gets the mouse wheel over its `take_clicks` boxes, and the
   game does not ([overlay.md](docs/modding/overlay.md#click-boxes)).
 - **The Armory's SKINS page (SDK 45).** `add_armory_tab(mod, HF_ARMORY_TABS_SKINS, ...)` puts a mod's tab on a SKINS

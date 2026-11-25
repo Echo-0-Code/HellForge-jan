@@ -91,6 +91,10 @@ static class DataBuilderTests
             check(BinaryPrimitives.ReadSingleLittleEndian(tinted.AsSpan(52)) == 0f && BinaryPrimitives.ReadSingleLittleEndian(tinted.AsSpan(56)) == 255f &&
                 BinaryPrimitives.ReadSingleLittleEndian(tinted.AsSpan(60)) == 127.5f, "A colour target does not keep the key's brightness.");
             check(ResourceEdits.RecolourCurves(Floats([1f, 2f, 3f]), ResourceEdits.WarmToBlue) == 0, "Something that is no curve was recoloured.");
+            var misted = original.ToArray();
+            check(ResourceEdits.RecolourCurves(misted, ResourceEdits.TowardsColour([0.8, 0.9, 1]), any: true) == 3, "match any does not recolour every bright key.");
+            check(BinaryPrimitives.ReadSingleLittleEndian(misted.AsSpan(76)) == 160f && BinaryPrimitives.ReadSingleLittleEndian(misted.AsSpan(80)) == 180f &&
+                BinaryPrimitives.ReadSingleLittleEndian(misted.AsSpan(84)) == 200f, "A blue key under match any does not keep its brightness.");
         });
 
         test("Material colours, references and colour lookup textures are edited only where expected", () =>
@@ -197,6 +201,7 @@ static class DataBuilderTests
             Refused("""{"archives":["1111111111111111"],"resources":[{"icon":"../icon.png","name":"test/mod/icon"}]}""", "a .png file in the mod folder");
             Refused("""{"archives":["1111111111111111"],"resources":[{"icon":"missing.png","name":"test/mod/icon"}]}""", "missing.png is missing");
             Refused("""{"archives":["1111111111111111"],"resources":[{"type":"particles","copy":"0x1","name":"test/mod/fx","curves":{"preset":"pink"}}]}""", "warm-to-blue");
+            Refused("""{"archives":["1111111111111111"],"resources":[{"type":"particles","copy":"0x1","name":"test/mod/fx","curves":{"preset":"warm-to-blue","match":"green"}}]}""", "match");
             Refused("""{"archives":["1111111111111111"],"resources":[{"type":"material","copy":"0x1","name":"test/mod/m","colours":{"0x1":[1,2]}}]}""", "a colour is");
             Refused("""{"archives":["1111111111111111"],"resources":[{"type":"unit","copy":"0xZZ","name":"test/mod/unit"}]}""", "0x<up to 16 hex digits>");
             Refused("""{"archives":["1111111111111111"],"resources":[{"type":"material","edit":"0x1","layers":["icon.png"]}]}""", "layers is for a texture edit");
