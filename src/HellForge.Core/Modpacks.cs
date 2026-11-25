@@ -7,6 +7,8 @@ namespace HellForge.Core;
 // holds the switches in use, so every reader of it (sessions, the CLI, kept versions) needs nothing new. Each named pack
 // has its switches in hellforge-mods-<name>.json; while one is on, the default pack's wait in hellforge-mods.json's
 // "defaultDisabled". Only the switches change with the pack: the order, pack options and trust stay.
+// A pack that is not in use keeps the mods installed when it was left ("known"; "defaultKnown" for the default pack),
+// so a mod installed since starts off in it: a new testing mod is on only in the pack it was installed under.
 public static partial class ModSettings
 {
     public const string ModpackPrefix = "hellforge-mods-";
@@ -18,15 +20,21 @@ public static partial class ModSettings
         state.Modpack = pack.GetString();
         state.DefaultDisabled = new HashSet<string>(StringComparer.Ordinal);
         AddTexts(root, "defaultDisabled", state.DefaultDisabled);
+        if (root.TryGetProperty("defaultKnown", out var known) && known.ValueKind == JsonValueKind.Array)
+        {
+            state.DefaultKnown = new HashSet<string>(StringComparer.Ordinal);
+            AddTexts(root, "defaultKnown", state.DefaultKnown);
+        }
     }
 
     // The pack in use is saved with every change, so its own file always shows its switches.
     static void WriteModpack(string modsFolder, JsonObject root, State state)
     {
         if (state.Modpack == null) return;
-        WriteModpack(modsFolder, state.Modpack, state.Disabled);
+        WriteModpack(modsFolder, state.Modpack, state.Disabled, null);
         root["modpack"] = state.Modpack;
         root["defaultDisabled"] = new JsonArray([.. (state.DefaultDisabled ?? []).Order(StringComparer.Ordinal).Select(id => (JsonNode?)id)]);
+        if (state.DefaultKnown != null) root["defaultKnown"] = new JsonArray([.. state.DefaultKnown.Order(StringComparer.Ordinal).Select(id => (JsonNode?)id)]);
     }
 
     // A name that is a plain file name on every system, and not the default pack's.
@@ -56,30 +64,38 @@ public static partial class ModSettings
         if (!ValidModpackName(name)) throw new InvalidDataException("A modpack name has 1 to 32 letters, digits, spaces, - or _, and is not \"Default\".");
         if (Modpacks(modsFolder).Contains(name, StringComparer.OrdinalIgnoreCase)) throw new InvalidDataException($"There is a modpack named {name} already.");
         Directory.CreateDirectory(modsFolder);
-        WriteModpack(modsFolder, name, []);
+        WriteModpack(modsFolder, name, [], null);
         SwitchModpack(modsFolder, name);
     }
 
-    // Puts a pack's switches in use (null: the default pack), after keeping the current ones in their own pack.
+    // The mods in the folder now, by id (folders and archives; one that fails to load is still listed by nothing).
+    static HashSet<string> InstalledMods(string modsFolder) =>
+        new(ModCatalog.Load(modsFolder).Mods.Select(m => m.Id), StringComparer.Ordinal);
+
+    // Puts a pack's switches in use (null: the default pack), after keeping the current ones in their own pack. Mods
+    // installed since the target pack was left start off in it.
     public static void SwitchModpack(string modsFolder, string? name)
     {
         var state = Read(modsFolder);
         if (string.Equals(name, state.Modpack, StringComparison.OrdinalIgnoreCase)) return;
         HashSet<string> target;
-        if (name == null) target = state.DefaultDisabled ?? [];
+        HashSet<string>? known;
+        if (name == null) { target = state.DefaultDisabled ?? []; known = state.DefaultKnown; }
         else
         {
             if (!File.Exists(ModpackFile(modsFolder, name))) throw new FileNotFoundException($"There is no modpack named {name}.");
-            target = ReadModpack(ModpackFile(modsFolder, name));
+            (target, known) = ReadModpack(ModpackFile(modsFolder, name));
         }
-        if (state.Modpack != null) WriteModpack(modsFolder, state.Modpack, state.Disabled);
+        var installed = InstalledMods(modsFolder);
+        if (known is { } seen) target.UnionWith(installed.Where(id => !seen.Contains(id)));
+        if (state.Modpack != null) WriteModpack(modsFolder, state.Modpack, state.Disabled, installed);
         Change(modsFolder, s =>
         {
-            if (s.Modpack == null) s.DefaultDisabled = [.. s.Disabled];
+            if (s.Modpack == null) { s.DefaultDisabled = [.. s.Disabled]; s.DefaultKnown = [.. installed]; }
             s.Disabled.Clear();
             s.Disabled.UnionWith(target);
             s.Modpack = name;
-            if (name == null) s.DefaultDisabled = null;
+            if (name == null) { s.DefaultDisabled = null; s.DefaultKnown = null; }
         });
     }
 
@@ -92,9 +108,10 @@ public static partial class ModSettings
 
     // A pack that cannot be read is refused, not taken as "every mod on": a broken gaming pack would otherwise switch
     // every testing mod on with no word.
-    static HashSet<string> ReadModpack(string path)
+    static (HashSet<string> Disabled, HashSet<string>? Known) ReadModpack(string path)
     {
         var disabled = new HashSet<string>(StringComparer.Ordinal);
+        HashSet<string>? known = null;
         try
         {
             using var document = JsonDocument.Parse(File.ReadAllText(path));
@@ -102,15 +119,21 @@ public static partial class ModSettings
                 list.ValueKind != JsonValueKind.Array)
                 throw new InvalidDataException($"The modpack file {Path.GetFileName(path)} has no \"disabled\" list; fix or delete it.");
             AddTexts(document.RootElement, "disabled", disabled);
+            if (document.RootElement.TryGetProperty("known", out var mods) && mods.ValueKind == JsonValueKind.Array)
+            {
+                known = new HashSet<string>(StringComparer.Ordinal);
+                AddTexts(document.RootElement, "known", known);
+            }
         }
         catch (JsonException error)
         {
             throw new InvalidDataException($"The modpack file {Path.GetFileName(path)} is not valid JSON ({error.Message}); fix or delete it.", error);
         }
-        return disabled;
+        return (disabled, known);
     }
 
-    static void WriteModpack(string modsFolder, string name, IEnumerable<string> disabled)
+    // known: the mods installed as the pack is left (null while it is in use: what is installed then is on in it).
+    static void WriteModpack(string modsFolder, string name, IEnumerable<string> disabled, IEnumerable<string>? known)
     {
         var path = ModpackFile(modsFolder, name);
         var root = new JsonObject
@@ -118,6 +141,7 @@ public static partial class ModSettings
             ["format"] = 1,
             ["disabled"] = new JsonArray([.. disabled.Order(StringComparer.Ordinal).Select(id => (JsonNode?)id)])
         };
+        if (known != null) root["known"] = new JsonArray([.. known.Order(StringComparer.Ordinal).Select(id => (JsonNode?)id)]);
         File.WriteAllText(path + ".tmp", root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n");
         File.Move(path + ".tmp", path, overwrite: true);
     }

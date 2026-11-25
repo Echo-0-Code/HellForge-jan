@@ -1071,6 +1071,8 @@ public static partial class ModSettings
         // DefaultDisabled keeps the default pack's switches for the way back.
         public string? Modpack { get; set; }
         public HashSet<string>? DefaultDisabled { get; set; }
+        // The mods installed when the default pack was left: one installed later starts off in it (Modpacks.cs).
+        public HashSet<string>? DefaultKnown { get; set; }
     }
 
     // HellForge's share of loot caches that hold Forge Credits: the game's 20 % for Super Credits, raised for a nicer

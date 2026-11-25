@@ -179,6 +179,34 @@ static class ModTests
             check(ModSettings.Disabled(mods).SetEquals(["test.rival"]), "Switch state not saved.");
         });
 
+        test("A mod installed under one modpack starts off in the others", () =>
+        {
+            var mods = Path.Combine(root, "mods-modpacks-new");
+            static void Install(string mods, string id)
+            {
+                var folder = Path.Combine(mods, id);
+                Directory.CreateDirectory(Path.Combine(folder, "data"));
+                File.WriteAllText(Path.Combine(folder, ModCatalog.ManifestName), $$"""{"format":1,"id":"{{id}}","name":"{{id}}","version":"1.0.0","gameplay":false}""");
+                var (archive, _, _) = ResourceArchive.Write(new Dictionary<ResourceKey, ResourceParts>
+                {
+                    [new(ResourceTypes.Texture, 0x1234)] = new([1, 2, 3, 4], [], [])
+                });
+                File.WriteAllBytes(Path.Combine(folder, "data", "9ba626afa44a3aa3.patch_0"), archive);
+            }
+            Install(mods, "test.old");
+            check(ModCatalog.Load(mods).Mods.Any(m => m.Id == "test.old"), "The test mod did not load.");
+            ModSettings.CreateModpack(mods, "Testing");
+            Install(mods, "test.new");
+            check(!ModSettings.Disabled(mods).Contains("test.new"), "A mod installed under the pack in use is off in it.");
+            ModSettings.SwitchModpack(mods, null);
+            check(ModSettings.Disabled(mods).SetEquals(["test.new"]), "A mod installed under another pack is on in the default one.");
+            ModSettings.SetEnabled(mods, "test.new", true);
+            ModSettings.SwitchModpack(mods, "Testing");
+            check(ModSettings.Disabled(mods).Count == 0, "The pack it was installed under lost it.");
+            ModSettings.SwitchModpack(mods, null);
+            check(ModSettings.Disabled(mods).Count == 0, "A mod switched on by hand in the default pack went off again.");
+        });
+
         test("Modpacks keep their own switches and leave the rest of the settings alone", () =>
         {
             var mods = Path.Combine(root, "mods-modpacks");
