@@ -184,6 +184,21 @@ if (tab == 0) tab = hf->add_armory_tab(mod, HF_ARMORY_TABS_WEAPONS, "SUPPORT", O
 - Each time the game sets the weapons labels again (its input after the grid, the way back from CUSTOMIZE), the SKINS
   labels go back, with the tab picked last. Back or Esc closes the page to the overview with WEAPONRY picked.
 
+### An item's size in the 3D preview (SDK 46)
+
+The Armory's 3D preview fits its camera to the item's unit box. A model that draws outside that box, such as a backpack
+shown as a weapon, comes out too big. `set_preview_fit` scales and moves one item there:
+
+```c
+HfPreviewFit fit = {sizeof fit, 0.5f, {0, 0, -0.1f}}; /* half as big, 10 cm down */
+hf->set_preview_fit(mod, weaponId, &fit);           /* weaponId: add_weapon's loadout id */
+```
+
+- `scale` 0.05 .. 20 against the game's fit; 0, or a NULL fit, gives the game's fit back.
+- `offset` is metres in the preview's own axes, z up, -5 .. 5.
+- Any time; the next box the preview fits uses it. The first frame after a pick shows the game's fit.
+- `modloader.log` lists the first 32 boxes of a session ("preview fit: item ... box size ..."), to tune a fit.
+
 ## A category in Vehicle Customization (retired)
 
 `add_hangar_category` and `set_hangar_equipped` (SDK 41) are retired: they refuse and return 0 and 1. Their places in

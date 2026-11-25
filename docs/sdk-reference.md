@@ -328,6 +328,10 @@ for changing and adding content; [Hooks and game memory](modding/hooks.md) for `
 
 - `add_rail`: `uint32_t (HfMod* mod, const HfRailDef* def)`
 
+### SDK 46: an item's size in the Armory's 3D preview (docs/modding/ui.md; check hf->size)
+
+- `set_preview_fit`: `int (HfMod* mod, uint32_t weapon, const HfPreviewFit* fit)`. weapon: a loadout id (add_weapon's or a vanilla one); fit NULL or scale 0: the game's fit. Any time. 0 done, 1 refused
+
 ## Functions
 
 Game functions by name (`hellforge_functions.h`, SDK 16), from `mappings/functions.json`. `hf_fn_<Name>(mod)` gives

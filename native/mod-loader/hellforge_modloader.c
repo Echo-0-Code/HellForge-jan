@@ -777,7 +777,7 @@ static void WatchInstalls(void)
     if (g_fired[HF_EVENT_GAME_LOADED] && g_tickState == 0) TickInstall();
     if (g_fired[HF_EVENT_GAME_LOADED]) PerfCorpseFreezeWatch();
     HeapTrimInstall();
-    if (g_fired[HF_EVENT_GAME_LOADED]) InstallLoadoutPreview();
+    if (g_fired[HF_EVENT_GAME_LOADED]) { InstallLoadoutPreview(); InstallPreviewFit(); }
     if (g_fired[HF_EVENT_GAME_LOADED]) { InstallForgeCreditsColour(); InstallForgeCreditsRoll(); }
     if (g_fired[HF_EVENT_GAME_LOADED]) InstallLockedWarbonds();
     if (g_fired[HF_EVENT_GAME_LOADED]) { InstallModWarbonds(); CustomizeListInstall(); CustomizeGuardsWatch(); }
@@ -1126,7 +1126,7 @@ static void ApiInit(void)
         ApiAddEnemy, ApiAddEnemySwap, ApiAddEnemySquad, ApiRpcListen, ApiRpcSend, ApiAddScreen, ApiScreenShow, ApiGenerationCapacity, ApiAddPattern, ApiUiOpen, ApiUiSet, ApiUiOn, ApiUiClose,
         ApiPlayEffect, ApiStopEffect, ApiFindEnemies, ApiArmoryWeapon, ApiAddText, ApiPlaceStratagem, ApiSetStratagemIcon, ApiPlaceModStratagem, ApiWeaponPick, ApiSetWeaponPick, ApiAddArmoryTab, ApiAddMenuTab,
         ApiLineOfSight, ApiFindProjectiles, ApiSetProjectile, ApiFactionOf, ApiSideOf, ApiFindEntities, ApiOnRender, ApiPoseJoint, ApiJointPose,
-        ApiAddStatusEffect, ApiAddEffectLooks, ApiAddEffectBuildup, ApiEffectState, ApiAddOption, ApiGetOption, ApiSetOption, ApiAiObey, ApiAiOrder, ApiAiState, IT_API, MV_API, TR_API, LF_API, HG_API, LB_API, MV_RAIL_API};
+        ApiAddStatusEffect, ApiAddEffectLooks, ApiAddEffectBuildup, ApiEffectState, ApiAddOption, ApiGetOption, ApiSetOption, ApiAiObey, ApiAiOrder, ApiAiState, IT_API, MV_API, TR_API, LF_API, HG_API, LB_API, MV_RAIL_API, PF_API};
 }
 
 /* One mod of the plan set up: its log opened, then a code mod's DLL loaded and its hellforge_mod_init called. */
