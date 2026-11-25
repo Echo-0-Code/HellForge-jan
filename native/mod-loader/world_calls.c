@@ -96,7 +96,17 @@ static void* WcWorld(void)
     return game && EvpPtr(game + WC_GAME, &g) && EvpPtr(g + WC_GAME_WORLD, &world) ? (void*)world : NULL;
 }
 
-static uint32_t WcIdString32(const char* name) { return (uint32_t)(Murmur64A(name, strlen(name)) >> 32); }
+/* A node's id: "#" and 8 hex digits name an unnamed joint by its id, as joint lists print it; else its name's hash. */
+static uint32_t WcIdString32(const char* name)
+{
+    char* end = NULL;
+    if (name[0] == '#' && strlen(name) == 9)
+    {
+        const unsigned long id = strtoul(name + 1, &end, 16);
+        if (end != NULL && *end == 0) return (uint32_t)id;
+    }
+    return (uint32_t)(Murmur64A(name, strlen(name)) >> 32);
+}
 
 /* The node of a unit a name gives: 0 (the root) for none, -1 when the unit has no such node. */
 static int32_t WcNode(uint32_t unit, uint32_t name)
