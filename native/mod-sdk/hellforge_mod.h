@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 44
+#define HF_MOD_SDK_VERSION 45
 #define HF_WEAPON_PAINTS 1 /* HfWeapon.paints exists */
 #define HF_MOD_EXPORT __declspec(dllexport)
 
@@ -1678,7 +1678,8 @@ typedef struct HfApi
     /* Adds label after the vanilla labels of one of the Armory's tab lists (HF_ARMORY_TABS_...); a click or Q/E reaches
      * it as the game's own. The game's select is not run for it: the page keeps what it showed, for the mod to change.
      * on_select runs on the game thread, selected 1 when picked, 0 when another tab is or the Armory closes. Any
-     * thread. Its handle (1 and up), or 0 refused (the mod's log says why: no room on the bar, or another game build). */
+     * thread. Its handle (1 and up), or 0 refused (the mod's log says why: no room on the bar, or another game build).
+     * SDK 45: HF_ARMORY_TABS_SKINS puts it on the SKINS page (an older HellForge refuses it: fall back to WEAPONS). */
     uint32_t (*add_armory_tab)(HfMod* mod, uint32_t list, const char* label, HfArmoryTabCallback on_select, void* user);
 
     /* ---- SDK 27: a mod's tab on any of the game's tab bars (hellforge_world.h, docs/modding/ui.md; check hf->size) - */
