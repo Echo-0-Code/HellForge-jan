@@ -11,7 +11,9 @@ static float BtDepth(const MvUnit* m, const float p[3], float* surface)
 {
     *surface = MvWaterAt(p[0], p[1], p[2]);
     if (*surface <= -499.0f) return 0;
-    const float ground = HvGroundAt(m, p[0], p[1], fmaxf(p[2], *surface) + 1.0f, -1e9f);
+    float ground = HvGroundAt(m, p[0], p[1], fmaxf(p[2], *surface) + 1.0f, -1e9f);
+    /* the water's surface blocks rays as the level's own: under it, the bed is read from just below the surface */
+    if (fabsf(ground - *surface) < 0.15f) ground = HvGroundAt(m, p[0], p[1], *surface - 0.1f, -1e9f);
     return ground > -1e8f ? fmaxf(*surface - ground, 0) : HV_REACH;
 }
 

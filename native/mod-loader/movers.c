@@ -545,6 +545,15 @@ static void MvBodyRail(MvUnit* m, const MvDef* def, const float w[16], const flo
     MvTrace(m, def, dt);
 }
 
+/* A tracked vehicle on a wheeled body pivots against its tyres' sideways grip: the yaw impulse its tracks would add to
+ * beat that skid, grip x weight on a 1.5 m half-track lever, while it turns slower than it wants. */
+static float MvSkid(const MvUnit* m, const MvDef* def, float yawRate, float mass, float dt)
+{
+    const float miss = m->turning - yawRate;
+    if (def->asked != HF_MOVE_TRACKS || fabsf(m->turning) < 0.05f || fabsf(miss) < 0.05f) return 0;
+    return copysignf(def->def.grip * mass * MV_G * 1.5f * dt, miss);
+}
+
 /* A walker or driver whose physics body undid its moves: the body is pushed toward the speed, sideways speed and turn
  * HellForge wants, as tyres or feet would; the ground, walls and its height stay the body's own. */
 static void MvBodyTick(MvUnit* m, const MvDef* def, float dt)
@@ -565,7 +574,7 @@ static void MvBodyTick(MvUnit* m, const MvDef* def, float dt)
     const float fx = -sinf(m->yaw), fy = cosf(m->yaw), k = fminf(1.0f, 8.0f * dt), mass = d->hover.mass > 0 ? d->hover.mass : 3000.0f;
     const float want[2] = {fx * m->speed - fy * m->side, fy * m->speed + fx * m->side};
     const float j[3] = {(want[0] - v[0]) * mass * k, (want[1] - v[1]) * mass * k, 0};
-    const float t[3] = {0, 0, (m->turning - om[2]) * mass * 2.0f * k}; /* about 2 m^2 x mass: a car's yaw inertia */
+    const float t[3] = {0, 0, (m->turning - om[2]) * mass * 2.0f * k + MvSkid(m, def, om[2], mass, dt)}; /* about 2 m^2 x mass: a car's yaw inertia */
     g_hvImpulse(m->body, j, NULL);
     g_hvAngular(m->body, t);
     const float got = v[0] * fx + v[1] * fy;

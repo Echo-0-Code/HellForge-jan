@@ -580,6 +580,8 @@ On `dev`, since 0.4.0-beta.
 
 ### Fixed
 
+- **Boats float in deep water.** A boat read the water's surface as its bed and sat aground; it now reads the bed
+  under the surface. A tracked vehicle on a wheeled body pivots on the spot against its tyres' grip.
 - **Mouse free after a modal screen.** Closing a modal overlay screen gives back the cursor clip the game asked for, so
   the cursor stays in the game window again.
 - **Walkers and drivers in co-op.** The other players now see a walker or driver where the host moves it, and its
