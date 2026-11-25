@@ -728,6 +728,12 @@ static const GrowthConstant kGrowthConstants[] = {
     {0x1305983u, 7, 3, 4, GROW_INDEX_SCALED, 1u, {0x49, 0x8d, 0x81, 0xe0, 0x17, 0x00, 0x00}},
     {0x50F13Eu, 6, 2, 4, GROW_DEFAULT_OFFSET, 0u, {0x48, 0x05, 0xd8, 0x4a, 0x0e, 0x00}},
     {0x7513D5u, 6, 2, 4, GROW_DEFAULT_OFFSET, 0u, {0x48, 0x05, 0xd8, 0x4a, 0x0e, 0x00}},
+    {0x50FDE8u, 10, 2, 8, GROW_MAGIC65, 0u, {0x48, 0xb8, 0x93, 0x24, 0x49, 0x92, 0x24, 0x49, 0x92, 0x24}},
+    {0x50FE01u, 4, 3, 1, GROW_SHIFT65, 0u, {0x48, 0xc1, 0xe8, 0x04}},
+    {0x50FE05u, 3, 2, 1, GROW_S, 0u, {0x6b, 0xc0, 0x1c}},
+    {0x50FE4Bu, 4, 3, 1, GROW_S, 0u, {0x41, 0x83, 0xfa, 0x1c}},
+    {0x50FE44u, 3, 2, 1, GROW_S_MINUS_1, 0u, {0x83, 0xf8, 0x1b}},
+    {0x50FE5Du, 7, 3, 4, GROW_INDEX_SCALED, 1u, {0x4d, 0x8d, 0x8b, 0xc0, 0x01, 0x00, 0x00}},
     {0x5100E6u, 10, 2, 8, GROW_MAGIC, 0u, {0x48, 0xb8, 0x21, 0x69, 0x43, 0x54, 0xa9, 0x93, 0xb8, 0x66}},
     {0x5100F3u, 4, 3, 1, GROW_SHIFT, 0u, {0x48, 0xc1, 0xea, 0x08}},
     {0x5100F7u, 6, 2, 4, GROW_S, 0u, {0x69, 0xc2, 0x7e, 0x02, 0x00, 0x00}},
@@ -895,13 +901,14 @@ static const GrowthTable kGrowthTables[] = {
     {268, 0, 22u, 11u, 192u, {127u, 1u, 0, 1}, 697, 6}, /* MeleeWeaponComponentData */
     {270, 0, 46u, 24u, 120u, {127u, 1u, 0, 0}, 703, 8}, /* BeamWeaponComponentData */
     {271, 0, 382u, 192u, 4872u, {134159568u, 1u, 0, 1}, 711, 14}, /* WeaponCustomizationComponentData */
-    {282, 0, 638u, 319u, 24u, {2147483647u, 1u, 0, 1}, 725, 12}, /* DetectorComponentData */
-    {284, 0, 2008u, 1005u, 12u, {134216974u, 1u, 0, 0}, 737, 9}, /* BehaviorComponentData */
-    {290, 0, 1968u, 984u, 32u, {2147483647u, 2u, 0, 0}, 746, 18}, /* AbilityComponentData */
-    {298, 0, 46u, 23u, 152u, {127u, 1u, 0, 0}, 764, 12}, /* BoidsComponentData */
-    {307, GROWTH_PROTECTED_MATCH, 648u, 325u, 46600u, {133274077u, 1u, 0, 0}, 776, 8}, /* StatusEffectReceiverComponentData */
-    {310, 0, 448u, 225u, 312u, {134213359u, 1u, 0, 0}, 784, 8}, /* RotationComponentData */
-    {315, 0, 46u, 24u, 224u, {127u, 1u, 0, 0}, 792, 9}, /* SprayWeaponComponentData */
-    {321, GROWTH_PROTECTED_MATCH, 542u, 272u, 616u, {134207294u, 1u, 0, 1}, 801, 8}, /* ProjectileWeaponComponentData */
-    {322, 0, 454u, 227u, 104u, {134217727u, 1u, 0, 1}, 809, 12}, /* TargetAimConstraintComponentData */
+    {279, 0, 28u, 14u, 208u, {127u, 1u, 0, 0}, 725, 6}, /* component 279 (vehicles, 28 slots) */
+    {282, 0, 638u, 319u, 24u, {2147483647u, 1u, 0, 1}, 731, 12}, /* DetectorComponentData */
+    {284, 0, 2008u, 1005u, 12u, {134216974u, 1u, 0, 0}, 743, 9}, /* BehaviorComponentData */
+    {290, 0, 1968u, 984u, 32u, {2147483647u, 2u, 0, 0}, 752, 18}, /* AbilityComponentData */
+    {298, 0, 46u, 23u, 152u, {127u, 1u, 0, 0}, 770, 12}, /* BoidsComponentData */
+    {307, GROWTH_PROTECTED_MATCH, 648u, 325u, 46600u, {133274077u, 1u, 0, 0}, 782, 8}, /* StatusEffectReceiverComponentData */
+    {310, 0, 448u, 225u, 312u, {134213359u, 1u, 0, 0}, 790, 8}, /* RotationComponentData */
+    {315, 0, 46u, 24u, 224u, {127u, 1u, 0, 0}, 798, 9}, /* SprayWeaponComponentData */
+    {321, GROWTH_PROTECTED_MATCH, 542u, 272u, 616u, {134207294u, 1u, 0, 1}, 807, 8}, /* ProjectileWeaponComponentData */
+    {322, 0, 454u, 227u, 104u, {134217727u, 1u, 0, 1}, 815, 12}, /* TargetAimConstraintComponentData */
 };

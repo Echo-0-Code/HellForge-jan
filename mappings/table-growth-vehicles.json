@@ -1,7 +1,7 @@
 {
  "build": "25480438",
  "game_dll_sha256": "2E2C3B7C2500646DADD5F2B4C6E0504DBB7E7896139F64CDDC0D1813C718F51E",
- "method": "Ghidra pass on the decoded game.dll: every instruction reading table 80 (entity state + 0xF126F8; 3, all lookups) and every use of the /18 magic 0xE38E38E38E38E38F classified by the table it reads (25; the other 22 read tables 70, 75, 108, 219, 245, 267 and 300). No default-record offset (0x860) and no other 0x120/0xE8 use next to a table 80 load. Tables 91, 225, 231 (25 Nov): every instruction reading them (91: 3 at entity state + 0xF12750; 225: 1 at +0xF12B80; 231: 2 at +0xF12BB0) and every use of their magics (/40 0xCCCCCCCCCCCCCCCD, /28 0x2492492492492493, /26 0x4EC4EC4EC4EC4EC5) classified by the table loaded next to it; only the listed ones read these tables. Table 91 has a default-record offset 0x123E0 = 16*40 + 20*3704 in its two lookup fallbacks.",
+ "method": "Ghidra pass on the decoded game.dll: every instruction reading table 80 (entity state + 0xF126F8; 3, all lookups) and every use of the /18 magic 0xE38E38E38E38E38F classified by the table it reads (25; the other 22 read tables 70, 75, 108, 219, 245, 267 and 300). No default-record offset (0x860) and no other 0x120/0xE8 use next to a table 80 load. Tables 91, 225, 231 (25 Nov): every instruction reading them (91: 3 at entity state + 0xF12750; 225: 1 at +0xF12B80; 231: 2 at +0xF12BB0) and every use of their magics (/40 0xCCCCCCCCCCCCCCCD, /28 0x2492492492492493, /26 0x4EC4EC4EC4EC4EC5) classified by the table loaded next to it; only the listed ones read these tables. Table 91 has a default-record offset 0x123E0 = 16*40 + 20*3704 in its two lookup fallbacks. Table 279 (25 Nov): 1 load at entity state + 0xF12D30 (0x50FDE1, the lookup 0x50FDC0); the other 16 uses of the /28 magic read other tables.",
  "tables": {
   "80": {
    "name": "component 80 (vehicles)",
@@ -437,6 +437,70 @@
       {
        "rva": "0x71023e",
        "bytes": "4881c1a0010000",
+       "imm_offset": 3,
+       "imm_size": 4,
+       "formula": "16*S/m",
+       "divisor": 1
+      }
+     ]
+    }
+   ]
+  },
+  "279": {
+   "name": "component 279 (vehicles, 28 slots)",
+   "growable": true,
+   "slots": 28,
+   "records": 14,
+   "stride": 208,
+   "rules": {
+    "max_slots": 127,
+    "slots_multiple_of": 1,
+    "pow2": false,
+    "magic64": false
+   },
+   "sites": [
+    {
+     "function": "0x50fdc0",
+     "what": "the lookup (entity -> record), 65-bit magic form",
+     "constants": [
+      {
+       "rva": "0x50fde8",
+       "bytes": "48b89324499224499224",
+       "imm_offset": 2,
+       "imm_size": 8,
+       "formula": "magic65(S)"
+      },
+      {
+       "rva": "0x50fe01",
+       "bytes": "48c1e804",
+       "imm_offset": 3,
+       "imm_size": 1,
+       "formula": "shift65(S)"
+      },
+      {
+       "rva": "0x50fe05",
+       "bytes": "6bc01c",
+       "imm_offset": 2,
+       "imm_size": 1,
+       "formula": "S"
+      },
+      {
+       "rva": "0x50fe4b",
+       "bytes": "4183fa1c",
+       "imm_offset": 3,
+       "imm_size": 1,
+       "formula": "S"
+      },
+      {
+       "rva": "0x50fe44",
+       "bytes": "83f81b",
+       "imm_offset": 2,
+       "imm_size": 1,
+       "formula": "S-1"
+      },
+      {
+       "rva": "0x50fe5d",
+       "bytes": "4d8d8bc0010000",
        "imm_offset": 3,
        "imm_size": 4,
        "formula": "16*S/m",
