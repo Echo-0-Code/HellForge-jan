@@ -10,6 +10,9 @@
 #define KIT_ZONES 64
 #define KIT_SEAT_R 1.2f   /* metres: a Helldiver's root this near the seat sits in it */
 #define KIT_MAX_SHOTS 4   /* rounds one update may fire (a 60 fps update at 3,000 rpm fires about 1) */
+#define ZN_RAYS 8         /* rays round a rotor's disc, hub to tip */
+#define ZN_STRIKE_EVERY 0.1f /* seconds between a disc's ray sweeps */
+#define ZN_STRIKE_AGAIN 1.0f /* seconds of lasting contact that count as another strike */
 
 typedef struct KitGun { HfMod* mod; HfFixedGunDef def; uint32_t slot; } KitGun;   /* slot: its index on its mover */
 typedef struct KitZone { HfMod* mod; HfDamageZoneDef def; uint32_t slot; } KitZone;
@@ -129,20 +132,110 @@ static void KitFire(MvUnit* m, const KitGun* g, const float w[16], float dt)
     }
 }
 
+static void ZnBreak(MvUnit* m, const struct KitZone* z);
+
+/* Two unit vectors across the disc whose axis is n. */
+static void ZnAcross(const float n[3], float u[3], float v[3])
+{
+    const float a[3] = {fabsf(n[2]) < 0.9f ? 0.0f : 1.0f, 0, fabsf(n[2]) < 0.9f ? 1.0f : 0.0f};
+    u[0] = a[1] * n[2] - a[2] * n[1]; u[1] = a[2] * n[0] - a[0] * n[2]; u[2] = a[0] * n[1] - a[1] * n[0];
+    const float l = sqrtf(u[0] * u[0] + u[1] * u[1] + u[2] * u[2]);
+    for (int k = 0; k < 3; k++) u[k] /= l;
+    v[0] = n[1] * u[2] - n[2] * u[1]; v[1] = n[2] * u[0] - n[0] * u[2]; v[2] = n[0] * u[1] - n[1] * u[0];
+}
+
+/* The first thing solid but the unit and its driver in the zone's disc: rays from the hub to the tips. */
+static int ZnTouching(const MvUnit* m, const KitZone* z, const float w[16], uint32_t driver, float hub[3], HfSightHit* hit)
+{
+    float n[3], u[3], v[3];
+    const float* d = z->def.disc;
+    const float axis[3] = {d[0], d[1], d[0] == 0 && d[1] == 0 && d[2] == 0 ? 1.0f : d[2]};
+    KitToWorld(w, axis, 0, n);
+    const float l = sqrtf(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+    for (int k = 0; k < 3; k++) n[k] /= l;
+    ZnAcross(n, u, v);
+    KitToWorld(w, z->def.center, 1, hub);
+    HfSight how = {sizeof how, {m->unit, driver, 0, 0}, 0.3f, 0};
+    for (int r = 0; r < ZN_RAYS; r++)
+    {
+        const float a = 6.2831853f * (float)r / ZN_RAYS, c = cosf(a) * z->def.radius, s = sinf(a) * z->def.radius;
+        const float tip[3] = {hub[0] + c * u[0] + s * v[0], hub[1] + c * u[1] + s * v[1], hub[2] + c * u[2] + s * v[2]};
+        if (ApiLineOfSight(&g_mvMod, hub, tip, &how, hit) == HF_SIGHT_BLOCKED) return 1;
+    }
+    return 0;
+}
+
+/* A slow bump into a unit: the body's speed toward it is taken away, plus 1 m/s back. 0: too fast, it breaks. */
+static int ZnBump(MvUnit* m, const KitZone* z, const float hub[3], const HfSightHit* hit)
+{
+    float v[3] = {0}, om[3] = {0}, d[3] = {hit->position[0] - hub[0], hit->position[1] - hub[1], hit->position[2] - hub[2]};
+    const float l = sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+    if (!m->body || l < 1e-3f) return 1;
+    g_hvVelocity(m->body, v, om);
+    const float r[3] = {hit->position[0] - m->pos[0], hit->position[1] - m->pos[1], hit->position[2] - m->pos[2]};
+    const float at[3] = {v[0] + om[1] * r[2] - om[2] * r[1], v[1] + om[2] * r[0] - om[0] * r[2], v[2] + om[0] * r[1] - om[1] * r[0]};
+    const float toward = (at[0] * d[0] + at[1] * d[1] + at[2] * d[2]) / l; /* the disc's own speed there, turning included */
+    if (toward > z->def.strike_speed) return 0;
+    const float dv = fmaxf(toward, 0) + 1.0f, mass = g_mvDefs[m->def - 1].def.hover.mass;
+    const float j[3] = {-d[0] / l * dv * mass, -d[1] / l * dv * mass, -d[2] / l * dv * mass};
+    g_hvImpulse(m->body, j, NULL);
+    return 1;
+}
+
+/* One zone's sweep: a strike takes `strike` of its health; a unit touched with strike_speed set is bumped instead. */
+static void ZnSweep(MvUnit* m, const KitZone* z, const float w[16], uint32_t driver, float swept)
+{
+    const uint32_t s = z->slot;
+    float hub[3];
+    HfSightHit hit = {0};
+    if (!ZnTouching(m, z, w, driver, hub, &hit)) { m->znContact[s] = 0; return; }
+    const int fresh = m->znContact[s] == 0 || m->znContact[s] >= ZN_STRIKE_AGAIN;
+    m->znContact[s] = fresh ? swept : m->znContact[s] + swept;
+    int32_t take = (int32_t)lroundf(z->def.strike_damage * (float)z->def.health);
+    if (hit.unit && z->def.strike_speed > 0)
+    {
+        if (ZnBump(m, z, hub, &hit)) { m->znContact[s] = 0; return; }
+        take = m->znHealth[s];
+        if (z->def.strike_explosion) ApiSpawnExplosion(z->mod, z->def.strike_explosion, hit.position);
+    }
+    else if (!fresh) return;
+    m->znHealth[s] = m->znHealth[s] > take ? m->znHealth[s] - take : 0;
+    ApiLog(z->mod, "damage zone %u on unit %u struck %s %u (%d health left)", s + 1, m->entity, hit.unit ? "unit" : "the ground or a static object", hit.unit, m->znHealth[s]);
+    if (m->znHealth[s] == 0) ZnBreak(m, z);
+}
+
+/* Open rotors' strikes, every ZN_STRIKE_EVERY: a new contact, and each ZN_STRIKE_AGAIN it lasts. */
+static void ZnStrikes(MvUnit* m, const float w[16], float dt)
+{
+    if ((m->znSweep += dt) < ZN_STRIKE_EVERY) return;
+    const float swept = m->znSweep;
+    m->znSweep = 0;
+    const uintptr_t game = (uintptr_t)GetModuleHandleW(L"game.dll");
+    ActHealth h;
+    const char* why;
+    const uint32_t driver = game && ActLocalAvatar(game, 1, &h, &why) ? h.unit : 0;
+    const uint64_t resource = g_mvDefs[m->def - 1].def.entity;
+    for (LONG i = 0; i < g_kitZoneCount; i++)
+    {
+        const KitZone* z = &g_kitZones[i];
+        if (z->def.entity == resource && z->def.strike_damage > 0 && m->znHealth[z->slot] > 0) ZnSweep(m, z, w, driver, swept);
+    }
+}
+
 /* Each update, under g_mvLock: the unit's guns on the host. */
 static void KitTick(MvUnit* m, float dt)
 {
     if (m->remote || !m->unit || (g_kitGunCount == 0 && g_kitZoneCount == 0)) return;
     KitInit(m);
-    if (g_kitGunCount == 0) return;
     float w[16];
     if (!ApiJointPose(&g_mvMod, m->unit, 0, HF_POSE_WORLD, w) || !isfinite(w[12])) return;
+    if (g_kitZoneCount > 0) ZnStrikes(m, w, dt);
     const uint64_t resource = g_mvDefs[m->def - 1].def.entity;
     for (LONG i = 0; i < g_kitGunCount; i++) if (g_kitGuns[i].def.entity == resource) KitFire(m, &g_kitGuns[i], w, dt);
 }
 
 /* A zone broke: its effect on the unit (the slowest sink of all broken zones, their spins added). */
-static void ZnBreak(MvUnit* m, const KitZone* z)
+static void ZnBreak(MvUnit* m, const struct KitZone* z)
 {
     if (z->def.effect != HF_ZONE_PLAIN) m->znSink = m->znSink > 0 ? fminf(m->znSink, z->def.sink) : z->def.sink;
     if (z->def.effect == HF_ZONE_CONTROL) m->znSpin += z->def.spin * 0.0174533f;
@@ -287,8 +380,8 @@ static const char* ZnRefusal(const HfDamageZoneDef* in, HfDamageZoneDef* d)
     if (d->spin == 0) d->spin = 60;
     if (!KitDefOf(d->entity)) return "add_mover it first";
     if (d->effect > HF_ZONE_CONTROL || !AiIn(d->radius, 0.05f, 20) || d->health < 1 || d->health > 1000000 || !AiIn(d->scale, -1, 10) ||
-        !AiIn(d->sink, 0.5f, 30) || !AiIn(d->spin, -720, 720))
-        return "effect PLAIN, ENGINE or CONTROL, radius 0.05 .. 20, health 1 .. 1000000, scale -1 .. 10, sink 0.5 .. 30, spin -720 .. 720";
+        !AiIn(d->sink, 0.5f, 30) || !AiIn(d->spin, -720, 720) || !AiIn(d->strike_damage, 0, 1) || !AiIn(d->strike_speed, 0, 50))
+        return "effect PLAIN, ENGINE or CONTROL, radius 0.05 .. 20, health 1 .. 1000000, scale -1 .. 10, sink 0.5 .. 30, spin -720 .. 720, strike_damage 0 .. 1, strike_speed 0 .. 50";
     return KitSlot(d->entity, 1) >= MV_KIT_SLOTS ? "8 zones on that mover already" : NULL;
 }
 

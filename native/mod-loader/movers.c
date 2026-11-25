@@ -60,7 +60,7 @@ typedef struct MvUnit
     MvWire sync;
     /* SDK 47 (movers_kit.c): its fixed guns and damage zones, by their slot on its mover */
     uint32_t kitInit, gunRounds[MV_KIT_SLOTS], gunBurst[MV_KIT_SLOTS], gunFiring[MV_KIT_SLOTS], gunSeated[MV_KIT_SLOTS];
-    float gunWait[MV_KIT_SLOTS], znSink, znSpin; /* znSink, znSpin: m/s and rad/s a broken zone forces */
+    float gunWait[MV_KIT_SLOTS], znSink, znSpin, znSweep, znContact[MV_KIT_SLOTS]; /* znSink, znSpin: m/s, rad/s a broken zone forces */
     uint8_t gunHeld[MV_KIT_SLOTS];
     int32_t znHealth[MV_KIT_SLOTS];
     /* SDK 48 (movers_view.c): mouse_steer's throttle lever, whether this machine's Helldiver drives it, and A/D */

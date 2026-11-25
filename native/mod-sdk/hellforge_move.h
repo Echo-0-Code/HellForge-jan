@@ -179,6 +179,13 @@ typedef struct HfDamageZoneDef
     float scale;          /* x the damage the vehicle itself takes from a hit in it (default 1; negative: none) */
     float sink;           /* _ENGINE, _CONTROL: m/s it comes down at once broken (default 5) */
     float spin;           /* _CONTROL: degrees a second it spins once broken, positive left (default 60) */
+    /* SDK 47, rotor strikes: the zone is a disc swept against the scenery every 0.1 s */
+    float strike_damage;  /* share of its health a strike takes, 0 .. 1, once a contact and each second it lasts (0: no
+                           * sweep; Jan's open rotors 0.6). The ground and static objects (trees) strike */
+    float disc[3];        /* the disc's axis in the mover's frame; its radius is `radius` (0, 0, 0: straight up) */
+    float strike_speed;   /* a unit it touches (a building): moving toward it slower than this, m/s, it is pushed back
+                           * unharmed; faster, the zone breaks at once (0: units strike like trees) */
+    uint32_t strike_explosion; /* the explosion such a fast hit sets off where it touches, to wreck the building (0: none) */
 } HfDamageZoneDef;
 
 /* zone_state's answer: one zone on one unit */
