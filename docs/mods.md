@@ -82,6 +82,8 @@ and for a mod folder Mod notices says which file changed, so you can reinstall t
 Every mod is a row with a switch, in two groups: GAMEPLAY mods first, then CLIENT ONLY ones. Client-only mods are
 cosmetic packs, Lua mods and mods that say they are not gameplay mods; friends need not have the same ones.
 
+- The search box above the list stays in view while it scrolls. It shows only the mods whose name, id, file or tags hold
+  every word typed. Ctrl+F jumps to it and Esc clears it. Drag ordering waits until the search is cleared.
 - Click a row's name for what the mod changes. Its ⋮ menu (or a right click) has Details, Move up and Move down, and
   Open folder. It also has Build now for a mod with sources, Prepare for sharing for your own folder mods, and Remove... for
   your own mods (not the bundled mods or Local Stats). Remove asks before it deletes the mod's files.
