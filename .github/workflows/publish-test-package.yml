@@ -16,10 +16,10 @@ jobs:
       - name: Download the artifact and publish it
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: "45635209424"
-          TAG: "test-a020b90"
-          TARGET: "a020b90de05bde7ed5c4877d72cae34a4a360140"
-          TITLE: "Test build a020b90, 2466be9 + thumbnail probe logging (run 45635209424)"
+          RUN_ID: "45645614363"
+          TAG: "test-b3507fc"
+          TARGET: "b3507fcd80a761c13ce67b2d9ccd55e9177cf127"
+          TITLE: "Test build b3507fc, a020b90 + vehicle tables 91, 225, 231 grown (run 45645614363)"
         run: |
           gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n test-package -D pkg
           find pkg -type f -exec ls -la {} \;
