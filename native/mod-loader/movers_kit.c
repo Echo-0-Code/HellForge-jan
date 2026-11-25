@@ -299,13 +299,14 @@ static void ZnDamage(uint8_t* event)
 
 static int ZnWantsDamage(void) { return g_kitZoneCount > 0; }
 
-/* Its slot on its mover (one past the last), or MV_KIT_SLOTS when that mover is full. */
+/* Its slot on its mover (one past the last), or its cap (MV_KIT_SLOTS, MV_ZONE_SLOTS) when that mover is full. */
 static uint32_t KitSlot(uint64_t entity, int zones)
 {
     uint32_t slot = 0;
     const LONG count = zones ? g_kitZoneCount : g_kitGunCount;
+    const uint32_t cap = zones ? MV_ZONE_SLOTS : MV_KIT_SLOTS;
     for (LONG i = 0; i < count; i++) if ((zones ? g_kitZones[i].def.entity : g_kitGuns[i].def.entity) == entity) slot++;
-    return slot < MV_KIT_SLOTS ? slot : MV_KIT_SLOTS;
+    return slot < cap ? slot : cap;
 }
 
 static const char* KitGunRefusal(const HfFixedGunDef* in, HfFixedGunDef* d)
@@ -393,7 +394,7 @@ static const char* ZnRefusal(const HfDamageZoneDef* in, HfDamageZoneDef* d)
     if (d->effect > HF_ZONE_CONTROL || !AiIn(d->radius, 0.05f, 20) || d->health < 1 || d->health > 1000000 || !AiIn(d->scale, -1, 10) ||
         !AiIn(d->sink, 0.5f, 30) || !AiIn(d->spin, -720, 720) || !AiIn(d->strike_damage, 0, 1) || !AiIn(d->strike_speed, 0, 50))
         return "effect PLAIN, ENGINE or CONTROL, radius 0.05 .. 20, health 1 .. 1000000, scale -1 .. 10, sink 0.5 .. 30, spin -720 .. 720, strike_damage 0 .. 1, strike_speed 0 .. 50";
-    return KitSlot(d->entity, 1) >= MV_KIT_SLOTS ? "8 zones on that mover already" : NULL;
+    return KitSlot(d->entity, 1) >= MV_ZONE_SLOTS ? "24 zones on that mover already" : NULL;
 }
 
 /* SDK 47, add_damage_zone: the zone's id (1 and up), or 0 refused (the log says why). */
@@ -415,7 +416,7 @@ static uint32_t ApiAddDamageZone(HfMod* mod, const HfDamageZoneDef* in)
 static uint32_t ApiZoneState(HfMod* mod, uint32_t entity, uint32_t zone, HfZoneState* out)
 {
     (void)mod;
-    if (out == NULL || out->size < sizeof *out || zone == 0 || zone > MV_KIT_SLOTS) return 0;
+    if (out == NULL || out->size < sizeof *out || zone == 0 || zone > MV_ZONE_SLOTS) return 0;
     uint32_t found = 0;
     AcquireSRWLockShared(&g_mvLock);
     const MvUnit* m = MvUnitOf(entity);

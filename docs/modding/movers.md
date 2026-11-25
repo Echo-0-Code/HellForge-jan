@@ -260,6 +260,7 @@ SDK 47's `add_damage_zone` puts a sphere on a mover that takes the hits landing 
   does. A plane glides down.
 - Zones see a hit before `HF_ON_DAMAGE_PRE` listeners, so listeners get the scaled amount.
 - `zone_state` reads a zone. `repair_zones` makes one, or all, whole again.
+- A mover takes up to 24 zones and 8 fixed guns. All movers together take up to 64 of each.
 
 A zone with `strike_damage` is a spinning disc, such as an open rotor, swept against the scenery every 0.1 s:
 
