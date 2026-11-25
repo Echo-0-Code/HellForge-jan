@@ -25,7 +25,7 @@ static float FlGap(MvUnit* m, const MvDef* def, const float p[3], float dt)
     if (!m->engaged && good && gap < h->height_min + 1.0f)
     {
         m->engaged = 1;
-        m->targetHeight = m->flWant = h->height_min;
+        m->targetHeight = m->flWant = m->flAlt = h->height_min;
         m->flDatum = surface;
         if (def->def.mode == HF_MOVE_HELI) m->flWant = -2.0f; /* collective down: it sits */
         ApiLog(def->mod, "mover: unit %u is on the ground (%.2f m): it flies when driven", m->entity, (double)gap);
@@ -33,17 +33,21 @@ static float FlGap(MvUnit* m, const MvDef* def, const float p[3], float dt)
     return gap;
 }
 
-/* The height it heads for: hover.height once anyone flies it, moved by lift, height_min (landing) once nobody has for
- * FL_LAND_S, and never above its gear while it can't climb (a plane under stall_speed). It moves at climb_rate. */
-static void FlTarget(MvUnit* m, const HfMoverHover* h, float dt, int canClimb)
+/* A plane's altitude target, over flDatum like a helicopter's: it climbs to hover.height over the ground once anyone
+ * flies it, lift moves it, and it lands once nobody has for FL_LAND_S. Holding an altitude rather than a height over
+ * the ground keeps hills from pitching it up and down; the ground under it is still its floor (height_min). It moves at
+ * climb_rate, and never leaves its gear while it can't climb (under stall_speed). */
+static void FlTarget(MvUnit* m, const HfMoverHover* h, float groundAlt, float dt, int canClimb)
 {
     const int asked = fabsf(m->throttle) > 0.05f || fabsf(m->steer) > 0.05f || fabsf(m->strafe) > 0.05f || m->lift > 0.05f;
+    const float floor = groundAlt + h->height_min;
     m->flIdle = m->driver != HF_DRIVER_NONE ? 0 : m->flIdle + dt;
-    if (m->driver != HF_DRIVER_NONE && asked && m->flWant < h->height) m->flWant = h->height;
-    if (m->flIdle > FL_LAND_S) m->flWant = h->height_min;
-    m->flWant = MvClamp(m->flWant + m->lift * h->climb_rate * dt, h->height_min, h->height_max);
-    const float want = canClimb ? m->flWant : h->height_min, step = h->climb_rate * dt;
-    m->targetHeight = MvClamp(want, m->targetHeight - 1.5f * step, m->targetHeight + step);
+    if (m->driver != HF_DRIVER_NONE && asked && m->flWant < groundAlt + h->height) m->flWant = groundAlt + h->height;
+    if (m->flIdle > FL_LAND_S) m->flWant = floor;
+    m->flWant = MvClamp(m->flWant + m->lift * h->climb_rate * dt, floor, fmaxf(h->height_max, floor));
+    const float want = canClimb ? m->flWant : floor, step = h->climb_rate * dt;
+    m->flAlt = MvClamp(want, m->flAlt - 1.5f * step, m->flAlt + step);
+    m->targetHeight = fmaxf(m->flAlt - groundAlt, h->height_min);
 }
 
 /* Upward m/s2: the weight its data leaves plus a spring-damper toward targetHeight, no faster than climb_rate up or
@@ -134,7 +138,7 @@ static void FlControl(MvUnit* m, const MvDef* def, float dt)
     if (plane && m->znSink > 0) m->lift = -1.0f; /* a broken engine or control zone: it glides down */
     if (plane)
     {
-        FlTarget(m, &d->hover, dt, vf >= d->stall_speed);
+        FlTarget(m, &d->hover, w[14] - gap - m->flDatum, dt, vf >= d->stall_speed);
         az = FlHeave(m, &d->hover, gap, v[2], onGround ? 1.0f : wing);
         FlPlaneDrive(m, def, fl, v, dt, a, &yawRate);
     }

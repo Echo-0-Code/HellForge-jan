@@ -183,10 +183,11 @@ How a helicopter climbs:
 
 How a plane takes off and lands:
 
-- It holds `hover.height_min` on its gear. Once anyone drives it, it climbs to `hover.height` at `hover.climb_rate`.
-  The `lift` input moves it between the heights.
+- It holds `hover.height_min` on its gear. Once anyone drives it, it climbs to `hover.height` over the ground at
+  `hover.climb_rate`. The `lift` input moves it up to `hover.height_max`.
+- Aloft it holds an altitude, counted from where it first sat down, as a helicopter does. Hills don't pitch it up and
+  down. The ground under it stays its floor.
 - When nobody has driven it for 3 s, it lands: it sinks to `height_min`.
-- With no ground in reach, it holds its height over the last ground it saw.
 
 A helicopter hovers in place and turns on the spot. Its thrust tilts toward the way it speeds up, up to 30° or
 `tilt_limit`. `strafe` slides it sideways.
@@ -212,9 +213,10 @@ A seated driver gives throttle and steer, and `lift` with Space (up) and Control
 
 SDK 48's `mouse_steer` 1 lets a seated driver fly with the mouse. The mover turns and climbs toward where the camera looks.
 
-- A plane aloft banks into the turn, up to `bank_max`. On its gear, or below `stall_speed`, it steers like a car.
-- A flier's `lift` follows the camera's pitch: a plane climbs or dives along it, a helicopter moves its collective.
-  About 3° either side of level holds height.
+- A plane aloft banks into the turn, up to `bank_max`, rolling at most 90° a second. On its gear, or below
+  `stall_speed`, it steers like a car.
+- A flier's `lift` follows the camera's pitch, eased in: a plane climbs or dives along it, a helicopter moves its
+  collective. About 3° either side of level holds height.
 - A/D steer by hand while held, such as a roll. Space and Control still move `lift`.
 - W/S move a throttle lever that stays where it is left. S with the lever closed brakes, as throttle below 0 does.
 - It counts as driven while the lever is open, so a pilot can fly with the mouse alone.

@@ -47,7 +47,8 @@ typedef struct MvUnit
     uint32_t body, engaged, told;
     float lost, lastSurface, seatThrottle, seatSteer, seatLift;
     float flWant, flIdle; /* a flier: the height it climbs toward, and how long nobody has flown it (movers_fly.c) */
-    float flDatum;        /* a helicopter: the ground under it when it first sat down, where its altitude is 0 */
+    float flDatum;        /* a flier: the ground under it when it first sat down, where its altitude is 0 */
+    float flAlt;          /* a plane: the altitude it heads for now, moving at climb_rate toward flWant */
     uint32_t rail;        /* a rail mover's rail, once it is on it (movers_rail.c) */
     float railS, railDir; /* how far along it, and +1 or -1: the way along it its heading points */
     uint32_t loggedDriver;
@@ -64,7 +65,7 @@ typedef struct MvUnit
     uint8_t gunHeld[MV_KIT_SLOTS];
     int32_t znHealth[MV_KIT_SLOTS];
     /* SDK 48 (movers_view.c): mouse_steer's throttle lever, whether this machine's Helldiver drives it, and A/D */
-    float seatLever, seatKeys;
+    float seatLever, seatKeys, viewSteer, viewLift; /* viewSteer, viewLift: the view's asks, eased in */
     uint32_t seatLocal;
 } MvUnit;
 
@@ -524,16 +525,16 @@ static void MvTrace(MvUnit* m, const MvDef* def, float dt)
 
 #define HV_SEAT_S 2.0 /* a hover's seated driver's last throttle or steer drives it this long */
 
-static void ViewSteer(MvUnit* m, const MvDef* def); /* movers_view.c (SDK 48) */
+static void ViewSteer(MvUnit* m, const MvDef* def, float dt); /* movers_view.c (SDK 48) */
 /* Who drives it now: a mod's input while it holds, a hover's seated driver, the custom AI, or nobody. */
-static void MvDriver(MvUnit* m, const MvDef* def)
+static void MvDriver(MvUnit* m, const MvDef* def, float dt)
 {
     if (m->inputAge < MV_INPUT_S) { m->driver = HF_DRIVER_MOD; return; }
     m->strafe = m->lift = m->boost = 0; /* a mod's input has them, and a seat's lift keys */
     if (m->seatAge < HV_SEAT_S) /* any mover whose unit has a driver's seat, read where it is moved */
     {
         m->driver = HF_DRIVER_SEAT; m->throttle = m->seatThrottle; m->steer = m->seatSteer; m->lift = m->seatLift;
-        if (def->def.mouse_steer && m->seatLocal) ViewSteer(m, def); /* SDK 48: toward where the camera looks */
+        if (def->def.mouse_steer && m->seatLocal) ViewSteer(m, def, dt); /* SDK 48: toward where the camera looks */
     }
     else if (def->ai) { m->driver = HF_DRIVER_AI; MvAiInputs(m, def); }
     else { m->driver = HF_DRIVER_NONE; m->throttle = 0; m->steer = 0; }
@@ -546,7 +547,7 @@ static void MvDriver(MvUnit* m, const MvDef* def)
 static void MvBodyRail(MvUnit* m, const MvDef* def, const float w[16], const float v[3], const float om[3], float dt)
 {
     const float body[2] = {w[12], w[13]}, bodyYaw = atan2f(-w[4], w[5]);
-    MvDriver(m, def);
+    MvDriver(m, def, dt);
     MvRailDrive(m, def, dt);
     if (!m->rail) return;
     const float fx = -sinf(m->yaw), fy = cosf(m->yaw), k = fminf(1.0f, 8.0f * dt), mass = def->def.hover.mass > 0 ? def->def.hover.mass : 3000.0f;
@@ -580,7 +581,7 @@ static void MvBodyTick(MvUnit* m, const MvDef* def, float dt)
     memcpy(m->pos, w + 12, 12);
     m->yaw = atan2f(-w[4], w[5]);
     if (d->mode == HF_MOVE_RAIL) { MvBodyRail(m, def, w, v, om, dt); return; }
-    MvDriver(m, def);
+    MvDriver(m, def, dt);
     const float top = MvTop(m, d, dt);
     MvSpeedTurn(m, def, top, dt);
     if (d->drive == NULL) m->side = d->mode == HF_MOVE_WALK ? m->strafe * d->strafe_speed : 0;
@@ -638,7 +639,7 @@ static void MvUnitTick(MvUnit* m, float dt)
         if (!MvKeepFrame(m, def)) { ApiLog(def->mod, "mover: unit %u: its root no longer reads; it waits", m->entity); m->started = 0; return; }
     }
     if (!m->written && !MvParent(m)) { m->status = HF_MOVER_WAITING; return; } /* still the game's: where it shows it now */
-    MvDriver(m, def);
+    MvDriver(m, def, dt);
     MvDrive(m, def, dt);
     MvSounds(m, &def->def.sounds);
     MvSetRoot(m);
