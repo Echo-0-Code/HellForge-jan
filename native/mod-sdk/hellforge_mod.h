@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 48
+#define HF_MOD_SDK_VERSION 49
 #define HF_WEAPON_PAINTS 1 /* HfWeapon.paints exists */
 #define HF_MOD_EXPORT __declspec(dllexport)
 
@@ -436,6 +436,9 @@ typedef struct HfStratagem
      * default) follow the stratagem types: the mods' set-up order (by mod id), then add_stratagem call order. Ignored in
      * vanilla sections. */
     int32_t selection_order;
+    /* SDK 49: seconds from the throw to the arrival (row +0x54), 0 to 600; 0: the base's. The card and the call add the
+     * delivery's own travel time where the game works one out. The card's name prefix is the payload's designation. */
+    float call_in;
 } HfStratagem;
 
 /* HfStratagem.category, beam and flags: HF_CATEGORY_..., HF_BEAM_... and HF_TRAIT_... (hellforge_content.h). */

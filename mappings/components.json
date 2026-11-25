@@ -1422,9 +1422,9 @@
         "call_in_time": {
           "offset": 84,
           "type": "f32",
-          "meaning": "seconds from the throw to the arrival",
-          "verified": false,
-          "source": "stats-schema stratagem.call_in_time",
+          "meaning": "seconds from the throw to the arrival, before the delivery's own travel time",
+          "verified": true,
+          "source": "stats-schema stratagem.call_in_time; game.dll 25480438 0x879900 adds the row's +0x54 to 0x6ADB40's travel time for the card (0x14D9212) and the call (0xB9ABE8)",
           "applies": "now",
           "appliesVerified": true,
           "appliesSource": "read from the row at each call (0x879900 from 0xB9ABE8): the next beacon (game.dll 25480438)"

@@ -49,7 +49,7 @@ static void ContentSecond(HfMod* old, HfMod* now)
 
 static uint32_t ContentStratagem(HfMod* mod, const char* name, float cooldown)
 {
-    HfStratagem s = {sizeof s, .base = 1, .name = name, .cooldown = cooldown};
+    HfStratagem s = {sizeof s, .base = 1, .name = name, .cooldown = cooldown, .call_in = cooldown * 2.0f};
     g_liveSetup = mod;
     uint32_t type = ApiAddStratagem(mod, &s);
     g_liveSetup = NULL;
@@ -493,7 +493,7 @@ static void ContentInstallFixture(void)
         !memcmp(game + STR_PICKER_PAD + 5, kPickerPad + 5, sizeof kPickerPad - 5)); /* the clear: every type's record */
     assert(*(uint32_t*)(table + STR_LENGTH_AT) == STR_VANILLA + 1 && game[kChoiceGuards[0].rva] == 0xE9 && PickerFrameFailed(g) != NULL); /* guards and frame in, live */
     assert(*(uint8_t**)(table + type * 8) == s->row && *(uint32_t*)s->row == type && *(uint32_t*)(s->row + 4) == s->stable &&
-        *(float*)(s->row + 0x68) == 5.0f && *(const char**)(table + STR_NAMES_AT + type * 8) == s->name &&
+        *(float*)(s->row + 0x68) == 5.0f && *(float*)(s->row + 0x54) == 10.0f && *(const char**)(table + STR_NAMES_AT + type * 8) == s->name &&
         !strcmp(*(const char**)(table + STR_NAMES_AT + (type + 1) * 8), "Count"));
     assert(g_damageTable && ListsAt(g, kDamageSites, sizeof kDamageSites / sizeof kDamageSites[0], (uintptr_t)g_damageTable));
     uint8_t* damageRow = *(uint8_t**)(g_damageTable + damage * 8);
