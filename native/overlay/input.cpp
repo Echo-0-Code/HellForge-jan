@@ -231,10 +231,25 @@ bool PointWithGameCursor(UINT message, LPARAM l)
     return false;
 }
 
+/* ImGui takes the mouse (SetCapture) on a press and lets it go on the release. A modal screen that closes on a press (a
+ * click outside it) leaves that release to the game, so ImGui kept the capture and the game's clicks went wrong until
+ * the window lost focus: a release ImGui is still waiting for is its too, as well as the game's. */
+void EndImGuiPress(HWND window, UINT message, WPARAM w, LPARAM l)
+{
+    bool down = false;
+    const uint32_t button = ButtonOf(message, &down);
+    if (g_captured || button == 0 || down) return;
+    const int index = button == HF_MOUSE_LEFT ? 0 : button == HF_MOUSE_RIGHT ? 1 : 2;
+    EnterCriticalSection(&g_lock);
+    if (ImGui::GetCurrentContext() != NULL && ImGui::IsMouseDown(index)) ImGui_ImplWin32_WndProcHandler(window, message, w, l);
+    LeaveCriticalSection(&g_lock);
+}
+
 LRESULT CALLBACK HostProc(HWND window, UINT message, WPARAM w, LPARAM l)
 {
     if (TakeKey(message, w, l)) return 0;
     if (PointWithGameCursor(message, l)) return TRUE;
+    EndImGuiPress(window, message, w, l);
     if (!g_captured && TakeClick(message, w, l)) return 0;
     if (g_captured)
     {
