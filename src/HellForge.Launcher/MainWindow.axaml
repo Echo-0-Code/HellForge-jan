@@ -353,7 +353,10 @@
               </StackPanel>
             </StackPanel>
           </Border>
-          <ScrollViewer>
+          <!-- Outside the list's scroller, so it stays at the top (ModsPage.Search.cs) -->
+          <TextBox x:Name="ModSearchBox" DockPanel.Dock="Top" Classes="clearButton" Margin="0,0,18,12" MaxLength="128"
+                   VerticalContentAlignment="Center" Watermark="Search mods by name, id or tag (Ctrl+F; Esc clears)" />
+          <ScrollViewer x:Name="ModsScroll">
             <StackPanel x:Name="ModsList" Spacing="12" Margin="0,0,18,0" />
           </ScrollViewer>
         </DockPanel>

@@ -53,6 +53,7 @@ public partial class MainWindow
         AddModsButton.Click += async (_, _) => await PickMods();
         OpenModsButton.IsEnabled = RefreshModsButton.IsEnabled = paths.ModsFolder != null;
         AddModsButton.IsEnabled = paths.InstallRoot != null;
+        InitializeModSearch();
         WatchMods();
     }
 
@@ -137,6 +138,10 @@ public partial class MainWindow
         ModsList.Children.Clear();
         modSwitches.Clear();
         modNumbers.Clear();
+        modRowsDrawn.Clear();
+        modGroupCounts.Clear();
+        modRowPlaces.Clear();
+        ModsList.MinHeight = 0;
         if (paths.ModsFolder == null)
         {
             ModsSummary.Text = "Mods load in installations made with HellForge-Setup, from the installation's mods folder.";
@@ -155,6 +160,9 @@ public partial class MainWindow
             ModsDigestText.Text = "";
             return;
         }
+        // The rows come back a batch at a time (DrawModRows): until the last one the list keeps its old height, or the
+        // scroller would clamp to the first batch and the page would jump up, away from the row just clicked.
+        ModsList.MinHeight = ModsList.Bounds.Height;
         (modStatuses, modStatusesWritten) = (data.Statuses, data.StatusesWritten);
         (premiumOwnership, premiumAccountRead, premiumChecksAtSession) = (data.Premium, true, data.PremiumAtSession);
         var mods = data.Mods;
@@ -202,6 +210,7 @@ public partial class MainWindow
         if (drawing != modsDrawing) return; // the page was drawn again since
         for (var i = 0; i < ModRowsAtOnce && modRowsToDraw.TryDequeue(out var draw); i++) draw();
         if (modRowsToDraw.Count > 0) Dispatcher.UIThread.Post(() => DrawModRows(drawing), DispatcherPriority.Background);
+        else ModsList.MinHeight = 0;
     }
 
     // Mod sync (ModSyncPlan, docs/mods.md "Playing with other mods"): whether players who join may download this player's
@@ -352,7 +361,8 @@ public partial class MainWindow
         var header = new DockPanel { Margin = new(2, 6, 2, 0) };
         var name = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         name.Children.Add(new TextBlock { Text = title, Classes = { "h2" }, Margin = new(0), VerticalAlignment = VerticalAlignment.Center });
-        name.Children.Add(new TextBlock { Text = group.Count.ToString(), FontSize = 12, Foreground = Light, VerticalAlignment = VerticalAlignment.Center });
+        var count = new TextBlock { Text = group.Count.ToString(), FontSize = 12, Foreground = Light, VerticalAlignment = VerticalAlignment.Center };
+        name.Children.Add(count);
         DockPanel.SetDock(name, Dock.Left);
         header.Children.Add(name);
         header.Children.Add(new TextBlock { Text = hint, Classes = { "muted" }, FontSize = 12, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center });
@@ -362,14 +372,19 @@ public partial class MainWindow
         if (group.Count == 0) section.Children.Add(new TextBlock { Text = empty, Classes = { "muted" }, FontSize = 12, Margin = new(2, 4) });
         var panel = new StackPanel { Spacing = 4 };
         var rows = new List<(ModManifest Mod, Border Row)>();
+        modGroupCounts.Add((count, rows, group.Count));
         foreach (var mod in group)
         {
             var place = ++number;
             modRowsToDraw.Enqueue(() =>
             {
                 var row = ModRow(mod, place, panel, rows, all);
+                row.IsVisible = ModMatches(mod);
                 rows.Add((mod, row));
+                modRowsDrawn.Add((mod, row));
+                modRowPlaces[mod.Id] = (place, panel, rows, all);
                 panel.Children.Add(row);
+                if (ModFilterActive) ApplyModFilter();
             });
         }
         section.Children.Add(panel);
@@ -454,8 +469,7 @@ public partial class MainWindow
         text.Tapped += (_, _) =>
         {
             if (modDragged) { modDragged = false; return; } // the end of a drag, not a click
-            if (!modsExpanded.Remove(mod.Id)) modsExpanded.Add(mod.Id);
-            DrawMods();
+            ToggleDetails(mod);
         };
         ToolTip.SetTip(text, expanded ? "Click to hide the details." : "Click for the details.");
         Grid.SetColumn(text, 4);
@@ -484,6 +498,32 @@ public partial class MainWindow
             grid.Children.Add(details);
         }
         return row;
+    }
+
+    // Where each drawn row sits, so its details open by drawing that row again instead of the whole page.
+    readonly Dictionary<string, (int Number, StackPanel Panel, List<(ModManifest Mod, Border Row)> Rows, List<ModManifest> All)> modRowPlaces = [];
+
+    void ToggleDetails(ModManifest mod)
+    {
+        if (!modsExpanded.Remove(mod.Id)) modsExpanded.Add(mod.Id);
+        var at = -1;
+        var index = -1;
+        if (modRowPlaces.TryGetValue(mod.Id, out var place) && (at = place.Rows.FindIndex(r => r.Mod.Id == mod.Id)) >= 0)
+            index = place.Panel.Children.IndexOf(place.Rows[at].Row);
+        if (index < 0)
+        {
+            DrawMods();
+            return;
+        }
+        var old = place.Rows[at].Row;
+        var row = ModRow(mod, place.Number, place.Panel, place.Rows, place.All);
+        // a moved row keeps the number it shows now, not the one it was drawn with
+        if (modNumbers.Remove(old, out var shown) && modNumbers.TryGetValue(row, out var number)) number.Text = shown.Text;
+        if (old.Child is Grid grid) foreach (var toggle in grid.Children.OfType<ToggleSwitch>()) modSwitches.Remove(toggle);
+        row.IsVisible = old.IsVisible;
+        place.Rows[at] = (mod, row);
+        if (modRowsDrawn.FindIndex(r => r.Row == old) is >= 0 and var drawn) modRowsDrawn[drawn] = (mod, row);
+        place.Panel.Children[index] = row;
     }
 
     // Short markers at the row's right; the details say more.
@@ -717,7 +757,7 @@ public partial class MainWindow
     {
         var menu = new MenuFlyout();
         var details = new MenuItem { Header = modsExpanded.Contains(mod.Id) ? "Hide details" : "Details" };
-        details.Click += (_, _) => { if (!modsExpanded.Remove(mod.Id)) modsExpanded.Add(mod.Id); DrawMods(); };
+        details.Click += (_, _) => ToggleDetails(mod);
         menu.Items.Add(details);
         // the group's rows are all there once the menu opens (this row is made before it joins them)
         int At() => rows.FindIndex(r => r.Mod.Id == mod.Id);
@@ -784,7 +824,8 @@ public partial class MainWindow
         {
             modDragged = false;
             pressed = null;
-            if (modsLocked || paths.ModsFolder == null || rows.Count < 2 || !e.GetCurrentPoint(row).Properties.IsLeftButtonPressed) return;
+            // hidden rows have no place on screen to drop between, so the order is not dragged while searching
+            if (modsLocked || paths.ModsFolder == null || rows.Count < 2 || ModFilterActive || !e.GetCurrentPoint(row).Properties.IsLeftButtonPressed) return;
             pressed = e.GetPosition(panel);
         };
         row.PointerMoved += (_, e) =>
