@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 45
+#define HF_MOD_SDK_VERSION 46
 #define HF_WEAPON_PAINTS 1 /* HfWeapon.paints exists */
 #define HF_MOD_EXPORT __declspec(dllexport)
 
@@ -1187,6 +1187,15 @@ typedef struct HfEditDef
 
 #include "hellforge_generation.h" /* HfGenerationCapacity: room in the map generator's arrays (generation_capacity) */
 
+/* An item's size and place in the Armory's 3D preview (SDK 46, set_preview_fit). The game fits the camera to the
+ * unit's bounding box, which misses parts some models draw outside it. */
+typedef struct HfPreviewFit
+{
+    uint32_t size;    /* sizeof(HfPreviewFit) */
+    float scale;      /* how big it shows against the game's fit: 0.5 half as big; 0.05 .. 20 (0 in set_preview_fit: clear) */
+    float offset[3];  /* metres the model moves in the preview's own axes (z up), -5 .. 5; 0 0 0 keeps the game's place */
+} HfPreviewFit;
+
 typedef struct HfApi
 {
     uint32_t version; /* HF_MOD_SDK_VERSION of the loader; functions are only ever added at the end. */
@@ -1789,6 +1798,9 @@ typedef struct HfApi
     int (*set_loadout_layout)(HfMod* mod, const HfLoadoutLayout* layout); /* the WEAPONRY boxes' sizes and rows. 0 done */
     /* ---- SDK 43: rails for HF_MOVE_RAIL movers (hellforge_move.h, docs/modding/movers.md; check hf->size) ---------- */
     uint32_t (*add_rail)(HfMod* mod, const HfRailDef* def); /* any time: the rail's id, or 0 refused (the log says why) */
+    /* ---- SDK 46: an item's size in the Armory's 3D preview (docs/modding/ui.md; check hf->size) ----------------- */
+    /* weapon: a loadout id (add_weapon's or a vanilla one); fit NULL or scale 0: the game's fit. Any time. 0 done, 1 refused */
+    int (*set_preview_fit)(HfMod* mod, uint32_t weapon, const HfPreviewFit* fit);
 } HfApi;
 
 /* SDK 6: an HfMod starts with the API, so these need only the mod. */

@@ -72,3 +72,5 @@ static void InstallLoadoutPreview(void)
         (void**)&g_loadoutPreviewOriginal) ? -1 : 1;
     Note(g_loadoutPreviewState == 1 ? "loadout preview: recursive fallback guarded" : "loadout preview: could not hook recursive fallback");
 }
+
+#include "preview_fit.c" /* SDK 46: the Armory preview's size */
