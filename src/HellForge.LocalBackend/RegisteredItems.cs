@@ -716,7 +716,7 @@ public sealed partial class RegisteredItems(string path)
         var withheld = Withheld?.Invoke() ?? new HashSet<uint>();
         var keeps = current.Keeps.Inventory - ReservedInventory;
         var attachments = current.Attachments.Where(a => !AttachmentLocked(a)).ToList();
-        foreach (var item in current.Admitted.Where(i => !Locked(i, current) && !withheld.Contains(i.MixId) && (!i.IsDifficulty || have.Contains(i.CopyOf)))) /* a difficulty not before level 10 is unlocked */
+        foreach (var item in current.Admitted.Where(i => !LeftOutHeld(i, current, withheld) && (!i.IsDifficulty || have.Contains(i.CopyOf)))) /* a difficulty not before level 10 is unlocked */
         {
             var own = HeldWith(item, current, saved, attachments);
             var mirrored = item.IsWeapon && !current.ByWeapon.ContainsKey(item.MixId) ? heldChildren.GetValueOrDefault(item.CopyOf) ?? [] : [];
@@ -732,6 +732,20 @@ public sealed partial class RegisteredItems(string path)
         }
         AddPaintsHeld(held, have, current.Painted, keeps, Game(), current.Admitted);
         AddPatternsHeld(held, have, current.Patterns, keeps);
+    }
+
+    // Locked or withheld: not held, said once (the catalogue still has it, so the armory shows it unowned).
+    bool LeftOutHeld(Item item, Session current, IReadOnlySet<uint> withheld)
+    {
+        string? why = LockedMods.Contains(item.Mod) ? "its mod is locked"
+            : Locked(item, current) ? (item.IsStratagem || GameBase(item, current) is not null ? "the player does not own its base"
+                : "its base is not the game's (a copy chain of more than 8, a cycle, or a base the catalogue does not have)")
+            : withheld.Contains(item.MixId) ? "a mod's warbond sells it, not bought yet" : null;
+        if (why == null) return false;
+        lock (reported)
+            if (reported.Add(item.MixId ^ 0x10C4EDu))
+                Log($"{(item.Mod.Length > 0 ? item.Mod + "'s " : "")}{(item.IsDifficulty ? "difficulty" : item.IsStratagem ? "stratagem" : "weapon")} {item.MixId} is not held: {why}.");
+        return true;
     }
 
     // Mods' patterns, held from the start: a weapon pattern's child of each weapon the inventory holds, and every unit
