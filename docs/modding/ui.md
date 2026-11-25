@@ -196,7 +196,8 @@ hf->set_preview_fit(mod, weaponId, &fit);           /* weaponId: add_weapon's lo
 
 - `scale` 0.05 .. 20 against the game's fit; 0, or a NULL fit, gives the game's fit back.
 - `offset` is metres in the preview's own axes, z up, -5 .. 5.
-- Any time; the next box the preview fits uses it. The first frame after a pick shows the game's fit.
+- HellForge fits the camera to each picked item's own box. The game alone keeps one fit per kind of item.
+- Any time; the shown item takes it at once.
 - `modloader.log` lists the first 32 boxes of a session ("preview fit: item ... box size ..."), to tune a fit.
 
 ## A category in Vehicle Customization (retired)
