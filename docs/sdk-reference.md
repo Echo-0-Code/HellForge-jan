@@ -10786,7 +10786,7 @@ and statuses without code.
 | `code` | +0x40 | u64 | mission? | pointer to its input's directions (u32: 1 up, 2 right, 3 down, 4 left) |
 | `code_length` | +0x48 | u32 | mission? | how many directions |
 | `uses` | +0x50 | u32 | mission? | uses per mission (0xFFFFFFFF unlimited) |
-| `call_in_time` | +0x54 | f32 | now | seconds from the throw to the arrival (unverified) |
+| `call_in_time` | +0x54 | f32 | now | seconds from the throw to the arrival, before the delivery's own travel time |
 | `free_spot_radius` | +0x58 | f32 | mission? | radius searched for a free landing spot (unverified) |
 | `linger` | +0x60 | f32 | mission? | seconds it lingers after activating (unverified) |
 | `cooldown` | +0x68 | f32 | now | seconds before it can be called again |

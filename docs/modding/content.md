@@ -552,7 +552,7 @@ HellForge does not check this for you. A code is 1 to 9 of U, D, L and R.
 
 ### Values
 
-`cooldown` is 0 to 3600 seconds and `uses` is -1 (unlimited) and up. 0 keeps the base's for both.
+`cooldown` is 0 to 3600 seconds, `call_in` (SDK 49) 0 to 600 and `uses` -1 (unlimited) and up. 0 keeps the base's.
 
 ### Icon
 
