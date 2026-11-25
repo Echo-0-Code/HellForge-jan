@@ -179,6 +179,28 @@ static class ModTests
             check(ModSettings.Disabled(mods).SetEquals(["test.rival"]), "Switch state not saved.");
         });
 
+        test("Modpacks keep their own switches and leave the rest of the settings alone", () =>
+        {
+            var mods = Path.Combine(root, "mods-modpacks");
+            Directory.CreateDirectory(mods);
+            ModSettings.SetEnabled(mods, "test.a", false);
+            ModSettings.SetOrder(mods, ["test.b", "test.a"]);
+            ModSettings.CreateModpack(mods, "Gaming");
+            check(ModSettings.ActiveModpack(mods) == "Gaming" && ModSettings.Disabled(mods).Count == 0, "A new modpack did not start with every mod on.");
+            ModSettings.SetEnabled(mods, "test.b", false);
+            ModSettings.SwitchModpack(mods, null);
+            check(ModSettings.ActiveModpack(mods) == null && ModSettings.Disabled(mods).SetEquals(["test.a"]), "The default modpack lost its switches.");
+            check(ModSettings.Read(mods).Order.SequenceEqual(["test.b", "test.a"]), "Switching modpacks changed the order.");
+            ModSettings.SwitchModpack(mods, "Gaming");
+            check(ModSettings.Disabled(mods).SetEquals(["test.b"]), "A modpack lost its switches.");
+            check(ModSettings.Modpacks(mods).SequenceEqual(["Gaming"]) && File.Exists(Path.Combine(mods, "hellforge-mods-Gaming.json")), "The modpack's file is missing.");
+            reject(() => ModSettings.CreateModpack(mods, "default"));
+            reject(() => ModSettings.CreateModpack(mods, "../x"));
+            ModSettings.DeleteModpack(mods, "Gaming");
+            check(ModSettings.ActiveModpack(mods) == null && ModSettings.Modpacks(mods).Count == 0 && ModSettings.Disabled(mods).SetEquals(["test.a"]),
+                "Deleting the modpack in use did not bring the default one back.");
+        });
+
         test("The modlist digest covers gameplay mods and their exact files", () =>
         {
             var mods = Path.Combine(root, "mods-digest");
