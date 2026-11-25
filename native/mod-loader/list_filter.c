@@ -38,6 +38,7 @@
 #define LF_TYPES_MAX 4096u
 #define LF_NAME 160u
 #define LF_TEXT_MAX 96u
+#define LF_TRAITS 256u
 #define LF_LISTS 2u
 
 static const uint8_t kLfBuildPin[] = {0x48, 0x89, 0x4C, 0x24, 0x08, 0x53, 0x55, 0x56, 0x57, 0x41, 0x55, 0x41, 0x56, 0x41, 0x57, 0x48, 0x83, 0xEC, 0x60};
@@ -165,22 +166,68 @@ static void LfStratagemCategory(uint32_t type, char* out, size_t size)
     if (text != NULL) snprintf(out, size, "%s", text);
 }
 
+static void LfAppend(char* out, size_t size, const char* text)
+{
+    const size_t at = strlen(out);
+    if (text != NULL && text[0] && at + 3 < size) snprintf(out + at, size - at, "%s%s", at ? ", " : "", text);
+}
+
+/* The trait lines a weapon's card shows: its loadout record's traits_1..5, as the game has them now. */
+static void LfWeaponTraits(uint64_t entity, char* out, size_t size)
+{
+    static const char* const slots[] = {"traits_1", "traits_2", "traits_3", "traits_4", "traits_5"};
+    const SdkComponent* c = SdkComponentNamed("LoadoutEntry");
+    out[0] = 0;
+    if (c == NULL || entity == 0) return;
+    AcquireSRWLockExclusive(&g_fieldsLock);
+    for (size_t i = 0; i < sizeof slots / sizeof slots[0]; i++)
+    {
+        const SdkField* f = SdkFieldNamed(c, slots[i]);
+        uint8_t* at = f != NULL ? LiveAddress(&g_lfMod, entity, c, f) : NULL;
+        uint32_t id = 0;
+        if (at != NULL && !SafeRead((uintptr_t)at, &id, 4) && id) LfAppend(out, size, LfText(id));
+    }
+    ReleaseSRWLockExclusive(&g_fieldsLock);
+}
+
+/* A stratagem card's ITEM TRAITS lines: a mod's (set_stratagem_traits), else the game's set tags in its order. */
+static void LfStratagemTraits(uint32_t type, char* out, size_t size)
+{
+    out[0] = 0;
+    if (g_itState != 1) return;
+    uint32_t ids[IT_TAGS] = {0}, count = 0;
+    AcquireSRWLockShared(&g_itLock);
+    const ItCard* card = ItCardOf(type);
+    if (card != NULL) count = card->count, memcpy(ids, card->ids, card->count * 4u);
+    ReleaseSRWLockShared(&g_itLock);
+    if (card == NULL)
+        for (uint32_t i = 0; i < IT_TAGS; i++)
+            if (((ItFlagFn)(g_itGame + IT_FLAG))(type, i) && !SafeRead(g_itGame + IT_TAG_IDS + i * 4u, &ids[count], 4)) count++;
+    for (uint32_t i = 0; i < count; i++) LfAppend(out, size, ItTextOfId(ids[i]));
+}
+
+/* "#text" searches the category, "@text" the traits, anything else the name. text and the row's fields are lower case. */
+static int LfMatches(const char* text, const char* name, const char* category, const char* traits)
+{
+    if (text[0] == '#') return strstr(category, text + 1) != NULL;
+    if (text[0] == '@') return strstr(traits, text + 1) != NULL;
+    return strstr(name, text) != NULL;
+}
+
 /* Whether a row is kept by every rule, and (*match) whether every filter matches it. Under g_lfLock, shared. */
 static int LfKeep(const HfListRow* row, int* match)
 {
     for (uint32_t i = 0; i < g_lfRuleCount; i++)
         if (g_lfRules[i].list == row->list && !g_lfRules[i].rule(g_lfRules[i].mod, row, g_lfRules[i].user)) return 0;
-    char name[LF_NAME], category[LF_NAME];
+    char name[LF_NAME], category[LF_NAME], traits[LF_TRAITS];
     snprintf(name, sizeof name, "%s", row->name);
     snprintf(category, sizeof category, "%s", row->category);
-    LfLower(name), LfLower(category);
+    snprintf(traits, sizeof traits, "%s", row->traits);
+    LfLower(name), LfLower(category), LfLower(traits);
     *match = 1;
     for (uint32_t i = 0; i < g_lfFilterCount && *match; i++)
-    {
-        const char* text = g_lfFilters[i].text;
-        if (g_lfFilters[i].list != row->list || !text[0]) continue;
-        if (text[0] == '#' ? strstr(category, text + 1) == NULL : strstr(name, text) == NULL) *match = 0;
-    }
+        if (g_lfFilters[i].list == row->list && g_lfFilters[i].text[0])
+            *match = LfMatches(g_lfFilters[i].text, name, category, traits);
     return 1;
 }
 
@@ -214,11 +261,12 @@ static void LfGridBuildRows(uintptr_t grid, uint32_t type)
     {
         uint32_t id = 0;
         uint64_t entity = 0;
-        char name[LF_NAME], category[LF_NAME];
+        char name[LF_NAME], category[LF_NAME], traits[LF_TRAITS];
         if (SafeRead(rows + i * 0x20u, &id, 4) || !id || SafeRead(rows + i * 0x20u + 8u, &entity, 8)) continue; /* listed by no one */
         LfWeaponName(entity, name, sizeof name);
         LfWeaponCategory(entity, category, sizeof category);
-        HfListRow row = {sizeof row, HF_LIST_ARMORY_WEAPONS, type, id, entity, name, category};
+        LfWeaponTraits(entity, traits, sizeof traits);
+        HfListRow row = {sizeof row, HF_LIST_ARMORY_WEAPONS, type, id, entity, name, category, traits};
         int m = 0;
         at[n] = rows + i * 0x20u, item[n] = id, keep[n] = (uint8_t)LfKeep(&row, &m), match[n] = (uint8_t)m;
         total += keep[n], matched += keep[n] && m;
@@ -362,8 +410,8 @@ static const char* LfHeightsInstall(uintptr_t game)
     {
         const LfHeightRead* r = &kLfHeightReads[i];
         int32_t disp = 0;
-        uint8_t op[2] = {0};
-        if (SafeRead(game + r->at + r->length - 4, &disp, 4) || SafeRead(game + r->at + r->length - 6, op, 2) || op[0] != 0x0F || op[1] != 0x10 ||
+        uint8_t op[2] = {0}, modrm = 0; /* movss xmm, [rip + disp32]: 0F 10, modrm 00 reg 101, then the disp */
+        if (SafeRead(game + r->at + r->length - 4, &disp, 4) || SafeRead(game + r->at + r->length - 7, op, 2) || SafeRead(game + r->at + r->length - 5, &modrm, 1) || op[0] != 0x0F || op[1] != 0x10 || (modrm & 0xC7) != 0x05 ||
             game + r->at + r->length + disp != game + (r->picker ? LF_PICKER_H : LF_ARMORY_H))
             return "its height reads are not the reviewed ones";
     }
@@ -400,10 +448,11 @@ static void LfPickerDecide(void)
     for (uint32_t type = 1; type < bound; type++)
     {
         if (!((LfHeldFn)(g_lfGame + LF_HELD))(account, type)) continue;
-        char name[LF_NAME], category[LF_NAME];
+        char name[LF_NAME], category[LF_NAME], traits[LF_TRAITS];
         LfStratagemName(type, name, sizeof name);
         LfStratagemCategory(type, category, sizeof category);
-        HfListRow row = {sizeof row, HF_LIST_STRATAGEMS, type, 0, 0, name, category};
+        LfStratagemTraits(type, traits, sizeof traits);
+        HfListRow row = {sizeof row, HF_LIST_STRATAGEMS, type, 0, 0, name, category, traits};
         int m = 0;
         if (!LfKeep(&row, &m)) { g_lfHidden[type / 8] |= (uint8_t)(1u << (type % 8)); continue; }
         total++;
@@ -559,7 +608,7 @@ static int ApiAddListRule(HfMod* mod, uint32_t list, HfListRule rule, void* user
 }
 
 /* SDK 38, set_list_filter: text every listed row's name must contain, any case; NULL or "" takes the mod's away.
- * SDK 44: "#text" is text the row's category must contain instead. */
+ * SDK 44: "#text" is text the row's category must contain instead; SDK 50: "@text", its traits. */
 static int ApiSetListFilter(HfMod* mod, uint32_t list, const char* text)
 {
     if (!LfListOk(mod, list, "set_list_filter")) return 1;

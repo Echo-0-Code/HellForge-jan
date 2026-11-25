@@ -386,6 +386,11 @@ void ReleaseCursorClip()
 
 void RestoreCursorClip()
 {
+    RECT now = {};
+    GetClipCursor(&now);
+    Log("overlay: mouse back to the game: game clip %s %ld,%ld-%ld,%ld, clip now %ld,%ld-%ld,%ld, in front %d, capture %s",
+        g_gameClipped ? "set" : "none", g_gameClip.left, g_gameClip.top, g_gameClip.right, g_gameClip.bottom, now.left, now.top, now.right,
+        now.bottom, g_window != NULL && GetForegroundWindow() == g_window, GetCapture() != NULL ? "held" : "free");
     /* not while another window is in front: the clip would hold the cursor there */
     if (g_clipCursor != NULL && g_gameClipped && g_window != NULL && GetForegroundWindow() == g_window) g_clipCursor(&g_gameClip);
 }
