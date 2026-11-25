@@ -334,6 +334,11 @@ def main(runtime, out_json, out_header):
     # load_package. The Scout Strider's also holds its conscript pilot (FileDiver, build 25480438).
     used.setdefault('0x094394C2A2C22F36', 'packages/generated/enemies/cyborg_walker_scout (Scout Strider and its pilot)')
     used.setdefault('0x2C8D8CC831D0C732', 'packages/generated/enemies/cyborg_walker_scout_tier2')
+    # Packages mods load for a copy of a vanilla vehicle: the FRVs' call-in packages (stratagem row +0xA8) hold its
+    # models, textures and animations. Without its base's package a copy shows a purple "?" and crashes as it lands.
+    used.setdefault('0x149F685717737CAE', 'M-103 Supply FRV call-in package (stratagem 26: the vehicle, for copies of it)')
+    used.setdefault('0x0BDF199F7AC14F43', 'M-102 Gunner FRV call-in package (stratagem 105: the vehicle, for copies of it)')
+    used.setdefault('0x2CEE40DFBD0B174D', 'M-104 Incinerator FRV call-in package (stratagem 135: the vehicle, for copies of it)')
 
     loader = residency['loader']
     engine = loader['engine']
