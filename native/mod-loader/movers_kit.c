@@ -13,6 +13,7 @@
 #define ZN_RAYS 8         /* rays round a rotor's disc, hub to tip */
 #define ZN_STRIKE_EVERY 0.1f /* seconds between a disc's ray sweeps */
 #define ZN_STRIKE_AGAIN 1.0f /* seconds of lasting contact that count as another strike */
+#define ZN_DISC_HALF 0.2f    /* metres: a rotor disc's half thickness for hits (blades and their flex) */
 
 typedef struct KitGun { HfMod* mod; HfFixedGunDef def; uint32_t slot; } KitGun;   /* slot: its index on its mover */
 typedef struct KitZone { HfMod* mod; HfDamageZoneDef def; uint32_t slot; } KitZone;
@@ -241,16 +242,26 @@ static void ZnBreak(MvUnit* m, const struct KitZone* z)
     if (z->def.effect == HF_ZONE_CONTROL) m->znSpin += z->def.spin * 0.0174533f;
 }
 
+/* Whether a hit at `local` lands in the zone. A rotor (strike_damage) is a thin disc, not a sphere, so a 3.6 m main
+ * rotor doesn't swallow the hits on the cabin under it. */
+static int ZnInside(const HfDamageZoneDef* z, const float local[3])
+{
+    const float d[3] = {local[0] - z->center[0], local[1] - z->center[1], local[2] - z->center[2]};
+    const float all = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+    if (z->strike_damage <= 0) return all <= z->radius * z->radius;
+    float n[3] = {z->disc[0], z->disc[1], z->disc[2]};
+    float l = sqrtf(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+    if (l < 1e-6f) { n[0] = 0; n[1] = 0; n[2] = 1; l = 1; }
+    const float along = (d[0] * n[0] + d[1] * n[1] + d[2] * n[2]) / l;
+    return fabsf(along) <= ZN_DISC_HALF && all - along * along <= z->radius * z->radius;
+}
+
 /* The first zone of the unit a hit at `local` lands in, or NULL. */
 static const KitZone* ZnAt(const MvUnit* m, const float local[3])
 {
     const uint64_t resource = g_mvDefs[m->def - 1].def.entity;
     for (LONG i = 0; i < g_kitZoneCount; i++)
-    {
-        const KitZone* z = &g_kitZones[i];
-        const float dx = local[0] - z->def.center[0], dy = local[1] - z->def.center[1], dz = local[2] - z->def.center[2];
-        if (z->def.entity == resource && dx * dx + dy * dy + dz * dz <= z->def.radius * z->def.radius) return z;
-    }
+        if (g_kitZones[i].def.entity == resource && ZnInside(&g_kitZones[i].def, local)) return &g_kitZones[i];
     return NULL;
 }
 

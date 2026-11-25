@@ -169,7 +169,7 @@ typedef struct HfDamageZoneDef
     uint32_t effect;      /* HF_ZONE_PLAIN, _ENGINE or _CONTROL */
     uint64_t entity;      /* the mover entity (add_mover it first) */
     float center[3];      /* metres in the mover's frame (x right, y forward, z up) */
-    float radius;         /* hits within this many metres of center land in it (default 0.5) */
+    float radius;         /* hits within this many metres of center land in it (a rotor: of its disc, 0.2 m thick; default 0.5) */
     int32_t health;       /* damage it takes before it breaks, before armour (default 500) */
     float scale;          /* x the damage the vehicle itself takes from a hit in it (default 1; negative: none) */
     float sink;           /* _ENGINE, _CONTROL: m/s it comes down at once broken (default 5) */

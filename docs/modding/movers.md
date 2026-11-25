@@ -251,7 +251,8 @@ A zone with `strike_damage` is a spinning disc, such as an open rotor, swept aga
   `strike_damage` of its health.
 - A unit it touches, such as a building, is bumped when `strike_speed` is set. Slower than `strike_speed` toward it,
   the mover is pushed back unharmed. Faster, the zone breaks and `strike_explosion` goes off where it touched.
-- `disc` is the disc's axis in the mover's frame, and `radius` its radius.
+- `disc` is the disc's axis in the mover's frame, and `radius` its radius. Hits land in it only within 0.2 m of the
+  disc's plane, so a big rotor doesn't take the hits on the cabin under it.
 
 ## Boats and submarines
 
