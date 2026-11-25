@@ -613,8 +613,8 @@ packs, and the launcher says when a newer HellForge is out.
 
 ### Fixed
 
-- **Clicks after a modal screen.** A modal overlay screen closed by a click no longer leaves the mouse captured, so
-  the game's buttons answer again without switching windows.
+- **Clicks after a modal screen.** A modal overlay screen no longer leaves the game's clicks and wheel dead until
+  alt-tab. The game still gets key and button releases while the screen is open, so the key that opened it is not held.
 - **Last row under a list band.** A list with a band, the Armory's or the stratagem picker's, scrolls to its last
   row after a search or filter rebuilds it.
 - **Boats float in deep water.** A boat read the water's surface as its bed and sat aground; it now reads the bed

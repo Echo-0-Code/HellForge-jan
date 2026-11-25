@@ -1,6 +1,7 @@
 /* The game window's input while a modal screen has it: the window procedure is replaced by one that toggles screens on
- * their keys and, while a modal one is open, keeps keyboard, mouse and raw input from the game. The game's cursor
- * clipping and recentring are ignored meanwhile, so the cursor moves freely, shown as the game's own pointer.
+ * their keys and, while a modal one is open, keeps keyboard, mouse and raw input from the game, all but releases. The
+ * game's cursor clipping and recentring are ignored meanwhile, so the cursor moves freely, shown as the game's own
+ * pointer.
  * With no modal screen open, a mouse button pressed inside a click box of an open non-modal screen (HfDraw.take_clicks)
  * is that screen's until it is released: its window messages, its raw input and its GetKeyState/GetAsyncKeyState state
  * are kept from the game. Everything else, the mouse's moves included, still reaches the game. */
@@ -231,6 +232,35 @@ bool PointWithGameCursor(UINT message, LPARAM l)
     return false;
 }
 
+/* While a screen has the input, the game still gets releases, with the presses and moves taken out. A key or button
+ * it saw go down before the screen opened (the X that opens the search box) would otherwise stay held to the game, and
+ * a held key keeps the keyboard its newest device: its mouse mode stays off and clicks do nothing until alt-tab. */
+bool KeepRelease(RAWINPUT* input)
+{
+    if (input->header.dwType == RIM_TYPEKEYBOARD) return (input->data.keyboard.Flags & RI_KEY_BREAK) != 0;
+    if (input->header.dwType != RIM_TYPEMOUSE) return false;
+    const USHORT ups = input->data.mouse.usButtonFlags & (RI_MOUSE_LEFT_BUTTON_UP | RI_MOUSE_RIGHT_BUTTON_UP |
+        RI_MOUSE_MIDDLE_BUTTON_UP | RI_MOUSE_BUTTON_4_UP | RI_MOUSE_BUTTON_5_UP);
+    input->data.mouse.usButtonFlags = ups, input->data.mouse.usButtonData = 0;
+    if (!(input->data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE)) input->data.mouse.lLastX = input->data.mouse.lLastY = 0;
+    return ups != 0;
+}
+
+bool ReleaseMessage(UINT message)
+{
+    return message == WM_KEYUP || message == WM_SYSKEYUP || message == WM_LBUTTONUP || message == WM_RBUTTONUP ||
+        message == WM_MBUTTONUP || message == WM_XBUTTONUP;
+}
+
+/* A WM_INPUT the game gets while a screen has the input: a release only. */
+bool ReleaseInput(LPARAM l)
+{
+    alignas(8) BYTE buffer[sizeof(RAWINPUT)];
+    UINT size = sizeof buffer;
+    const UINT read = g_rawInputData((HRAWINPUT)l, RID_INPUT, buffer, &size, sizeof(RAWINPUTHEADER));
+    return read != (UINT)-1 && read >= sizeof(RAWINPUTHEADER) && KeepRelease((RAWINPUT*)buffer);
+}
+
 /* ImGui takes the mouse (SetCapture) on a press and lets it go on the release. A modal screen that closes on a press (a
  * click outside it) leaves that release to the game, so ImGui kept the capture and the game's clicks went wrong until
  * the window lost focus: a release ImGui is still waiting for is its too, as well as the game's. */
@@ -245,23 +275,29 @@ void EndImGuiPress(HWND window, UINT message, WPARAM w, LPARAM l)
     LeaveCriticalSection(&g_lock);
 }
 
+/* A message while a modal screen has the input: the screen's, and the game's too when it is a release or not input. */
+LRESULT CapturedMessage(HWND window, UINT message, WPARAM w, LPARAM l)
+{
+    bool down = false;
+    uint32_t button = ButtonOf(message, &down);
+    if (button != 0 && !down) InterlockedAnd(&g_heldByMessage, ~(LONG)button); /* a box's press the modal screen ends */
+    Note(window, message, w, l);
+    EnterCriticalSection(&g_lock);
+    if (ImGui::GetCurrentContext() != NULL) ImGui_ImplWin32_WndProcHandler(window, message, w, l);
+    LeaveCriticalSection(&g_lock);
+    if (ReleaseMessage(message) || (message == WM_INPUT && ReleaseInput(l)))
+        return CallWindowProcW(g_gameProc, window, message, w, l);
+    if (InputMessage(message)) return message == WM_INPUT ? DefWindowProcW(window, message, w, l) : 0;
+    return CallWindowProcW(g_gameProc, window, message, w, l);
+}
+
 LRESULT CALLBACK HostProc(HWND window, UINT message, WPARAM w, LPARAM l)
 {
     if (TakeKey(message, w, l)) return 0;
     if (PointWithGameCursor(message, l)) return TRUE;
     EndImGuiPress(window, message, w, l);
     if (!g_captured && TakeClick(message, w, l)) return 0;
-    if (g_captured)
-    {
-        bool down = false;
-        uint32_t button = ButtonOf(message, &down);
-        if (button != 0 && !down) InterlockedAnd(&g_heldByMessage, ~(LONG)button); /* a box's press the modal screen ends */
-        Note(window, message, w, l);
-        EnterCriticalSection(&g_lock);
-        if (ImGui::GetCurrentContext() != NULL) ImGui_ImplWin32_WndProcHandler(window, message, w, l);
-        LeaveCriticalSection(&g_lock);
-        if (InputMessage(message)) return message == WM_INPUT ? DefWindowProcW(window, message, w, l) : 0;
-    }
+    if (g_captured) return CapturedMessage(window, message, w, l);
     return CallWindowProcW(g_gameProc, window, message, w, l);
 }
 
@@ -276,11 +312,28 @@ BOOL WINAPI ClipCursorDetour(const RECT* rect)
     return g_captured ? TRUE : g_clipCursor(rect);
 }
 BOOL WINAPI SetCursorPosDetour(int x, int y) { return g_captured ? TRUE : g_setCursorPos(x, y); }
-/* The game reads its mouse and keys in batches; while a screen has them the batch is drained and reported empty. */
+/* The game reads its mouse and keys in batches; while a screen has them only the batch's releases are left. */
 UINT WINAPI RawInputBufferDetour(PRAWINPUT data, PUINT size, UINT header)
 {
     UINT read = g_rawInputBuffer(data, size, header);
-    if (g_captured && data != NULL) return 0;
+    if (g_captured && data != NULL)
+    {
+        if (read == (UINT)-1 || header != sizeof(RAWINPUTHEADER)) return 0;
+        RAWINPUT *at = data, *to = data;
+        UINT kept = 0;
+        for (UINT i = 0; i < read; i++)
+        {
+            RAWINPUT* next = (RAWINPUT*)(((ULONG_PTR)at + at->header.dwSize + 7) & ~(ULONG_PTR)7);
+            const DWORD bytes = at->header.dwSize;
+            if (KeepRelease(at))
+            {
+                memmove(to, at, bytes);
+                to = (RAWINPUT*)(((ULONG_PTR)to + bytes + 7) & ~(ULONG_PTR)7), kept++;
+            }
+            at = next;
+        }
+        return kept;
+    }
     if (data != NULL && read != (UINT)-1 && header == sizeof(RAWINPUTHEADER))
     {
         /* NEXTRAWINPUTBLOCK, which MinGW's headers cannot expand (no QWORD): records are 8-byte aligned */
@@ -297,6 +350,8 @@ UINT WINAPI RawInputBufferDetour(PRAWINPUT data, PUINT size, UINT header)
 UINT WINAPI RawInputDataDetour(HRAWINPUT input, UINT command, LPVOID data, PUINT size, UINT header)
 {
     UINT read = g_rawInputData(input, command, data, size, header);
+    if (g_captured && command == RID_INPUT && data != NULL && read != (UINT)-1 && read >= sizeof(RAWINPUTHEADER))
+        KeepRelease((RAWINPUT*)data);
     if (!g_captured && command == RID_INPUT && data != NULL && read != (UINT)-1 && read >= sizeof(RAWINPUTHEADER) &&
         header == sizeof(RAWINPUTHEADER))
         FilterRaw((RAWINPUT*)data);
