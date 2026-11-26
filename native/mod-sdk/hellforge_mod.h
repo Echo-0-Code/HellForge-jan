@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 54
+#define HF_MOD_SDK_VERSION 55
 #define HF_WEAPON_PAINTS 1 /* HfWeapon.paints exists */
 #define HF_MOD_EXPORT __declspec(dllexport)
 
@@ -1821,6 +1821,11 @@ typedef struct HfApi
     /* option_info: option index (0 ..) of any mod in out: 1, or 0 past the last. Any thread. apply_option: a value for
      * another mod's option as if the player picked it: clamped, saved, and its on_change called on the game thread. 1 done */
     int (*option_info)(HfMod* mod, uint32_t index, HfOptionInfo* out); int (*apply_option)(HfMod* mod, const char* mod_id, const char* id, double value);
+    /* ---- SDK 55: how far enemies see an entity (docs/modding/world.md; check hf->size) -------------------------- */
+    /* Scales the reach of enemy eyes on one entity: 1 the game's, 0 back to 1, else 0.01 .. 10 (clamped). Game thread
+     * of every machine (a local write, nothing is sent); HellForge puts 1 back when the mod is taken out. 1 done, 0 the
+     * entity has no visibility record (or the call is refused; the log says why). */
+    int (*set_visibility)(HfMod* mod, uint32_t entity, float scale);
 } HfApi;
 
 /* SDK 6: an HfMod starts with the API, so these need only the mod. */

@@ -12,6 +12,9 @@ On `dev`, since 0.5.0-beta.
 
 ### Added
 
+- **Stealth for mods (SDK 55).** `set_visibility` scales how far enemy eyes see one entity, such as a quiet vehicle
+  and its riders. It is a local write on the game thread, and HellForge puts the game's value back when the mod is
+  taken out.
 - **Tune mods' values live in the editor (SDK 54).** The editor's new MOD VALUES tab (F8) lists every mod's options, a
   page per mod, as sliders, toggles and choices. `HF_OPTION_EDITOR_ONLY` keeps a tuning row out of OPTIONS > MODS.
   `option_info` lists any mod's options and `apply_option` sets one as the player would.

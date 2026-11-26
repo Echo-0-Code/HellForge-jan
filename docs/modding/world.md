@@ -19,6 +19,7 @@ includes.
 - [Friend or foe](#friend-or-foe)
 - [Posing joints](#posing-joints)
 - [The camera](#the-camera)
+- [How far enemies see an entity](#how-far-enemies-see-an-entity)
 - [Limits](#limits)
 
 ## Before you call
@@ -247,6 +248,29 @@ const float y = 540.0f - (d[0] * view.up[0] + d[1] * view.up[1] + d[2] * view.up
 - Any thread, such as an overlay screen's draw callback. 0 before the first frame, or on another game build.
 - The vectors are unit length, in world space with Z up.
 - `fov` is 0 until HellForge reads it; 0.96 rad is the game's default view.
+
+## How far enemies see an entity
+
+`set_visibility(mod, entity, scale)` (SDK 55) scales how far enemy eyes see one entity. An eye's reach is its own
+range times the target's visibility, and this scale multiplies that visibility.
+
+```c
+/* each update, on the game thread of every machine: a third of a vanilla FRV's reach, like a Helldiver on foot */
+if (HAS(hf, set_visibility)) hf->set_visibility(mod, frv, 0.33f);
+```
+
+| Scale | Meaning |
+| --- | --- |
+| 1 | the game's |
+| 0 | back to the game's 1 |
+| 0.01 .. 10 | that share of the reach; outside it, clamped |
+| below 0 | refused (logged once) |
+
+- Game thread only. It writes this machine's memory and sends nothing, so call it on every machine.
+- It answers 0 when the entity has no visibility record, such as a unit that is gone.
+- A rider is an entity of its own: scale each seated Helldiver too, and pass 0 when one gets out.
+- When the mod is taken out, HellForge puts 1 back on every entity it scaled.
+- Firing still reveals: the game's floor while a unit fires is not scaled.
 
 ## Limits
 
