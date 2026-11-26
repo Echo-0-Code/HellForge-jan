@@ -458,22 +458,34 @@ static EvpHole g_evpHoles[EVP_MAX_DESTRUCTIBLES]; /* by the manager's instance s
 static ULONGLONG g_evpHolesNext;
 static uint32_t g_evpHolesState;
 
+/* Where a unit's +0xE8 getter puts its scene graph: the classes seen answer `lea rax, [rcx + d]; ret` (d 0x48, 0x60), so the
+ * offset is read from the code rather than calling unknown code; 0 when the method is something else. */
+static uintptr_t EvpGraphOffset(uintptr_t method)
+{
+    static uintptr_t told;
+    uint8_t code[8];
+    int32_t d = 0;
+    if (SafeRead(method, code, sizeof code)) return 0;
+    memcpy(&d, code + 3, 4);
+    if (code[0] == 0x48 && code[1] == 0x8d && code[2] == 0x41 && code[4] == 0xc3) return code[3];
+    if (code[0] == 0x48 && code[1] == 0x8d && code[2] == 0x81 && code[7] == 0xc3 && d > 0 && d < 0x10000) return (uintptr_t)d;
+    if (told != method) Note("unit position: scene-graph getter exe+0x%llX is not a plain offset; its units have no position",
+        (unsigned long long)(method - (uintptr_t)GetModuleHandleW(NULL)));
+    told = method;
+    return 0;
+}
+
 /* A unit's position (its scene graph's root, helldivers2.exe's unit registry); 0 when it does not read. */
 static int EvpUnitPosition(uint32_t unit, float* position)
 {
-    uintptr_t exe = (uintptr_t)GetModuleHandleW(NULL), registry, gens, objects, object, vtable, method, poses;
+    uintptr_t exe = (uintptr_t)GetModuleHandleW(NULL), registry, gens, objects, object, vtable, method, poses, at;
     uint32_t index = unit & 0x3FFFFFu, count;
-    uint8_t gen, code[5];
+    uint8_t gen;
     if (!unit || !EvpPtr(exe + EVP_EXE_UNITS, &registry) || SafeRead(registry + 0x98, &count, 4) || index >= count ||
         !EvpPtr(registry + 0xA0, &gens) || SafeRead(gens + index, &gen, 1) || gen != ((unit >> 22) & 0xFF) ||
         !EvpPtr(registry + 0x88, &objects) || !EvpPtr(objects + (uintptr_t)index * 8, &object) || EvpU32(object + 8, 0) != unit ||
-        !EvpPtr(object, &vtable) || !EvpPtr(vtable + 0xE8, &method) || SafeRead(method, code, 5)) return 0;
-    static const uint8_t level[5] = {0x48, 0x8d, 0x41, 0x48, 0xc3}, plain[5] = {0x48, 0x8d, 0x41, 0x60, 0xc3};
-    uintptr_t graph;
-    if (vtable == exe + 0x16770E0u && method == exe + 0x2CAC50u && !memcmp(code, level, 5)) graph = object + 0x48;
-    else if (method == exe + 0x2BD870u && !memcmp(code, plain, 5)) graph = object + 0x60;
-    else return 0;
-    if (!EvpPtr(graph + 0x28, &poses) || SafeRead(poses + 0x30, position, 12)) return 0;
+        !EvpPtr(object, &vtable) || !EvpPtr(vtable + 0xE8, &method) || (at = EvpGraphOffset(method)) == 0) return 0;
+    if (!EvpPtr(object + at + 0x28, &poses) || SafeRead(poses + 0x30, position, 12)) return 0;
     for (int k = 0; k < 3; k++) if (!isfinite(position[k]) || fabsf(position[k]) > 100000.0f) return 0;
     return 1;
 }

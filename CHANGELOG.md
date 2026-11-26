@@ -29,6 +29,8 @@ On `dev`, since 0.5.0-beta.
 
 ### Fixed
 
+- **find_enemies and other position reads see every unit class.** A unit's position was read for two pinned classes
+  only, so units of other classes were left out. The scene-graph offset now comes from each class's own getter.
 - **No crash entering the ship with Difficulty 11 and mods' attachments.** The game's entity delta table has rows
   after its last named delta that are not deltas. The level 11 countdown's copy kept them, and the attachments followed
   their values past the end of the copy (`c0000005` at `hellforge_modloader.dll+0x88b94`). Both now follow only named
