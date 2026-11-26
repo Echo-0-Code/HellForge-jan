@@ -16,10 +16,10 @@ jobs:
       - name: Download the artifact and publish it
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: "45723786296"
-          TAG: "test-9b90560"
-          TARGET: "9b90560af38823b3b12db87f79ccd7343c188892"
-          TITLE: "Test build 9b90560, 032cf58 + HellForge review fixes + upstream dev merge + Equipment component (run 45723786296)"
+          RUN_ID: "45726193324"
+          TAG: "test-34276cd"
+          TARGET: "34276cdf04aceb9397de5289a67a7e3e46e7d25a"
+          TITLE: "Test build 34276cd, 9b90560 + co-op fixed guns + modpack defaults + fallback seats (SDK 53) (run 45726193324)"
         run: |
           gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n test-package -D pkg
           find pkg -type f -exec ls -la {} \;
