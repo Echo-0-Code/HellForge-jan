@@ -44,8 +44,8 @@ On `dev`, since 0.5.0-beta.
 - **find_enemies and other position reads see every unit class.** A unit's position was read for two pinned classes
   only, so units of other classes were left out. The scene-graph offset now comes from each class's own getter.
 - **The editor no longer says NEXT BOOT for changes the game already took.** An attachment's or default magazine's
-  stats and a status multiplier change when you apply them, and a weapon takes them when it is next built, but their
-  pages still said NEXT BOOT (the CHANGES list said EDITED). A stratagem's unlimited mission uses now read "next
+  stats and a status multiplier change when you apply them. A weapon takes them when it is next built. Their pages
+  still said NEXT BOOT, while the CHANGES list said EDITED. A stratagem's unlimited mission uses now read "next
   mission", not "next launch".
 - **No crash entering the ship with Difficulty 11 and mods' attachments.** The game's entity delta table has rows
   after its last named delta that are not deltas. The level 11 countdown's copy kept them, and the attachments followed
