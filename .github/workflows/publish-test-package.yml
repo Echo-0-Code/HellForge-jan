@@ -16,10 +16,10 @@ jobs:
       - name: Download the artifact and publish it
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: "45768086433"
-          TAG: "test-285f93d"
-          TARGET: "285f93df7c7ec0beb737ec27bd198894804ec320"
-          TITLE: "Test build 285f93d, Gemini review fixes: co-op orders, hover lift, BC7, paints (run 45768086433)"
+          RUN_ID: "45771218988"
+          TAG: "test-366022b"
+          TARGET: "366022bbcc66e134baec61813786d63db1f21022"
+          TITLE: "Test build 366022b, CUSTOMIZE class line for mods items (run 45771218988)"
         run: |
           gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n test-package -D pkg
           find pkg -type f -exec ls -la {} \;
