@@ -484,8 +484,6 @@ static int LfPickerOpen(void)
     return g_lfPickerArgs[0] != NULL && !SafeRead((uintptr_t)g_lfPickerArgs[0] - 0xD2850u + LF_PICKER_STATE, &state, 4) && state == 10;
 }
 
-#include "customize_class.c" /* CUSTOMIZE class line for mods' items (LF_KIND, g_lfKinds) */
-
 /* ---- install and the game-thread update ---- */
 
 static const char* LfArmoryInstall(uintptr_t game)
@@ -499,7 +497,6 @@ static const char* LfArmoryInstall(uintptr_t game)
         return "the Armory grid's code is not the reviewed one";
     g_lfKinds = PinMatches(game + LF_KIND, kLfKindPin, sizeof kLfKindPin) && PinMatches(game + LF_KIND_CHECK, kLfKindCheckPin, sizeof kLfKindCheckPin) &&
                 PinMatches(game + LF_KIND_TEXTS, kLfKindTextsPin, sizeof kLfKindTextsPin);
-    CcInstall(game);
     return LoaderHook("lists: the Armory weapon grid", game + LF_GRID_BUILD, (void*)LfGridBuild, (void**)&g_lfBuild) ? "its builder could not be hooked" : NULL;
 }
 
