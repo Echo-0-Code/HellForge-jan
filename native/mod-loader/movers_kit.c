@@ -85,14 +85,22 @@ static int KitLocalRoot(float out[3])
     return EvpUnitPosition(h.unit, out);
 }
 
-/* Whether this machine's Helldiver sits in the gun's seat. */
-static int KitSeated(const HfFixedGunDef* d, const float w[16])
+/* The gun's seat this machine's Helldiver sits in: 1 its `seat`, 2 .. its fallback_seats (SDK 53), 0 none. The nearest
+ * within KIT_SEAT_R when two are close. */
+static uint32_t KitSeatOf(const HfFixedGunDef* d, const float w[16])
 {
-    float root[3], seat[3];
+    float root[3];
     if (!KitLocalRoot(root)) return 0;
-    KitToWorld(w, d->seat, 1, seat);
-    const float dx = root[0] - seat[0], dy = root[1] - seat[1], dz = root[2] - seat[2];
-    return dx * dx + dy * dy + dz * dz < KIT_SEAT_R * KIT_SEAT_R;
+    uint32_t best = 0;
+    float bestD = KIT_SEAT_R * KIT_SEAT_R;
+    for (uint32_t i = 0; i <= d->fallback_count; i++)
+    {
+        float seat[3];
+        KitToWorld(w, i == 0 ? d->seat : d->fallback_seats[i - 1], 1, seat);
+        const float dx = root[0] - seat[0], dy = root[1] - seat[1], dz = root[2] - seat[2], dd = dx * dx + dy * dy + dz * dz;
+        if (dd < bestD) { bestD = dd; best = i + 1; }
+    }
+    return best;
 }
 
 /* One round along the nose, scattered and converged; 0 when spawn_projectile refused it (its log says why). */
@@ -118,49 +126,53 @@ static int KitShot(MvUnit* m, const KitGun* g, const float w[16], float period)
     return 1;
 }
 
-/* Co-op: only the host may spawn projectiles, so a joiner's Helldiver in a gun's seat sends its trigger to the host under
- * "@hellforge.guns" (the unit's network id, the gun's slot, held), on a change and every KIT_ASK_S while held; the host
- * fires that gun as if its own player held it, for KIT_ASK_HOLD unless told again. Fliers are physics bodies the engine
- * replicates, so both machines have the unit and the seat in the same place. */
+/* Co-op: only the host may spawn projectiles, so a joiner's Helldiver in one of a gun's seats tells the host under
+ * "@hellforge.guns" (the unit's network id, the gun's slot, the seat, held): on a change and every KIT_ASK_S while it
+ * sits there. The host keeps each seat taken for KIT_ASK_HOLD unless told again, and the highest-priority taken seat
+ * (its own player's or a joiner's) fires the gun. Fliers are physics bodies the engine replicates, so both machines
+ * have the unit and its seats in the same place. */
 #define KIT_CHANNEL "@hellforge.guns"
-#define KIT_ASK_VERSION 1u
+#define KIT_ASK_VERSION 2u
 #define KIT_ASK_S 0.2f
 #define KIT_ASK_HOLD 0.5f
 #define KIT_INBOX 64
-typedef struct KitAsk { uint8_t version, slot, held, pad; uint32_t network; } KitAsk;
+typedef struct KitAsk { uint8_t version, slot, seat, held; uint32_t network; } KitAsk; /* seat 1 .., 0 left */
 static KitAsk g_kitInbox[KIT_INBOX];
 static uint32_t g_kitInboxCount;
 static SRWLOCK g_kitInboxLock = SRWLOCK_INIT;
 
-/* A joiner: this machine's trigger on the gun, to the host. */
-static void KitAskHost(MvUnit* m, uint32_t slot, int held, float dt)
+/* A joiner: this machine's seat and trigger on the gun, to the host. */
+static void KitAskHost(MvUnit* m, uint32_t slot, uint32_t seat, int held, float dt)
 {
-    if (held == m->gunSentHeld[slot] && (!held || (m->gunSent[slot] -= dt) > 0)) return;
+    const int same = seat == m->gunSentSeat[slot] && (held != 0) == m->gunSentHeld[slot];
+    if (same && (!seat || (m->gunSent[slot] -= dt) > 0)) return;
     uint32_t unit = 0, network = WC_NO_NETWORK;
     if (!WcEntity(m->entity, &unit, &network) || network == WC_NO_NETWORK) return; /* no network id yet: asked again next update */
-    const KitAsk ask = {KIT_ASK_VERSION, (uint8_t)slot, (uint8_t)(held != 0), 0, network};
+    const KitAsk ask = {KIT_ASK_VERSION, (uint8_t)slot, (uint8_t)seat, (uint8_t)(held != 0), network};
     char hex[sizeof ask * 2 + 1], line[64 + sizeof hex];
     ChannelHex((const uint8_t*)&ask, sizeof ask, hex);
     snprintf(line, sizeof line, "send\t%s\thost\t%s", KIT_CHANNEL, hex);
     LiveQueue(line);
+    m->gunSentSeat[slot] = (uint8_t)seat;
     m->gunSentHeld[slot] = (uint8_t)(held != 0);
     m->gunSent[slot] = KIT_ASK_S;
 }
 
-/* The live pipe's thread: a joiner's trigger, kept for the host's next update. */
+/* The live pipe's thread: a joiner's seat, kept for the host's next update. */
 static void KitReceive(uint64_t from, const uint8_t* data, uint32_t bytes)
 {
     (void)from;
     KitAsk ask;
     if (bytes != sizeof ask) return;
     memcpy(&ask, data, sizeof ask);
-    if (ask.version != KIT_ASK_VERSION || ask.slot >= MV_KIT_SLOTS) return;
+    if (ask.version != KIT_ASK_VERSION || ask.slot >= MV_KIT_SLOTS || ask.seat > MV_GUN_SEATS) return;
     AcquireSRWLockExclusive(&g_kitInboxLock);
     if (g_kitInboxCount < KIT_INBOX) g_kitInbox[g_kitInboxCount++] = ask;
     ReleaseSRWLockExclusive(&g_kitInboxLock);
 }
 
-/* The host's update, g_mvLock held: the joiners' triggers onto their units. */
+/* The host's update, g_mvLock held: the joiners' seats onto their units. A joiner who moved seats or left frees the
+ * seat they had once its KIT_ASK_HOLD runs out. */
 static void KitTake(void)
 {
     if (g_kitGunCount == 0) return;
@@ -173,22 +185,31 @@ static void KitTake(void)
     for (uint32_t k = 0; k < n; k++)
     {
         MvUnit* m = MvUnitOf(ApiEntityOfNetwork(NULL, in[k].network));
-        if (m != NULL) m->gunRemote[in[k].slot] = in[k].held ? KIT_ASK_HOLD : 0;
+        if (m == NULL || in[k].seat == 0) continue;
+        m->gunRemote[in[k].slot][in[k].seat - 1] = KIT_ASK_HOLD;
+        m->gunRemoteHeld[in[k].slot][in[k].seat - 1] = in[k].held;
     }
 }
 
-/* One gun, one update. The host fires for its own player and for a joiner's (KitTake); a joiner only asks the host and
- * counts its rounds down at the same rate, so fixed_gun_state reads about what the host has. */
-/* Whether the gun's trigger is held this update: by this machine's Helldiver in its seat, or (host) by a joiner's. */
+/* Whether the gun's trigger is held this update, by whoever sits in its highest-priority taken seat (m->gunSeat). A
+ * joiner only knows its own seat; the host also has the joiners' (KitTake). */
 static int KitHeld(MvUnit* m, const KitGun* g, const float w[16], float dt, int joiner)
 {
-    const uint32_t s = g->slot;
-    const int seated = KitSeated(&g->def, w), mine = seated && KitTrigger(g->def.trigger);
-    if (joiner) KitAskHost(m, s, mine, dt);
-    const int theirs = !joiner && m->gunRemote[s] > 0;
-    if (theirs) m->gunRemote[s] -= dt;
-    m->gunSeated[s] = seated || theirs;
-    return mine || theirs;
+    const uint32_t s = g->slot, mine = KitSeatOf(&g->def, w);
+    const int pressed = mine && KitTrigger(g->def.trigger);
+    if (joiner) KitAskHost(m, s, mine, pressed, dt);
+    uint32_t top = 0;
+    int held = 0;
+    for (uint32_t i = MV_GUN_SEATS; i-- > 0;)
+    {
+        const int theirs = !joiner && m->gunRemote[s][i] > 0;
+        if (theirs) m->gunRemote[s][i] -= dt;
+        if (mine == i + 1) top = i + 1, held = pressed;
+        else if (theirs) top = i + 1, held = m->gunRemoteHeld[s][i];
+    }
+    m->gunSeat[s] = (uint8_t)top;
+    m->gunSeated[s] = top != 0;
+    return held;
 }
 
 static void KitFire(MvUnit* m, const KitGun* g, const float w[16], float dt, int joiner)
@@ -399,10 +420,23 @@ static uint32_t KitSlot(uint64_t entity, int zones)
     return slot < cap ? slot : cap;
 }
 
+/* Its muzzle and seats within 50 m of its root, and at most HF_GUN_FALLBACK_SEATS fallbacks: NULL, or why not. */
+static const char* KitPointsRefusal(const HfFixedGunDef* d)
+{
+    if (d->fallback_count > HF_GUN_FALLBACK_SEATS) return "fallback_count 0 .. 3";
+    for (int k = 0; k < 3; k++)
+        if (!AiIn(d->muzzle[k], -50, 50) || !AiIn(d->seat[k], -50, 50)) return "muzzle and seat within 50 m of its root";
+    for (uint32_t i = 0; i < d->fallback_count * 3; i++)
+        if (!AiIn(d->fallback_seats[i / 3][i % 3], -50, 50)) return "fallback seats within 50 m of its root";
+    return NULL;
+}
+
 static const char* KitGunRefusal(const HfFixedGunDef* in, HfFixedGunDef* d)
 {
-    if (in == NULL || in->size < sizeof(HfFixedGunDef) || in->entity == 0) return "no HfFixedGunDef, its size or its entity";
-    *d = *in;
+    if (in == NULL || in->size < offsetof(HfFixedGunDef, fallback_seats) || in->entity == 0) return "no HfFixedGunDef, its size or its entity";
+    memset(d, 0, sizeof *d);
+    memcpy(d, in, in->size < sizeof *d ? in->size : sizeof *d); /* an SDK 47 mod's has no fallback seats */
+    d->size = sizeof *d;
     if (!d->trigger) d->trigger = HF_TRIGGER_FIRE;
     if (!d->rounds) d->rounds = 100;
     if (d->fire_rate == 0) d->fire_rate = 600;
@@ -410,8 +444,8 @@ static const char* KitGunRefusal(const HfFixedGunDef* in, HfFixedGunDef* d)
     if (d->trigger > HF_TRIGGER_ALT || d->projectile == 0 || !AiIn(d->fire_rate, 1, 6000) || d->rounds > 100000 || !AiIn(d->spread, 0, 30) ||
         !AiIn(d->converge, 0, 2000) || !AiIn(d->recoil, 0, 1e6f))
         return "trigger FIRE or ALT, a projectile, fire_rate 1 .. 6000, rounds up to 100000, spread 0 .. 30, converge 0 .. 2000, recoil 0 .. 1e6";
-    for (int k = 0; k < 3; k++)
-        if (!AiIn(d->muzzle[k], -50, 50) || !AiIn(d->seat[k], -50, 50)) return "muzzle and seat within 50 m of its root";
+    const char* where = KitPointsRefusal(d);
+    if (where) return where;
     return KitSlot(d->entity, 0) >= MV_KIT_SLOTS ? "8 guns on that mover already" : NULL;
 }
 
@@ -442,7 +476,8 @@ static uint32_t ApiAddFixedGun(HfMod* mod, const HfFixedGunDef* in)
 static uint32_t ApiFixedGunState(HfMod* mod, uint32_t entity, uint32_t gun, HfFixedGunState* out)
 {
     (void)mod;
-    if (out == NULL || out->size < sizeof *out || gun == 0 || gun > MV_KIT_SLOTS) return 0;
+    if (out == NULL || out->size < offsetof(HfFixedGunState, seat) || gun == 0 || gun > MV_KIT_SLOTS) return 0; /* SDK 47's has no seat */
+    const uint32_t size = out->size < sizeof *out ? out->size : (uint32_t)sizeof *out;
     uint32_t found = 0;
     AcquireSRWLockShared(&g_mvLock);
     const MvUnit* m = MvUnitOf(entity);
@@ -451,7 +486,9 @@ static uint32_t ApiFixedGunState(HfMod* mod, uint32_t entity, uint32_t gun, HfFi
             if (g_kitGuns[i].def.entity == g_mvDefs[m->def - 1].def.entity && g_kitGuns[i].slot == gun - 1)
             {
                 const uint32_t s = gun - 1;
-                *out = (HfFixedGunState){sizeof *out, m->kitInit ? m->gunRounds[s] : g_kitGuns[i].def.rounds, g_kitGuns[i].def.rounds, m->gunFiring[s], m->gunSeated[s]};
+                const HfFixedGunState state = {size, m->kitInit ? m->gunRounds[s] : g_kitGuns[i].def.rounds, g_kitGuns[i].def.rounds,
+                    m->gunFiring[s], m->gunSeated[s], m->gunSeat[s]};
+                memcpy(out, &state, size);
                 found = 1;
             }
     ReleaseSRWLockShared(&g_mvLock);

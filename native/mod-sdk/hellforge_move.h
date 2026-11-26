@@ -136,6 +136,8 @@ typedef struct HfMoverDef
 #define HF_TRIGGER_FIRE 1u /* the fire button (left mouse) */
 #define HF_TRIGGER_ALT 2u  /* the aim button (right mouse) */
 
+#define HF_GUN_FALLBACK_SEATS 3u /* SDK 53: HfFixedGunDef.fallback_seats */
+
 typedef struct HfFixedGunDef
 {
     uint32_t size;        /* sizeof(HfFixedGunDef) */
@@ -150,6 +152,11 @@ typedef struct HfFixedGunDef
     float spread;         /* degrees: the cone its rounds scatter in (0: none) */
     float converge;       /* metres ahead where its line crosses the mover's centre line (0: parallel to the nose) */
     float recoil;         /* newtons each shot pushes back at the muzzle, held for 60 / fire_rate s (0: none) */
+    /* SDK 53: more seats that may fire it, after `seat` in priority order. Only the highest one with a Helldiver in it
+     * fires it: with `seat` a gunner's and fallback_seats[0] the driver's, the driver fires it alone and a gunner who
+     * climbs in takes it over. One gun, one rate and one magazine whichever seat fires it. Any player, host or not. */
+    float fallback_seats[HF_GUN_FALLBACK_SEATS][3];
+    uint32_t fallback_count; /* how many of fallback_seats are used, 0 .. HF_GUN_FALLBACK_SEATS */
 } HfFixedGunDef;
 
 /* fixed_gun_state's answer: one gun on one unit */
@@ -159,7 +166,8 @@ typedef struct HfFixedGunState
     uint32_t rounds;      /* rounds left */
     uint32_t capacity;    /* rounds when full */
     uint32_t firing;      /* 1 while it fires */
-    uint32_t seated;      /* 1 while this machine's Helldiver sits in its driver's seat */
+    uint32_t seated;      /* 1 while a Helldiver sits in a seat that fires it (the host sees joiners' too) */
+    uint32_t seat;        /* SDK 53: the seat that fires it now: 1 `seat`, 2 .. fallback_seats[0 ..], 0 none */
 } HfFixedGunState;
 
 /* SDK 47: damage zones on a mover's units (add_damage_zone): spheres in its frame that take the hits landing in them

@@ -239,9 +239,13 @@ gun.seat[1] = 0.2f; gun.seat[2] = 1.0f;
 uint32_t id = api->add_fixed_gun(mod, &gun);
 ```
 
-- It fires on the host while that machine's Helldiver sits within 1.2 m of `seat` and holds `trigger`: the fire
-  button (left mouse) or the aim button (right mouse).
-- Each round is a `spawn_projectile` shot, credited to that Helldiver.
+- It fires while a Helldiver sits within 1.2 m of `seat` and holds `trigger`: the fire button (left mouse) or the
+  aim button (right mouse). Any player can: a joiner's machine tells the host, which fires the shot.
+- SDK 53: `fallback_seats` (up to 3, `fallback_count`) are more seats that may fire it, after `seat` in priority
+  order. Only the highest one with a Helldiver in it fires. With `seat` a gunner's and the driver's as
+  `fallback_seats[0]`, the driver fires it alone and a gunner who climbs in takes it over. It stays one gun: one fire
+  rate and one magazine, whichever seat fires it. `fixed_gun_state`'s `seat` says which seat fires it now.
+- Each round is a `spawn_projectile` shot, on the host and credited to the host's Helldiver.
 - `burst` fires that many rounds a press; 0 fires while held. `spread`, `converge` and `recoil` shape the shots.
 - Points are metres in the mover's frame: x right, y forward, z up.
 - `fixed_gun_state` reads a unit's rounds. `fixed_gun_refill` adds rounds, 0 for full.

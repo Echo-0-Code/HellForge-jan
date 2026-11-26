@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 52
+#define HF_MOD_SDK_VERSION 53
 #define HF_WEAPON_PAINTS 1 /* HfWeapon.paints exists */
 #define HF_MOD_EXPORT __declspec(dllexport)
 

@@ -10,6 +10,14 @@ Unreleased, and a release renames that section ([CONTRIBUTING.md](CONTRIBUTING.m
 
 On `dev`, since 0.5.0-beta.
 
+### Added
+
+- **Fixed guns fire for any player, and from more than one seat (SDK 53).** A joiner in a gun's seat now fires it
+  (the host fires the shot). `HfFixedGunDef.fallback_seats` lists more seats in priority order: the highest one taken
+  fires the gun, so a driver can fire it alone and a gunner who climbs in takes it over.
+- **Modpacks: a mod installed under one pack starts off in the others.** A new testing mod no longer turns on in a
+  gaming pack.
+
 ### Fixed
 
 - **No crash entering the ship with Difficulty 11 and mods' attachments.** The game's entity delta table has rows

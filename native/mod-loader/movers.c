@@ -7,6 +7,7 @@
 #define MV_DEFS 32
 #define MV_UNITS 64
 #define MV_KIT_SLOTS 8   /* fixed guns on one mover */
+#define MV_GUN_SEATS (1 + HF_GUN_FALLBACK_SEATS) /* a fixed gun's seat and its fallbacks (SDK 53) */
 #define MV_ZONE_SLOTS 24 /* damage zones on one mover: armour plates and rotors need more than guns do */
 #define MV_INPUT_S 0.5     /* a mod's input holds this long */
 #define MV_SOLID_S 0.5     /* how often the moving units near a mover are listed */
@@ -65,8 +66,8 @@ typedef struct MvUnit
     float gunWait[MV_KIT_SLOTS], znSink, znSpin, znSweep, znContact[MV_ZONE_SLOTS]; /* znSink, znSpin: m/s, rad/s a broken zone forces */
     uint8_t gunHeld[MV_KIT_SLOTS];
     /* co-op (movers_kit.c "@hellforge.guns"): a joiner's trigger on the host (seconds it holds), and what a joiner last sent */
-    float gunRemote[MV_KIT_SLOTS], gunSent[MV_KIT_SLOTS];
-    uint8_t gunSentHeld[MV_KIT_SLOTS];
+    float gunRemote[MV_KIT_SLOTS][MV_GUN_SEATS], gunSent[MV_KIT_SLOTS]; /* gunRemote: seconds a joiner's seat stays taken */
+    uint8_t gunRemoteHeld[MV_KIT_SLOTS][MV_GUN_SEATS], gunSentSeat[MV_KIT_SLOTS], gunSentHeld[MV_KIT_SLOTS], gunSeat[MV_KIT_SLOTS];
     int32_t znHealth[MV_ZONE_SLOTS];
     /* SDK 48 (movers_view.c): mouse_steer's throttle lever, whether this machine's Helldiver drives it, and A/D */
     float seatLever, seatKeys, viewSteer, viewLift; /* viewSteer, viewLift: the view's asks, eased in */
