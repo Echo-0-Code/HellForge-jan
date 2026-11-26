@@ -16,10 +16,10 @@ jobs:
       - name: Download the artifact and publish it
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: "45771218988"
-          TAG: "test-366022b"
-          TARGET: "366022bbcc66e134baec61813786d63db1f21022"
-          TITLE: "Test build 366022b, CUSTOMIZE class line for mods items (run 45771218988)"
+          RUN_ID: "45775351914"
+          TAG: "test-ff11d7a"
+          TARGET: "ff11d7a312502452d4fa150aa4aa930c3e303c70"
+          TITLE: "Test build ff11d7a, CUSTOMIZE probe build (run 45775351914)"
         run: |
           gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n test-package -D pkg
           find pkg -type f -exec ls -la {} \;
