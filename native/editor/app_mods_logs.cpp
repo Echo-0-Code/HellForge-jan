@@ -254,6 +254,14 @@ static void DrawModHeading(const ModEntry& e, float x, float y, float lw, float 
     g_cv.Rect(x + 16, y + rh - 5, lw - 32, 1, LINE_STRONG, 2);
 }
 
+void DrawModLine(const std::string& name, const std::string& detail, const Area& a, bool selected, bool hovered, float room)
+{
+    if (selected) { g_cv.Rect(a.x + 8, a.y + 2, a.w - 16, a.h - 4, SELECT, 2); g_cv.Rect(a.x + 8, a.y + 2, 3, a.h - 4, GOLD, 3); }
+    else if (hovered) g_cv.Rect(a.x + 8, a.y + 2, a.w - 16, a.h - 4, HOVER, 2);
+    g_cv.Text(name, a.x + 24, a.y + 15, Raw(T(SZ_LABEL, selected ? TEXT : DIM, ui::BODY, ui::LEFT, a.w - room)));
+    g_cv.Text(detail, a.x + 24, a.y + 32, Raw(T(SZ_TINY, FAINT, ui::BODY, ui::LEFT, a.w - room)));
+}
+
 void DrawMods(float y0, float h)
 {
     ScanMods(false);
@@ -274,11 +282,7 @@ void DrawMods(float y0, float h)
         const ModEntry& e = entries[i];
         if (e.mod < 0) { DrawModHeading(e, x, y, lw, rh); return; }
         const ModInfo& m = g_modList[e.mod];
-        bool selected = i == g_modEntry;
-        if (selected) { g_cv.Rect(x + 8, y + 2, lw - 16, rh - 4, SELECT, 2); g_cv.Rect(x + 8, y + 2, 3, rh - 4, GOLD, 3); }
-        else if (hovered) g_cv.Rect(x + 8, y + 2, lw - 16, rh - 4, HOVER, 2);
-        g_cv.Text(m.name, x + 24, y + 15, Raw(T(SZ_LABEL, selected ? TEXT : DIM, ui::BODY, ui::LEFT, lw - 120)));
-        g_cv.Text(m.detail, x + 24, y + 32, Raw(T(SZ_TINY, FAINT, ui::BODY, ui::LEFT, lw - 120)));
+        DrawModLine(m.name, m.detail, {x, y, lw, rh}, i == g_modEntry, hovered, 120);
         if (!m.loaded) Chip("NOT LOADED", x + lw - 18, y + rh / 2, ERROR_, ERROR_SOFT, true);
         else if (!m.rows.empty()) Chip(std::to_string(m.rows.size()), x + lw - 18, y + rh / 2, m.kind == HF_MOD_LUA ? LUA : MOD, m.kind == HF_MOD_LUA ? LUA_SOFT : MOD_SOFT, true);
         else if (!g_holdersRead) Chip("READING", x + lw - 18, y + rh / 2, FAINT, LINE, true);

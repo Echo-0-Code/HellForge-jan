@@ -260,6 +260,7 @@ static MtCategory* MtModCategory(const ModOption* o)
 static const char* MtAddItem(int i)
 {
     const ModOption* o = &g_options[i];
+    if (o->flags & HF_OPTION_EDITOR_ONLY) return NULL; /* the editor's MOD VALUES alone shows it */
     MtItem* item = &g_mtItems[i];
     const char* why = MtFields(item, o, i);
     if (why != NULL) return why;

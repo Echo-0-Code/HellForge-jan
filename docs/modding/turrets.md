@@ -13,6 +13,7 @@ types are in `hellforge_turret.h`, which `hellforge_mod.h` includes.
 - [Put it on a host](#put-it-on-a-host)
 - [Who aims it](#who-aims-it)
 - [What HellForge writes](#what-hellforge-writes)
+- [Change it live](#change-it-live)
 
 ## Before you call
 
@@ -112,3 +113,12 @@ which way it faces.
 
 A setting whose record the entity lacks is refused when the data loads, and the mod's log names it. The other
 settings still apply.
+
+## Change it live
+
+SDK 54: call `add_turret` again for the same entity, on the game thread, to replace its settings. HellForge makes the
+edits above again, except the mount.
+
+- `host`, `mount_slot` and `attach_node` stay; a call that changes them is refused.
+- A 0 keeps the value set before, not the game's.
+- Only the mod that added the turret may change it. Another thread is refused.

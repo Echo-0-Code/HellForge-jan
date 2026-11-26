@@ -15,6 +15,7 @@ types are in `hellforge_status.h`, which `hellforge_mod.h` includes.
 - [Give each level a look](#give-each-level-a-look)
 - [Read an entity's level](#read-an-entitys-level)
 - [Choosing the numbers](#choosing-the-numbers)
+- [Change the numbers live](#change-the-numbers-live)
 - [Co-op](#co-op)
 - [What HellForge guarantees](#what-hellforge-guarantees)
 
@@ -133,6 +134,16 @@ what the effect is.
 
 Give a level a `leave` below its `enter` when the look has a physical lag, such as ice that forms before it melts.
 That also stops a target at the edge from switching looks.
+
+## Change the numbers live
+
+SDK 54: call `add_status_effect` again with the same name to replace the meter, levels, feeds and callback. It answers
+the same handle.
+
+- The looks stay, and every entity keeps its meter and level.
+- `level_count` stays; a call that changes it is refused.
+- It is refused from an `on_level` callback.
+- In co-op each player's game uses its own numbers, so tune solo.
 
 ## Co-op
 

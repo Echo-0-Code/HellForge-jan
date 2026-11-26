@@ -17,7 +17,7 @@ static float DrawTab(int v, float tx, float h)
     if (selected) { g_cv.Rect(tx, h - 3, w, 3, GOLD, 4); g_cv.Rect(tx, 8, w, h - 11, GOLD_WASH, 2); }
     else if (g_cv.Hovered() == id) g_cv.Rect(tx, 8, w, h - 11, HOVER, 2);
     g_cv.Text(label, tx + 11, h / 2 + 1, T(SZ_TAB, selected ? GOLD : DIM, ui::TITLE));
-    if (g_cv.Hit(tx, 6, w, h - 6, id)) { g_view = (View)v; g_edit.on = false; if (v == PRESETS) ScanPresets(); if (v == LOGS) LogRead(true); if (v == MODS) ScanMods(true); }
+    if (g_cv.Hit(tx, 6, w, h - 6, id)) { g_view = (View)v; g_edit.on = false; if (v == PRESETS) ScanPresets(); if (v == LOGS) LogRead(true); if (v == MODS) ScanMods(true); if (v == VALUES) ScanValues(true); }
     return w;
 }
 
@@ -602,6 +602,7 @@ static const char* ViewHint()
     return g_view == SEARCH ? "Every word must match, in any order. Enter or a click opens the object in BROWSE." :
         g_view == CHANGES ? "Enter jumps to the field. RESET or Backspace stages a reset, UNDO drops a pending change; APPLY writes them." :
         g_view == MODS ? "\xE2\x86\x91\xE2\x86\x93 mod   PgUp PgDn value   Enter or a click opens the field; its reset goes back to the mod's value   F5 read again" :
+        g_view == VALUES ? "\xE2\x86\x91\xE2\x86\x93 mod   PgUp PgDn value   \xE2\x86\x90\xE2\x86\x92 change (Shift x10)   Enter flip a toggle or choice   F5 read again" :
         g_view == PRESETS ? "Enter or IMPORT stages the selected preset; EXPORT writes your saved changes as a preset HD2R Editor reads." :
         g_view == LOGS ? "\xE2\x86\x90\xE2\x86\x92 filter   Enter switch HellForge's log / the editor's   End follow the end" :
         "Settings are saved with the editor and apply at once.";

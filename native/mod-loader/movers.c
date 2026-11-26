@@ -882,8 +882,66 @@ static const char* MvRefusal(const HfMoverDef* in, HfMoverDef* d)
     return MvHoverRefusal(&d->hover, MvFlier(d->mode));
 }
 
+/* SDK 54: what a redefinition changed, as "speed 12 -> 14, hover.height 2 -> 3" (or "nothing"). */
+static void MvChanges(const HfMoverDef* was, const HfMoverDef* now, char* out, size_t size)
+{
+    static const struct { const char* name; size_t at; } kFields[] = {
+        {"speed", offsetof(HfMoverDef, speed)}, {"reverse_speed", offsetof(HfMoverDef, reverse_speed)},
+        {"acceleration", offsetof(HfMoverDef, acceleration)}, {"brake", offsetof(HfMoverDef, brake)},
+        {"turn_rate", offsetof(HfMoverDef, turn_rate)}, {"turn_radius", offsetof(HfMoverDef, turn_radius)},
+        {"grip", offsetof(HfMoverDef, grip)}, {"max_slope", offsetof(HfMoverDef, max_slope)}, {"tilt_limit", offsetof(HfMoverDef, tilt_limit)},
+        {"boost_speed", offsetof(HfMoverDef, boost_speed)}, {"strafe_speed", offsetof(HfMoverDef, strafe_speed)},
+        {"stall_speed", offsetof(HfMoverDef, stall_speed)}, {"bank_max", offsetof(HfMoverDef, bank_max)},
+        {"thrust_max", offsetof(HfMoverDef, thrust_max)}, {"hover.height", offsetof(HfMoverDef, hover.height)},
+        {"hover.height_min", offsetof(HfMoverDef, hover.height_min)}, {"hover.height_max", offsetof(HfMoverDef, hover.height_max)},
+        {"hover.climb_rate", offsetof(HfMoverDef, hover.climb_rate)}, {"hover.mass", offsetof(HfMoverDef, hover.mass)},
+        {"hover.stiffness", offsetof(HfMoverDef, hover.stiffness)}, {"hover.damping", offsetof(HfMoverDef, hover.damping)}};
+    size_t n = 0;
+    out[0] = 0;
+    for (size_t i = 0; i < sizeof kFields / sizeof kFields[0] && n + 1 < size; i++)
+    {
+        float a = *(const float*)((const char*)was + kFields[i].at), b = *(const float*)((const char*)now + kFields[i].at);
+        if (a == b) continue;
+        int w = snprintf(out + n, size - n, "%s%s %g -> %g", n ? ", " : "", kFields[i].name, (double)a, (double)b);
+        n = w > 0 && (size_t)w < size - n ? n + (size_t)w : size - 1;
+    }
+    if (n == 0) snprintf(out, size, "nothing it logs");
+}
+
+/* SDK 54: add_mover again for an entity the mod moves already, on the game thread: its definition replaced in its slot,
+ * so its units keep their state. Its mode stays (a hover's body and a walker's steps are not swapped live). Under the
+ * add lock. NULL done, else why refused. */
+static const char* MvRedefine(HfMod* mod, LONG slot, const HfMoverDef* d, uint32_t asked, uint32_t axles, char* changes, size_t size)
+{
+    MvDef* m = &g_mvDefs[slot];
+    if (m->mod != mod && !ModGone(m->mod)) return "it has a mover already (another mod's)";
+    if (g_gameThread == 0 || GetCurrentThreadId() != g_gameThread) return "it has a mover already (redefine it on the game thread)";
+    if (m->asked != asked) return "a redefinition keeps its mode";
+    MvChanges(&m->def, d, changes, size);
+    m->mod = mod;
+    m->def = *d;
+    m->slopeTan = d->max_slope >= 89.9f ? 1e9f : tanf(d->max_slope * 0.0174533f);
+    m->axles = axles;
+    return NULL;
+}
+
+/* The slot of the entity's mover among the first count, or -1. */
+static LONG MvSlotOf(uint64_t entity, LONG count)
+{
+    for (LONG i = 0; i < count; i++) if (g_mvDefs[i].def.entity == entity) return i;
+    return -1;
+}
+
+/* add_mover's answer to a redefinition, logged: 0 done, 1 refused. */
+static int MvRedefined(HfMod* mod, uint64_t entity, const char* why, const char* changes)
+{
+    if (why) { ApiLog(mod, "add_mover(%016llx): refused: %s", (unsigned long long)entity, why); return 1; }
+    ApiLog(mod, "add_mover(%016llx): redefined: %s", (unsigned long long)entity, changes);
+    return 0;
+}
+
 /* SDK 35, add_mover: HellForge moves the entity's units (hellforge_move.h). Any time, best from hellforge_mod_init.
- * 0 done, 1 refused (the log says why). */
+ * SDK 54: again on the game thread, it replaces the definition. 0 done, 1 refused (the log says why). */
 static int ApiAddMover(HfMod* mod, const HfMoverDef* in)
 {
     HfMoverDef d;
@@ -894,17 +952,17 @@ static int ApiAddMover(HfMod* mod, const HfMoverDef* in)
     static const uint32_t kAxles[] = {0, 0, 0, 0, HF_AXLE_FRONT, HF_AXLE_REAR, HF_AXLE_FRONT | HF_AXLE_REAR, 0, 0, 0, 0, 0, HF_AXLE_FRONT | HF_AXLE_REAR};
     const uint32_t asked = d.mode;
     if (kAxles[d.mode]) d.mode = HF_MOVE_DRIVE; /* one driver from here on, with its axles */
+    char changes[512];
     AcquireSRWLockExclusive(&addLock);
-    const LONG at = g_mvDefCount;
-    int dup = 0;
-    for (LONG i = 0; i < at; i++) dup |= g_mvDefs[i].def.entity == d.entity;
-    if (!dup && at < MV_DEFS)
+    const LONG at = g_mvDefCount, dup = MvSlotOf(d.entity, at);
+    if (dup < 0 && at < MV_DEFS)
     {
         g_mvDefs[at] = (MvDef){mod, d, 0, 3.0f, d.max_slope >= 89.9f ? 1e9f : tanf(d.max_slope * 0.0174533f), kAxles[asked], asked};
         InterlockedExchange(&g_mvDefCount, at + 1);
     }
+    const char* again = dup >= 0 ? MvRedefine(mod, dup, &d, asked, kAxles[asked], changes, sizeof changes) : NULL;
     ReleaseSRWLockExclusive(&addLock);
-    if (dup) { ApiLog(mod, "add_mover(%016llx): refused: it has a mover already", (unsigned long long)d.entity); return 1; }
+    if (dup >= 0) return MvRedefined(mod, d.entity, again, changes);
     if (at >= MV_DEFS) { ApiLog(mod, "add_mover: refused: %d movers already", MV_DEFS); return 1; }
     static const char* const kMode[] = {"", "walks", "drives", "hovers", "drives (FWD)", "drives (RWD)", "drives (4WD)", "flies (helicopter)", "flies (plane)", "sails (boat)", "sails (submarine)", "rides a rail", "drives (tracks)"}, * const kWater[] = {"", "wades", "stays dry", "floats", "sinks"};
     ApiLog(mod, "add_mover(%016llx): %s, %.1f m/s (%.1f back), %s at %.0f deg/s, brakes %.1f m/s2, %s (%.2f m)%s", (unsigned long long)d.entity,

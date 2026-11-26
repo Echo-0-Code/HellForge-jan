@@ -150,8 +150,35 @@ static void TrGunReady(void)
         if (g_trDefs[i].def.entity && !g_trDefs[i].gunDone && !ModGone(g_trDefs[i].mod)) TrGunEdits(&g_trDefs[i]);
 }
 
+/* SDK 54: add_turret again for an entity the mod made a turret, on the game thread: the definition replaced in its slot
+ * and its aim, sight and gun edits made again. Its mount stays (host, slot and node). Under the add lock: NULL, or why. */
+static const char* TrRedefine(HfMod* mod, LONG slot, const HfTurretDef* d)
+{
+    TrDef* t = &g_trDefs[slot];
+    if (t->mod != mod && !ModGone(t->mod)) return "it is a turret already (another mod's)";
+    if (g_gameThread == 0 || GetCurrentThreadId() != g_gameThread) return "it is a turret already (redefine it on the game thread)";
+    if (t->def.host != d->host || t->def.mount_slot != d->mount_slot || t->def.attach_node != d->attach_node)
+        return "a redefinition keeps host, mount_slot and attach_node";
+    t->mod = mod;
+    t->def = *d;
+    t->gunDone = 0;
+    return NULL;
+}
+
+/* A redefinition's edits made again (after the add lock: they log and queue), or its refusal. 0 done, 1 refused. */
+static int TrRedone(HfMod* mod, LONG slot, const HfTurretDef* d, const char* why)
+{
+    if (why) { ApiLog(mod, "add_turret(%016llx): refused: %s", (unsigned long long)d->entity, why); return 1; }
+    if (g_fired[HF_EVENT_ENTITIES_READY]) TrGunEdits(&g_trDefs[slot]);
+    const int failed = TrAim(mod, d) | TrSight(mod, d) | TrGun(mod, d);
+    ApiLog(mod, "add_turret(%016llx): redefined: turns %.0f / %.0f deg/s, sees %.0f m, %.0f a minute, %u rounds%s", (unsigned long long)d->entity,
+        (double)d->yaw_speed, (double)d->pitch_speed, (double)d->range, (double)d->fire_rate, d->rounds, failed ? "; some settings were refused (lines above)" : "");
+    return 0;
+}
+
 /* SDK 37 and 39, add_turret: the turret's settings, as deferred edits of its records (hellforge_turret.h). From
- * hellforge_mod_init, so a mod's own entity gets records of its own to edit. 0 done, 1 refused (the log says why). */
+ * hellforge_mod_init, so a mod's own entity gets records of its own to edit. SDK 54: again on the game thread, it
+ * replaces them (a 0 keeps the value set before). 0 done, 1 refused (the log says why). */
 static int ApiAddTurret(HfMod* mod, const HfTurretDef* in)
 {
     HfTurretDef d;
@@ -161,15 +188,16 @@ static int ApiAddTurret(HfMod* mod, const HfTurretDef* in)
     static SRWLOCK addLock = SRWLOCK_INIT;
     AcquireSRWLockExclusive(&addLock);
     const LONG at = g_trDefCount;
-    int dup = 0;
-    for (LONG i = 0; i < at; i++) dup |= g_trDefs[i].def.entity == d.entity;
-    if (!dup && at < TR_DEFS)
+    LONG dup = -1;
+    for (LONG i = 0; i < at && dup < 0; i++) if (g_trDefs[i].def.entity == d.entity) dup = i;
+    if (dup < 0 && at < TR_DEFS)
     {
         g_trDefs[at] = (TrDef){mod, d, 0};
         InterlockedExchange(&g_trDefCount, at + 1);
     }
+    const char* again = dup >= 0 ? TrRedefine(mod, dup, &d) : NULL;
     ReleaseSRWLockExclusive(&addLock);
-    if (dup) { ApiLog(mod, "add_turret(%016llx): refused: it is a turret already", (unsigned long long)d.entity); return 1; }
+    if (dup >= 0) return TrRedone(mod, dup, &d, again);
     if (at >= TR_DEFS) { ApiLog(mod, "add_turret: refused: %d turrets already", TR_DEFS); return 1; }
     TrLiveStart();
     if (g_fired[HF_EVENT_ENTITIES_READY]) TrGunEdits(&g_trDefs[at]);

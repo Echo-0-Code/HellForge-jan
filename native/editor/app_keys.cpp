@@ -13,6 +13,7 @@ static void NextView(int delta)
     if (g_view == PRESETS) ScanPresets();
     if (g_view == LOGS) LogRead(true);
     if (g_view == MODS) ScanMods(true);
+    if (g_view == VALUES) ScanValues(true);
 }
 
 static std::vector<std::string> Chars()
@@ -299,6 +300,7 @@ static void ViewKeys(const std::vector<std::string>& chars, bool ctrl, bool shif
     case SEARCH: SearchKeys(chars); break;
     case CHANGES: ChangesKeys(); break;
     case MODS: ModsKeys(); break;
+    case VALUES: ValuesKeys(shift); break;
     case LOGS: LogsKeys(); break;
     case PRESETS: PresetsKeys(); break;
     case SETTINGS: SettingsKeys(); break;

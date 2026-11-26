@@ -12,6 +12,12 @@ On `dev`, since 0.5.0-beta.
 
 ### Added
 
+- **Tune mods' values live in the editor (SDK 54).** The editor's new MOD VALUES tab (F8) lists every mod's options, a
+  page per mod, as sliders, toggles and choices. `HF_OPTION_EDITOR_ONLY` keeps a tuning row out of OPTIONS > MODS.
+  `option_info` lists any mod's options and `apply_option` sets one as the player would.
+- **Movers, turrets and status effects change live (SDK 54).** Calling `add_mover`, `add_turret` or
+  `add_status_effect` again on the game thread replaces the definition. Units keep their state and entities their
+  meters, and the mod's log says what changed.
 - **Fixed guns fire for any player, and from more than one seat (SDK 53).** A joiner in a gun's seat now fires it
   (the host fires the shot). `HfFixedGunDef.fallback_seats` lists more seats in priority order: the highest one taken
   fires the gun, so a driver can fire it alone and a gunner who climbs in takes it over.

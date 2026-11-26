@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 53
+#define HF_MOD_SDK_VERSION 54
 #define HF_WEAPON_PAINTS 1 /* HfWeapon.paints exists */
 #define HF_MOD_EXPORT __declspec(dllexport)
 
@@ -1817,6 +1817,10 @@ typedef struct HfApi
     /* set_text: the game's text id answered with text (UTF-8, every language) from now on; any thread. 0 done, 1 refused.
      * add_tip: a new tip (its text id), a vanilla tip's new text or one taken out (replaces); any time. 0 refused. */
     int (*set_text)(HfMod* mod, uint32_t id, const char* text); uint32_t (*add_tip)(HfMod* mod, const HfTipDef* def);
+    /* ---- SDK 54: every mod's options, for the editor (hellforge_options.h, docs/modding/ui.md; check hf->size) ---- */
+    /* option_info: option index (0 ..) of any mod in out: 1, or 0 past the last. Any thread. apply_option: a value for
+     * another mod's option as if the player picked it: clamped, saved, and its on_change called on the game thread. 1 done */
+    int (*option_info)(HfMod* mod, uint32_t index, HfOptionInfo* out); int (*apply_option)(HfMod* mod, const char* mod_id, const char* id, double value);
 } HfApi;
 
 /* SDK 6: an HfMod starts with the API, so these need only the mod. */
@@ -1931,11 +1935,9 @@ static inline int hf_on_spawn(HfMod* mod, HfSpawnListener listener, void* user, 
 /* HF_ON_HEAL (SDK 11): a Helldiver's health went up. */
 static inline int hf_on_heal(HfMod* mod, HfHealListener listener, void* user, int32_t priority) { return hf_subscribe_(mod, HF_ON_HEAL, HF_LISTENER_(listener), user, priority); }
 /* HF_ON_STAT (SDK 11): the local player's mission stats grew (HF_STAT_...). */
-static inline int hf_on_stat(HfMod* mod, HfStatListener listener, void* user, int32_t priority)
-{ return hf_subscribe_(mod, HF_ON_STAT, HF_LISTENER_(listener), user, priority); }
+static inline int hf_on_stat(HfMod* mod, HfStatListener listener, void* user, int32_t priority) { return hf_subscribe_(mod, HF_ON_STAT, HF_LISTENER_(listener), user, priority); }
 /* HF_ON_WEAPON (SDK 11): what the local player's Helldiver holds changed. */
-static inline int hf_on_weapon(HfMod* mod, HfWeaponListener listener, void* user, int32_t priority)
-{ return hf_subscribe_(mod, HF_ON_WEAPON, HF_LISTENER_(listener), user, priority); }
+static inline int hf_on_weapon(HfMod* mod, HfWeaponListener listener, void* user, int32_t priority) { return hf_subscribe_(mod, HF_ON_WEAPON, HF_LISTENER_(listener), user, priority); }
 /* HF_ON_EXPLOSION (SDK 11): an explosion was requested in this machine's world. */
 static inline int hf_on_explosion(HfMod* mod, HfExplosionListener listener, void* user, int32_t priority) { return hf_subscribe_(mod, HF_ON_EXPLOSION, HF_LISTENER_(listener), user, priority); }
 /* HF_ON_BUGHOLE (SDK 11): a bug hole was closed, on every machine. */

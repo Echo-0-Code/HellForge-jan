@@ -306,6 +306,22 @@ if (HAS(hf, add_option) && hf->add_option(mod, &speed)) hf->get_option(mod, "spe
 - `set_option` changes a value from code, and the menu's row follows. It does not call the mod's own `on_change`.
 - A mod has up to 32 options. Labels take 64 characters, choices 48 and descriptions 400.
 
+### Tuning values in the editor (SDK 54)
+
+The HellForge Editor's MOD VALUES tab (F8) lists every mod's options, a page per mod. Its changes apply at once, call the
+mod's `on_change` on the game thread, and are saved like the menu's.
+
+- `flags = HF_OPTION_EDITOR_ONLY` keeps a row out of OPTIONS > MODS (HellForge's tab and the Megapack's menu). Use it
+  for tuning values players should not see.
+- `option_info(mod, index, &info)` reads any mod's option by index (`HfOptionInfo`, `hellforge_options.h`); it answers
+  0 past the last one.
+- `apply_option(mod, mod_id, id, value)` sets another mod's option as the player would: clamped, saved, `on_change`
+  called. The editor uses it.
+- Values are this machine's, so tune solo: other players keep their own.
+- To change a mover, turret or status effect live, call `add_mover`, `add_turret` or `add_status_effect` again from
+  `on_change` with the edited definition ([movers.md](movers.md), [turrets.md](turrets.md),
+  [status-effects.md](status-effects.md)).
+
 ## Limits
 
 - 64 screens across all mods per session, and 256 click handlers.

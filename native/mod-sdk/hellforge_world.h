@@ -236,6 +236,7 @@ typedef struct HfAbility
 #define HF_OPTION_SLIDER 3u /* value a number from min to max, snapped to step */
 #define HF_OPTION_MAX_CHOICES 16u
 #define HF_OPTION_MAX_PER_MOD 32u
+#define HF_OPTION_EDITOR_ONLY 1u /* SDK 54 HfOption.flags: only the HellForge Editor's MOD VALUES shows it, not OPTIONS > MODS */
 /* The player applied a new value in the menu; on the game thread. A mod's own set_option does not call it. */
 typedef void (*HfOptionCallback)(HfMod* mod, const char* id, double value, void* user);
 typedef struct HfOption
@@ -252,4 +253,7 @@ typedef struct HfOption
     uint32_t gap;            /* 1: space above the row */
     HfOptionCallback on_change; /* may be NULL (read get_option when it matters) */
     void* user;
+    uint32_t flags;          /* SDK 54: HF_OPTION_EDITOR_ONLY, or 0 */
 } HfOption;
+#define HF_OPTION_SIZE_30 ((uint32_t)offsetof(HfOption, flags)) /* an SDK 30 .. 53 mod's HfOption, still taken */
+#include "hellforge_options.h" /* SDK 54: HfOptionInfo, any mod's option (option_info) */

@@ -86,8 +86,8 @@ extern uint32_t g_layout;
 extern Canvas g_cv;
 extern float g_time, g_panelH, g_scaleNow;
 
-enum View { BROWSE, SEARCH, CHANGES, MODS, PRESETS, LOGS, SETTINGS, VIEW_COUNT };
-const char* const VIEW_LABELS[] = {"BROWSE", "SEARCH", "CHANGES", "MODS", "PRESETS", "LOGS", "SETTINGS"};
+enum View { BROWSE, SEARCH, CHANGES, MODS, VALUES, PRESETS, LOGS, SETTINGS, VIEW_COUNT };
+const char* const VIEW_LABELS[] = {"BROWSE", "SEARCH", "CHANGES", "MODS", "MOD VALUES", "PRESETS", "LOGS", "SETTINGS"};
 extern View g_view;
 enum Focus { CATEGORIES, OBJECTS, FIELDS };
 extern Focus g_focus;
@@ -341,8 +341,16 @@ extern int g_modEntry, g_modRow;
 std::vector<ModEntry> ModEntries();
 std::vector<const Row*> ModRows();
 void ScanMods(bool now);
+/* A mod's line in a left list (MODS, MOD VALUES): name over detail, room units kept on the right for a chip. */
+void DrawModLine(const std::string& name, const std::string& detail, const Area& a, bool selected, bool hovered, float room);
 void DrawMods(float y0, float h);
 void DrawLogs(float y0, float h);
+
+/* ---- MOD VALUES (app_mod_values.cpp): every mod's options, editor-only ones too (SDK 54) ---- */
+void ValuesChanged(); /* a live mod change: the next ScanValues reads them again */
+void ScanValues(bool now);
+void DrawValues(float y0, float h);
+void ValuesKeys(bool shift);
 
 /* ---- mod sync (app_sync.cpp) ---- */
 struct SyncDialog

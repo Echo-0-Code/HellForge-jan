@@ -174,6 +174,7 @@ static void Draw()
     else if (g_view == SEARCH) DrawSearch(bodyY, bodyH);
     else if (g_view == CHANGES) DrawChanges(bodyY, bodyH);
     else if (g_view == MODS) DrawMods(bodyY, bodyH);
+    else if (g_view == VALUES) DrawValues(bodyY, bodyH);
     else if (g_view == PRESETS) DrawPresets(bodyY, bodyH);
     else if (g_view == LOGS) DrawLogs(bodyY, bodyH);
     else DrawSettings(bodyY, bodyH);
@@ -639,7 +640,7 @@ static bool AddStratagemPage(const HfContent& s, const std::vector<HfContent>& a
 static std::set<std::string> g_contentPages;
 static volatile LONG g_modsChanged;
 
-void ModsChanged() { InterlockedExchange(&g_modsChanged, 1); }
+void ModsChanged() { InterlockedExchange(&g_modsChanged, 1); ValuesChanged(); }
 
 /* The name a mod gave a content, without its mod's id. */
 static std::string OwnName(const HfContent& c)

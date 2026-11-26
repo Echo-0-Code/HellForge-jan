@@ -585,6 +585,21 @@ static void SeStartTick(void)
     ApiOnGameThread(&g_seMod, SeTick, NULL);
 }
 
+/* SDK 54: add_status_effect again with a name the mod used: the numbers replaced (meter, levels, feeds, callback), the
+ * handle, looks and every entity's meter kept. Not from on_level: the tick holds the target lock. Not under g_seLock.
+ * NULL, or why. */
+static const char* SeRedefine(SeEffect* e, const HfStatusEffect* effect)
+{
+    if (SeOnTickThread()) return "redefined from an on_level callback";
+    if (effect->level_count != e->def.level_count) return "a redefinition keeps level_count";
+    AcquireSRWLockExclusive(&g_seTargetLock); /* the tick reads def under it */
+    e->def = *effect;
+    e->def.name = e->name;
+    ReleaseSRWLockExclusive(&g_seTargetLock);
+    return NULL;
+}
+
+/* SDK 29, add_status_effect: the handle (1 ..), or 0 refused. SDK 54: the same name again replaces its numbers. */
 static uint32_t ApiAddStatusEffect(HfMod* mod, const HfStatusEffect* effect)
 {
     const char* why = SeRefusal(effect);
@@ -592,10 +607,13 @@ static uint32_t ApiAddStatusEffect(HfMod* mod, const HfStatusEffect* effect)
     char key[160];
     snprintf(key, sizeof key, "%s/%s", mod->id, effect->name);
     uint32_t handle = 0, hash = (uint32_t)(Murmur64A(key, strlen(key)) >> 32);
+    SeEffect* again = NULL;
     AcquireSRWLockExclusive(&g_seLock);
-    for (LONG i = 0; i < g_seCount && !why; i++) if (g_se[i].key == hash && !ModGone(g_se[i].mod)) why = "the mod has an effect of that name";
-    if (!why && g_seCount >= SE_EFFECTS) why = "64 effects in all";
-    if (!why)
+    for (LONG i = 0; i < g_seCount && !why && !again; i++)
+        if (g_se[i].key == hash && g_se[i].mod == mod) again = &g_se[i];
+        else if (g_se[i].key == hash && !ModGone(g_se[i].mod)) why = "the mod has an effect of that name";
+    if (!why && !again && g_seCount >= SE_EFFECTS) why = "64 effects in all";
+    if (!why && !again)
     {
         SeEffect* e = &g_se[g_seCount];
         *e = (SeEffect){mod, *effect, {0}, hash, NULL, 0, 0};
@@ -604,7 +622,14 @@ static uint32_t ApiAddStatusEffect(HfMod* mod, const HfStatusEffect* effect)
         handle = (uint32_t)InterlockedIncrement(&g_seCount);
     }
     ReleaseSRWLockExclusive(&g_seLock);
+    if (again) { why = SeRedefine(again, effect); handle = (uint32_t)(again - g_se) + 1; } /* after g_seLock: the tick takes it inside */
     if (why) { ApiLog(mod, "add_status_effect(%s): refused: %s", effect->name, why); return 0; }
+    if (again)
+    {
+        ApiLog(mod, "status effect %s: redefined (handle %u): full %g, hold %g s, decay %g/s, half-life %g s, level 1 enters at %g", effect->name, handle,
+            (double)effect->full, (double)effect->hold_s, (double)effect->decay_per_s, (double)effect->half_life_s, (double)effect->levels[0].enter);
+        return handle;
+    }
     SeStartTick();
     ApiLog(mod, "status effect %s: handle %u, %u level(s), %u feed(s)", effect->name, handle, effect->level_count, effect->feed_count);
     return handle;

@@ -28,6 +28,7 @@ SDK 47 adds a helicopter's `thrust_max`, fixed weapons its driver fires, and dam
 - [Let the custom AI drive it](#let-the-custom-ai-drive-it)
 - [Let it fight](#let-it-fight)
 - [Read how it moves](#read-how-it-moves)
+- [Change it live](#change-it-live)
 - [What HellForge does each update](#what-hellforge-does-each-update)
 
 ## Before you call
@@ -437,6 +438,17 @@ the same animation code works there.
 | `throttle`, `steer` | The inputs it moves by now |
 | `height`, `water_depth`, `grade`, `driven` | SDK 36: a hover's height, the water there, the slope ahead, the axles pushing |
 | `pitch`, `roll`, `boost_left`, `boosting`, `strafe`, `lift` | SDK 37: its tilt in radians, its boost, the two new inputs |
+
+## Change it live
+
+SDK 54: call `add_mover` again for the same entity, on the game thread, to replace its definition. An option's
+`on_change` is a good place ([ui.md](ui.md#tuning-values-in-the-editor-sdk-54)).
+
+- The checks of a first call apply, and a refused call keeps the old definition.
+- Its units keep their state: position, speed, height and seats.
+- The mode stays: a call with another `mode` is refused.
+- Only the mod that added the mover may change it. Another thread is refused.
+- The mod's log lists what changed, such as `speed 12 -> 14, hover.height 2 -> 3`.
 
 ## What HellForge does each update
 

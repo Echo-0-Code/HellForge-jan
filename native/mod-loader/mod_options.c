@@ -22,7 +22,7 @@ typedef struct ModOption
     char description[OPTION_DESCRIPTION_CHARS * 4 + 1];
     char choiceText[HF_OPTION_MAX_CHOICES][OPTION_CHOICE_CHARS * 4 + 1];
     const char* choices[HF_OPTION_MAX_CHOICES];
-    uint32_t kind, choiceCount, gap;
+    uint32_t kind, choiceCount, gap, flags; /* flags: HF_OPTION_EDITOR_ONLY */
     double value, min, max, step;
     uint32_t serial;            /* bumped by every change of value */
     HfOptionCallback onChange;
@@ -32,6 +32,7 @@ typedef struct ModOption
 static ModOption g_options[OPTIONS_MAX];
 static volatile LONG g_optionCount;  /* entries are whole before the count shows them */
 static volatile LONG g_optionRevision;
+static volatile LONG g_optionDue[OPTIONS_MAX]; /* apply_option from another thread: on_change at the next game update */
 static SRWLOCK g_optionsLock = SRWLOCK_INIT;
 
 /* UTF-8 characters in text (bytes that are not continuation bytes), or -1 when it holds a control character. */
@@ -219,6 +220,8 @@ static const char* OptionCheck(const HfOption* def, ModOption* o)
     const char* why = o->kind == HF_OPTION_CHOICE ? OptionCheckChoices(def, o) : o->kind == HF_OPTION_SLIDER ? OptionCheckSlider(def, o) : NULL;
     if (why != NULL) return why;
     o->gap = def->gap != 0;
+    o->flags = def->size >= sizeof *def ? def->flags : 0;
+    if (o->flags & ~HF_OPTION_EDITOR_ONLY) return "flags: HF_OPTION_EDITOR_ONLY or 0";
     o->onChange = def->on_change, o->user = def->user;
     return OptionFit(o, def->value) == OptionFit(o, def->value) ? NULL : "its value is not a number";
 }
@@ -228,7 +231,7 @@ static const char* OptionCheck(const HfOption* def, ModOption* o)
 static int OptionInsert(ModOption* o, double fallback)
 {
     ModOption* there = OptionFind(o->modId, o->id);
-    if (there != NULL) { there->mod = o->mod, there->onChange = o->onChange, there->user = o->user; return 2; }
+    if (there != NULL) { there->mod = o->mod, there->onChange = o->onChange, there->user = o->user, there->flags = o->flags; return 2; }
     int mine = 0;
     for (LONG i = 0; i < g_optionCount; i++) mine += !strcmp(g_options[i].modId, o->modId);
     if (mine >= (int)HF_OPTION_MAX_PER_MOD || g_optionCount >= OPTIONS_MAX) return 0;
@@ -250,7 +253,7 @@ static int ApiAddOption(HfMod* mod, const HfOption* def)
 {
     if (mod == NULL) return 0;
     if (ModGone(mod)) { ApiLog(mod, "add_option: refused: the mod is being taken out"); return 0; }
-    if (def == NULL || def->size < sizeof(HfOption)) { ApiLog(mod, "add_option: refused: it needs an HfOption with size set"); return 0; }
+    if (def == NULL || def->size < HF_OPTION_SIZE_30) { ApiLog(mod, "add_option: refused: it needs an HfOption with size set"); return 0; }
     if (!OptionIdValid(def->id)) { ApiLog(mod, "add_option: refused: the id must be 1 to %d of a-z 0-9 _ . -", OPTION_ID_MAX); return 0; }
     static ModOption o; /* large: built here, under g_optionsAddLock */
     static SRWLOCK g_optionsAddLock = SRWLOCK_INIT;
@@ -322,6 +325,7 @@ HF_LUA_API int hellforge_lua_option(uint32_t index, HfLuaOption* out)
     if (out == NULL || out->size < sizeof *out || index >= (uint32_t)g_optionCount) return 0;
     AcquireSRWLockShared(&g_optionsLock);
     const ModOption* o = &g_options[index];
+    if (o->flags & HF_OPTION_EDITOR_ONLY) { ReleaseSRWLockShared(&g_optionsLock); return 0; } /* the editor's alone */
     *out = (HfLuaOption){sizeof *out, o->kind, o->modId, o->modName, o->key, o->label, o->description[0] ? o->description : NULL,
         o->value, o->min, o->max, o->step, o->gap, o->choiceCount, {0}, o->serial};
     for (uint32_t i = 0; i < o->choiceCount; i++) out->choices[i] = o->choices[i];
@@ -329,39 +333,52 @@ HF_LUA_API int hellforge_lua_option(uint32_t index, HfLuaOption* out)
     return 1;
 }
 
-/* The player applied value to option index in the menu (the Lua's on_change, on the game thread): saved, and the mod's
- * on_change called. 1 taken, 0 refused (no such option, not a number). */
-HF_LUA_API int hellforge_lua_option_applied(uint32_t index, double value)
+/* The mod's on_change for option index with its value now; on the game thread. */
+static void OptionCall(uint32_t index, const char* where)
 {
-    if (index >= (uint32_t)g_optionCount) return 0;
+    AcquireSRWLockShared(&g_optionsLock);
+    const ModOption* o = &g_options[index];
+    HfMod* mod = o->mod;
+    HfOptionCallback onChange = o->onChange;
+    void* user = o->user;
+    double v = o->value;
+    char id[OPTION_ID_MAX + 1];
+    memcpy(id, o->id, sizeof id);
+    ReleaseSRWLockShared(&g_optionsLock);
+    ApiLog(mod, "option %s set to %g in %s", id, v, where);
+    if (onChange == NULL || mod->removing || mod->removed) return;
+    HfMod* previous = g_callingMod;
+    g_callingMod = mod;
+    onChange(mod, id, v, user);
+    g_callingMod = previous;
+}
+
+/* Option index takes value as the player's pick: saved when it changed. 1 changed, 0 the same, -1 not a number. */
+static int OptionPick(uint32_t index, double value)
+{
     AcquireSRWLockExclusive(&g_optionsLock);
     ModOption* o = &g_options[index];
     double v = OptionFit(o, value);
-    int changed = v == v && v != o->value;
-    if (changed)
+    int changed = v != v ? -1 : v != o->value;
+    if (changed == 1)
     {
         o->value = v;
         o->serial++;
         InterlockedIncrement(&g_optionRevision);
         OptionSave(o->modId);
     }
-    HfMod* mod = o->mod;
-    HfOptionCallback onChange = o->onChange;
-    void* user = o->user;
-    char id[OPTION_ID_MAX + 1];
-    memcpy(id, o->id, sizeof id);
     ReleaseSRWLockExclusive(&g_optionsLock);
-    if (v != v) return 0;
-    if (!changed) return 1;
-    ApiLog(mod, "option %s set to %g in the MODS menu", id, v);
-    if (onChange != NULL && !mod->removing && !mod->removed)
-    {
-        HfMod* previous = g_callingMod;
-        g_callingMod = mod;
-        onChange(mod, id, v, user);
-        g_callingMod = previous;
-    }
-    return 1;
+    return changed;
+}
+
+/* The player applied value to option index in the menu (the Lua's on_change, on the game thread): saved, and the mod's
+ * on_change called. 1 taken, 0 refused (no such option, not a number). */
+HF_LUA_API int hellforge_lua_option_applied(uint32_t index, double value)
+{
+    if (index >= (uint32_t)g_optionCount) return 0;
+    int changed = OptionPick(index, value);
+    if (changed == 1) OptionCall(index, "the MODS menu");
+    return changed >= 0;
 }
 
 /* A line in modloader.log from the bundled Lua mod (what it registered, what the menu refused). */
@@ -373,3 +390,59 @@ HF_LUA_API void hellforge_lua_options_note(const char* text)
     for (char* c = line; *c; c++) if ((unsigned char)*c < 0x20) *c = ' ';
     Note("MODS menu: %s", line);
 }
+
+/* ---- SDK 54: the editor's MOD VALUES (hellforge_options.h) -------------------------------------------------------- */
+
+static HfMod g_optMod; /* the loader's own tick: apply_option's on_change from another thread */
+
+static void OptionTick(HfMod* mod, float dt, void* user)
+{
+    (void)mod, (void)dt, (void)user;
+    for (LONG i = 0; i < g_optionCount && i < OPTIONS_MAX; i++)
+        if (InterlockedExchange(&g_optionDue[i], 0)) OptionCall((uint32_t)i, "the editor");
+}
+
+static void OptionStartTick(void)
+{
+    static volatile LONG started;
+    if (InterlockedExchange(&started, 1) != 0) return;
+    g_optMod.api = &g_api;
+    snprintf(g_optMod.id, sizeof g_optMod.id, "hellforge.mod-options");
+    g_optMod.log = g_log;
+    g_optMod.loaded = 1;
+    ApiOnGameThread(&g_optMod, OptionTick, NULL);
+}
+
+/* SDK 54, option_info: option index (any mod's) in out: 1, or 0 past the last. */
+static int ApiOptionInfo(HfMod* mod, uint32_t index, HfOptionInfo* out)
+{
+    (void)mod;
+    if (out == NULL || out->size < sizeof *out || index >= (uint32_t)g_optionCount) return 0;
+    AcquireSRWLockShared(&g_optionsLock);
+    const ModOption* o = &g_options[index];
+    *out = (HfOptionInfo){sizeof *out, o->kind, o->modId, o->modName, o->id, o->label, o->value, o->min, o->max, o->step, o->flags,
+        o->choiceCount, {0}};
+    for (uint32_t i = 0; i < o->choiceCount; i++) out->choices[i] = o->choices[i];
+    ReleaseSRWLockShared(&g_optionsLock);
+    return 1;
+}
+
+/* SDK 54, apply_option: another mod's option set as the player would set it. 1 done, 0 refused (logged). */
+static int ApiApplyOption(HfMod* mod, const char* modId, const char* id, double value)
+{
+    if (mod == NULL || modId == NULL || id == NULL) return 0;
+    AcquireSRWLockShared(&g_optionsLock);
+    const ModOption* o = OptionFind(modId, id);
+    LONG index = o != NULL ? (LONG)(o - g_options) : -1;
+    ReleaseSRWLockShared(&g_optionsLock);
+    if (index < 0) { ApiLog(mod, "apply_option: %s/%s refused: no such option", modId, id); return 0; }
+    int changed = OptionPick((uint32_t)index, value);
+    if (changed < 0) { ApiLog(mod, "apply_option: %s/%s refused: not a number", modId, id); return 0; }
+    if (changed == 0) return 1;
+    if (g_gameThread != 0 && GetCurrentThreadId() == g_gameThread) { OptionCall((uint32_t)index, "the editor"); return 1; }
+    OptionStartTick();
+    InterlockedExchange(&g_optionDue[index], 1);
+    return 1;
+}
+
+#define OPTIONS_API ApiOptionInfo, ApiApplyOption
