@@ -665,6 +665,7 @@ packs, and the launcher says when a newer HellForge is out.
 - **`ai_obey` works after an `HF_ON_ORDER` listener.** A mod that listened for orders first no longer kept later `ai_obey` rules from seeing spawns.
 - **A second `set_text` on one id wins**, in lists and cards as in the game's own texts.
 - **`@` trait search finds stratagems' game lines** without a mod calling `set_stratagem_traits` first.
+- **A mod's item's CUSTOMIZE class line names its kind, not UNKNOWN.** An item the game could not name is looked up in HellForge's armory rows, and each such item is logged once.
 - **Co-op orders reach `HF_OWNER_CALLER` units.** A Follow or Hold sent from another machine now names its caller, so units that obey only their caller follow remote players too.
 - **A hover craft's lift keys stop when its driver leaves.** Space or Ctrl on foot near a craft just driven no longer keeps lifting it.
 - **Rotors no longer strike co-op passengers.** Helldivers riding the craft are skipped like its driver.

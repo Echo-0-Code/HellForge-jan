@@ -22,6 +22,8 @@ the row's name must contain). The types are in `hellforge_lists.h`, which `hellf
 - Do not hook `0x18D7360` (the Armory grid) or `0x18D8710` (the picker) to hide rows. Two mods writing the same rows in
   one build undo each other's work.
 - Everything is client side. Nothing is sent to the other players.
+- A mod's weapon's CUSTOMIZE screen names its class from its kind (`equipment_type`), as the Armory's heading does.
+  HellForge hooks `0x18DC920` for this; do not hook it too.
 
 ## Hide rows with a rule
 
