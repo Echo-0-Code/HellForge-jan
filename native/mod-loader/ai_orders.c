@@ -77,6 +77,7 @@ static const char* AcSet(uint64_t entity, const HfAiDrive* in);
 static volatile LONG g_aiTicking;
 static int g_aiState;                        /* 0 waiting for the game, 1 ready, -1 off (logged) */
 static int g_aiHooked, g_aiListening;
+static int g_aiSpawnsHeard; /* HF_ON_SPAWN subscribed, once ai_obey has a rule */
 static double g_aiClock, g_aiStep;
 static uintptr_t g_aiGame;
 static AiMoveFn g_aiMove;
@@ -809,13 +810,14 @@ static int AiReady(void)
 static void AiListen(void)
 {
     int wanted = g_aiRuleCount > 0 || AnyListener(HF_ON_ORDER);
+    /* the spawns separately: an HF_ON_ORDER listener alone starts the rest, and ai_obey may come later */
+    if (g_aiRuleCount > 0 && !g_aiSpawnsHeard) { g_aiSpawnsHeard = 1; ApiSubscribe(&g_aiMod, HF_ON_SPAWN, (HfListener)(void (*)(void))AiSpawned, NULL, 0); }
     if (!wanted || g_aiListening) return;
     g_aiListening = 1;
     if (ApiHookFunction(&g_aiMod, "CommsWheelPick", (void*)AiWheelDetour, (void**)&g_aiWheelNext, 0))
         Note("ai: the comms wheel could not be hooked; orders come from the other machines only");
     else g_aiHooked = 1;
     ApiRpcListen(&g_aiMod, AI_RPC_COMMS, AiRpc, NULL, 0);
-    if (g_aiRuleCount > 0) ApiSubscribe(&g_aiMod, HF_ON_SPAWN, (HfListener)(void (*)(void))AiSpawned, NULL, 0);
 }
 
 static void AiTick(HfMod* mod, float dt, void* user)

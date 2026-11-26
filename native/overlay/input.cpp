@@ -257,7 +257,7 @@ bool ReleaseInput(LPARAM l)
 {
     alignas(8) BYTE buffer[sizeof(RAWINPUT)];
     UINT size = sizeof buffer;
-    const UINT read = g_rawInputData((HRAWINPUT)l, RID_INPUT, buffer, &size, sizeof(RAWINPUTHEADER));
+    const UINT read = (g_rawInputData != NULL ? g_rawInputData : GetRawInputData)((HRAWINPUT)l, RID_INPUT, buffer, &size, sizeof(RAWINPUTHEADER)); /* its hook may have failed */
     return read != (UINT)-1 && read >= sizeof(RAWINPUTHEADER) && KeepRelease((RAWINPUT*)buffer);
 }
 

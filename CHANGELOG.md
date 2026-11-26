@@ -661,6 +661,10 @@ packs, and the launcher says when a newer HellForge is out.
 - **Fast planes get a default strafe speed they may have.** `strafe_speed` defaults to half of `speed`, at most 40 m/s. A plane above 80 m/s was refused unless its mod set it.
 - **A mover takes up to 24 damage zones.** It was 8, too few for armour plates, wheels and rotors on one vehicle.
 - **Very large vehicles no longer crash the game as they land.** More than 64 contact points in a tick overflowed a list in game.dll; HellForge drops the extra ones ([crash-guards.md](docs/crash-guards.md)).
+- **An effect on a unit with no pose is refused, not a crash.** `play_effect` on a node whose unit has no pose says so in the log.
+- **`ai_obey` works after an `HF_ON_ORDER` listener.** A mod that listened for orders first no longer kept later `ai_obey` rules from seeing spawns.
+- **A second `set_text` on one id wins**, in lists and cards as in the game's own texts.
+- **`@` trait search finds stratagems' game lines** without a mod calling `set_stratagem_traits` first.
 - **Mods' packages are no longer dropped past 256.** The plan's own and patched packages had to share 256 places, so a big data mod left others' packages unknown. They now have 2,048, and a full table is logged as an error.
 - **Slow ground movers are no longer refused.** `add_mover` checks `stall_speed` only for planes, so a mover under 2.2 m/s, such as a crawler, is accepted.
 - **Paints for an `add_weapon` copy of a support weapon.** The copy now gets a catalogue item of its own with its paints after it, so its CUSTOMIZE opens (Support Paint Bodies' Jump Pack card). It had none, as its base's entry is its stratagem's child. The backend log now also says when a weapon gets no paints, or a mod's item is not held, and why.

@@ -1091,7 +1091,7 @@ static EngineTextFn g_engineText;
 /* A mod text's text (AddText's id), or NULL for none. */
 static const char* ModTextOf(uint32_t id)
 {
-    for (int i = 0; id != 0 && i < g_textCount; i++) if (g_texts[i].id == id) return g_texts[i].text;
+    for (int i = g_textCount - 1; id != 0 && i >= 0; i--) if (g_texts[i].id == id) return g_texts[i].text; /* the newest: a second set_text wins */
     return NULL;
 }
 

@@ -194,6 +194,7 @@ static void LfWeaponTraits(uint64_t entity, char* out, size_t size)
 static void LfStratagemTraits(uint32_t type, char* out, size_t size)
 {
     out[0] = 0;
+    if (g_itState == 0) ItStartTick(); /* the game's own lines are read once the cards are found, set_stratagem_traits or not */
     if (g_itState != 1) return;
     uint32_t ids[IT_TAGS] = {0}, count = 0;
     AcquireSRWLockShared(&g_itLock);
