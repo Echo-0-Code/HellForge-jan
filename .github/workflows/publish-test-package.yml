@@ -16,10 +16,10 @@ jobs:
       - name: Download the artifact and publish it
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: "45726193324"
-          TAG: "test-34276cd"
-          TARGET: "34276cdf04aceb9397de5289a67a7e3e46e7d25a"
-          TITLE: "Test build 34276cd, 9b90560 + co-op fixed guns + modpack defaults + fallback seats (SDK 53) (run 45726193324)"
+          RUN_ID: "45766620846"
+          TAG: "test-291472a"
+          TARGET: "291472a05042971551adf8503a5315553261b50e"
+          TITLE: "Test build 291472a, 34276cd + PR review fixes: NULL pose, ai obey spawns, set text, trait search (run 45766620846)"
         run: |
           gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n test-package -D pkg
           find pkg -type f -exec ls -la {} \;
