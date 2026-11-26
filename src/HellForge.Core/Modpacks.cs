@@ -102,6 +102,7 @@ public static partial class ModSettings
     // Deletes a named pack; when it is in use, the default pack comes back first.
     public static void DeleteModpack(string modsFolder, string name)
     {
+        if (!ValidModpackName(name)) throw new InvalidDataException($"\"{name}\" is not a modpack name.");
         if (string.Equals(ActiveModpack(modsFolder), name, StringComparison.OrdinalIgnoreCase)) SwitchModpack(modsFolder, null);
         File.Delete(ModpackFile(modsFolder, name));
     }

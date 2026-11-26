@@ -281,6 +281,10 @@ static void SeShare(const SeEffect* e, const SeTarget* t, uint32_t level)
 {
     uint32_t unit = 0, network = WC_NO_NETWORK;
     if (!(e->def.flags & HF_EFFECT_SHARED_LOOK) || !WcEntity(t->entity, &unit, &network) || network == WC_NO_NETWORK) return;
+    AcquireSRWLockShared(&g_sessionLock);
+    const uint32_t role = g_session.role;
+    ReleaseSRWLockShared(&g_sessionLock);
+    if (role == HF_SESSION_SOLO) return; /* nobody to tell: the line would only fill the pipe's queue */
     ULONGLONG now = GetTickCount64();
     if (now - g_seRefilled >= 1000) { g_seTokens = CHANNEL_RATE; g_seRefilled = now; }
     if (g_seTokens == 0) return;
@@ -426,7 +430,7 @@ static uint32_t SeEffectOfKey(uint32_t key)
 static void SeRemoteLevel(const SeWire* wire)
 {
     uint32_t effect = SeEffectOfKey(wire->key), entity = ApiEntityOfNetwork(NULL, wire->network);
-    if (!effect || !entity || wire->level > g_se[effect - 1].def.level_count) return;
+    if (!effect || !entity || entity == 0xFFFFFFFFu || wire->level > g_se[effect - 1].def.level_count) return;
     SeTarget* t = SeTargetOf(entity, wire->level > 0);
     SeSlot* s = t ? SeSlotOf(t, effect, wire->level > 0) : NULL;
     if (s == NULL) return;
@@ -637,7 +641,7 @@ static int ApiAddEffectLooks(HfMod* mod, uint32_t effect, const HfEffectLook* ro
 static int ApiAddEffectBuildup(HfMod* mod, uint32_t effect, uint32_t entity, float amount)
 {
     if (SeOwn(mod, effect, "add_effect_buildup") == NULL) return 1;
-    if (entity == 0 || !(amount == amount) || amount == 0) { ApiLog(mod, "add_effect_buildup: refused: an entity and an amount other than 0"); return 1; }
+    if (entity == 0 || entity == 0xFFFFFFFFu || !isfinite(amount) || amount == 0) { ApiLog(mod, "add_effect_buildup: refused: an entity and a finite amount other than 0"); return 1; }
     SeQueue((SeNote){entity, 0, effect, amount, g_seUpdate});
     return 0;
 }

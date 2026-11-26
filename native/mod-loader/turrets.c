@@ -157,11 +157,20 @@ static int ApiAddTurret(HfMod* mod, const HfTurretDef* in)
     HfTurretDef d;
     const char* why = TrRefusal(in, &d);
     if (why) { ApiLog(mod, "add_turret: refused: %s", why); return 1; }
-    for (LONG i = 0; i < g_trDefCount; i++)
-        if (g_trDefs[i].def.entity == d.entity) { ApiLog(mod, "add_turret(%016llx): refused: it is a turret already", (unsigned long long)d.entity); return 1; }
-    LONG at = InterlockedIncrement(&g_trDefCount) - 1;
-    if (at >= TR_DEFS) { InterlockedDecrement(&g_trDefCount); ApiLog(mod, "add_turret: refused: %d turrets already", TR_DEFS); return 1; }
-    g_trDefs[at] = (TrDef){mod, d, 0};
+    /* Readers walk g_trDefs up to the count without a lock, so a slot is written whole before the count covers it. */
+    static SRWLOCK addLock = SRWLOCK_INIT;
+    AcquireSRWLockExclusive(&addLock);
+    const LONG at = g_trDefCount;
+    int dup = 0;
+    for (LONG i = 0; i < at; i++) dup |= g_trDefs[i].def.entity == d.entity;
+    if (!dup && at < TR_DEFS)
+    {
+        g_trDefs[at] = (TrDef){mod, d, 0};
+        InterlockedExchange(&g_trDefCount, at + 1);
+    }
+    ReleaseSRWLockExclusive(&addLock);
+    if (dup) { ApiLog(mod, "add_turret(%016llx): refused: it is a turret already", (unsigned long long)d.entity); return 1; }
+    if (at >= TR_DEFS) { ApiLog(mod, "add_turret: refused: %d turrets already", TR_DEFS); return 1; }
     TrLiveStart();
     if (g_fired[HF_EVENT_ENTITIES_READY]) TrGunEdits(&g_trDefs[at]);
     const int failed = TrMount(mod, &d) | TrAim(mod, &d) | TrSight(mod, &d) | TrGun(mod, &d);

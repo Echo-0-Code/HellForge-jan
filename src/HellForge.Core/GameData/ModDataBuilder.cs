@@ -567,7 +567,7 @@ public static class ModDataCache
                 new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase }) + "\n");
             try { Directory.Move(staging, target); }
             catch (IOException) when (Directory.Exists(target)) { Directory.Delete(staging, recursive: true); }
-            foreach (var stale in Directory.GetDirectories(cache).Where(d => !string.Equals(d, target, StringComparison.OrdinalIgnoreCase)))
+            foreach (var stale in Directory.GetDirectories(cache).Where(d => Stale(d, target)))
                 try { Directory.Delete(stale, recursive: true); }
                 catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
             return (target, files, true, notes);
@@ -578,6 +578,11 @@ public static class ModDataCache
             throw;
         }
     }
+
+    // Another build's staging folder is in use unless it is old: one that died is cleared on a later build.
+    static bool Stale(string folder, string target) =>
+        !string.Equals(folder, target, StringComparison.OrdinalIgnoreCase) &&
+        (!Path.GetFileName(folder).Contains(".partial-", StringComparison.Ordinal) || Directory.GetLastWriteTimeUtc(folder) < DateTime.UtcNow.AddHours(-1));
 
     // Steam's data folder, for a spec with resources from Steam; the build cannot be made without it.
     static string SteamData()

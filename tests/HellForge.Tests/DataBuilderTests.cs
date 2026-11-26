@@ -1056,6 +1056,11 @@ static class DataBuilderTests
             Bc7.EncodeBlock(flat, one);
             var back = Bc7.DecodeMode6(one);
             check(back.Select((v, i) => Math.Abs(v - flat[i])).Max() <= 1, "BC7 mode 6 does not keep a flat block within one level.");
+            var crossed = new int[64]; // R up while G goes down: a normal-map slope the old start axis missed
+            for (var k = 0; k < 16; k++) (crossed[4 * k], crossed[4 * k + 1], crossed[4 * k + 2], crossed[4 * k + 3]) = (16 * k, 255 - 16 * k, 128, 255);
+            Bc7.EncodeBlock(crossed, one);
+            back = Bc7.DecodeMode6(one);
+            check(back.Select((v, i) => Math.Abs(v - crossed[i])).Max() <= 8, "BC7 mode 6 collapses a block whose channels move against each other.");
             reject(() => TextureImage.Build([png, Png(new byte[4 * 4 * 4], 4)], "rgba8"));
 
             var material = Material(0x2222);

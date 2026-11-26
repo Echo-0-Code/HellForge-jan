@@ -106,7 +106,8 @@ static uint32_t ApiLineOfSight(HfMod* mod, const float from[3], const float to[3
     }
     float dir[3] = {to[0] - from[0], to[1] - from[1], to[2] - from[2]};
     float range = sqrtf(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
-    if (!isfinite(range) || range < 1e-3f || (how && range <= how->skip_from + how->skip_to)) return HF_SIGHT_CLEAR;
+    if (!isfinite(range)) return HF_SIGHT_UNKNOWN; /* NaN or Inf ends: no ray was cast, so no clear line is known */
+    if (range < 1e-3f || (how && range <= how->skip_from + how->skip_to)) return HF_SIGHT_CLEAR;
     for (int k = 0; k < 3; k++) dir[k] /= range;
     uint8_t hits[WS_RAY_HITS * WS_HIT_SIZE];
     memset(hits, 0, sizeof hits);

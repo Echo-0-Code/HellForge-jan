@@ -96,13 +96,15 @@ public static class Bc7
         for (var c = 0; c < 4; c++) { e0[c] = Math.Clamp(mean[c] + axis[c] * lo, 0, 255); e1[c] = Math.Clamp(mean[c] + axis[c] * hi, 0, 255); }
     }
 
-    // Power iteration on the 4 x 4 covariance; a flat block keeps the start axis, which is harmless at zero spread.
+    // Power iteration on the 4 x 4 covariance. It starts on the channel with the most spread: a fixed start can sit
+    // orthogonal to the true axis (one channel up while another goes down) and collapse the block to one colour.
+    // A flat block keeps the start axis, which is harmless at zero spread.
     static void PrincipalAxis(ReadOnlySpan<int> pixels, ReadOnlySpan<double> mean, Span<double> axis)
     {
         Span<double> cov = stackalloc double[16], next = stackalloc double[4];
         for (var k = 0; k < 16; k++)
             for (var i = 0; i < 16; i++) cov[i] += (pixels[4 * k + i / 4] - mean[i / 4]) * (pixels[4 * k + i % 4] - mean[i % 4]);
-        axis.Fill(0.5);
+        StartAxis(cov, axis);
         for (var it = 0; it < 8; it++)
         {
             next.Clear();
@@ -113,6 +115,15 @@ public static class Bc7
             n = Math.Sqrt(n);
             for (var i = 0; i < 4; i++) axis[i] = next[i] / n;
         }
+    }
+
+    static void StartAxis(ReadOnlySpan<double> cov, Span<double> axis)
+    {
+        axis.Fill(0.5);
+        var widest = 0;
+        for (var c = 1; c < 4; c++)
+            if (cov[5 * c] > cov[5 * widest]) widest = c;
+        if (cov[5 * widest] > 0) { axis.Clear(); axis[widest] = 1; }
     }
 
     static void Quantize(ReadOnlySpan<double> e, int p, Span<int> q)

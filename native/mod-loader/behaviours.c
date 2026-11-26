@@ -372,8 +372,9 @@ static void TransportUpdate(BehaviourCtx* ctx, const Behaviour* b)
     if (stage == 6 && b->holdMicroseconds != 0 && BhvNow() < hover + b->holdMicroseconds) { HoldTick(ctx, b); return; }
     ((BhvCtxFn)BhvFn(F_667_UPDATE))(ctx); /* 667: approach, hover, release (at once after the hold), depart, removal */
     /* Leaving stage 7 lets the cargo go (0x9D0260 clears its slot); a Pelican inside a larger cargo would then climb out
-     * through it, so it goes the way 667's stage 10 removes it, at once. */
-    if (b->depart == HF_DEPART_REMOVE && stage == 7 && *(int32_t*)ctx->p == 8)
+     * through it, so it goes the way 667's stage 10 removes it, at once. A release right after the hold can pass 7
+     * within one update (6 to 8), so both count. */
+    if (b->depart == HF_DEPART_REMOVE && (stage == 6 || stage == 7) && *(int32_t*)ctx->p == 8)
     {
         void* entities = *(void**)(g_bhvGame + BHV_ENTITIES);
         if (entities == NULL)

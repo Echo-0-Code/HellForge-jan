@@ -62,6 +62,7 @@ static AiUnit g_aiUnits[AI_UNITS];
 static struct { uint32_t entity; uint64_t resource; double at; } g_aiPending[AI_PENDING];
 static AiHeard g_aiHeard[AI_HEARD];
 static AiWire g_aiInbox[32];
+static uint64_t g_aiInboxFrom[32]; /* the pipe's sender of each inbox order */
 static uint32_t g_aiInboxCount;
 static SRWLOCK g_aiLock = SRWLOCK_INIT;      /* the units, held by the game thread's whole update */
 static SRWLOCK g_aiInboxLock = SRWLOCK_INIT;
@@ -556,28 +557,34 @@ static int AiRpc(HfMod* mod, const HfRpcEvent* e, void* user)
 /* The other machines' wheel orders, as the live pipe delivers them (its thread): queued for the game thread. */
 static void AiReceive(uint64_t from, const uint8_t* data, uint32_t bytes)
 {
-    (void)from;
     AiWire wire;
     if (bytes != sizeof wire) return;
     memcpy(&wire, data, sizeof wire);
     if (wire.version != AI_WIRE_VERSION || (wire.order != HF_ORDER_FOLLOW && wire.order != HF_ORDER_HOLD)) return;
     AcquireSRWLockExclusive(&g_aiInboxLock);
-    if (g_aiInboxCount < 32) g_aiInbox[g_aiInboxCount++] = wire;
+    if (g_aiInboxCount < 32) { g_aiInboxFrom[g_aiInboxCount] = from; g_aiInbox[g_aiInboxCount++] = wire; }
     ReleaseSRWLockExclusive(&g_aiInboxLock);
 }
 
 static void AiTakeInbox(void)
 {
     AiWire inbox[32];
+    uint64_t from[32];
     AcquireSRWLockExclusive(&g_aiInboxLock);
     uint32_t n = g_aiInboxCount;
     memcpy(inbox, g_aiInbox, sizeof inbox[0] * n);
+    memcpy(from, g_aiInboxFrom, sizeof from[0] * n);
     g_aiInboxCount = 0;
     ReleaseSRWLockExclusive(&g_aiInboxLock);
     for (uint32_t i = 0; i < n; i++)
     {
         uint32_t speaker = ApiEntityOfNetwork(NULL, inbox[i].network);
-        if (speaker != 0xFFFFFFFFu) AiHeardOrder(inbox[i].order, speaker, 0, 0, "HellForge's order line");
+        if (speaker == 0xFFFFFFFFu) continue;
+        /* The caller's player: the speaker's own player slot, else the pipe's sender, so HF_OWNER_CALLER units obey remote callers. */
+        uint64_t peer = 0;
+        AiPlayerAvatar(0, &peer, speaker);
+        if (!peer) peer = from[i];
+        AiHeardOrder(inbox[i].order, speaker, peer, 0, "HellForge's order line");
     }
 }
 

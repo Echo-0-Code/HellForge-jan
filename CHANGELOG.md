@@ -665,6 +665,15 @@ packs, and the launcher says when a newer HellForge is out.
 - **`ai_obey` works after an `HF_ON_ORDER` listener.** A mod that listened for orders first no longer kept later `ai_obey` rules from seeing spawns.
 - **A second `set_text` on one id wins**, in lists and cards as in the game's own texts.
 - **`@` trait search finds stratagems' game lines** without a mod calling `set_stratagem_traits` first.
+- **Co-op orders reach `HF_OWNER_CALLER` units.** A Follow or Hold sent from another machine now names its caller, so units that obey only their caller follow remote players too.
+- **A hover craft's lift keys stop when its driver leaves.** Space or Ctrl on foot near a craft just driven no longer keeps lifting it.
+- **Rotors no longer strike co-op passengers.** Helldivers riding the craft are skipped like its driver.
+- **A transport removed on release is removed even when it releases in the hold's last update.**
+- **`add_mover` and `add_turret` are safe from any thread.** A reader could see a mover counted before it was written.
+- **Bad numbers are refused.** `add_effect_buildup` refuses Inf and the no-entity id, `line_of_sight` says unknown for NaN ends, and a peer's NaN mover pose is dropped. Shared effect looks send nothing in solo.
+- **Normal-map colours where channels move apart keep their gradient.** BC7 blocks whose red rises while green falls no longer collapse to one colour.
+- **A paint package only for a weapon with paints.** A weapon whose paints found no catalogue place no longer gets an empty paint package.
+- **Building a mod's data no longer deletes another build's work in progress**, a modpack name is checked before its file is deleted, and the C mod template asks for SDK 53.
 - **Mods' packages are no longer dropped past 256.** The plan's own and patched packages had to share 256 places, so a big data mod left others' packages unknown. They now have 2,048, and a full table is logged as an error.
 - **Slow ground movers are no longer refused.** `add_mover` checks `stall_speed` only for planes, so a mover under 2.2 m/s, such as a crawler, is accepted.
 - **Paints for an `add_weapon` copy of a support weapon.** The copy now gets a catalogue item of its own with its paints after it, so its CUSTOMIZE opens (Support Paint Bodies' Jump Pack card). It had none, as its base's entry is its stratagem's child. The backend log now also says when a weapon gets no paints, or a mod's item is not held, and why.

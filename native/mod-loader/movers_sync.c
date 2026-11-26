@@ -65,6 +65,16 @@ static void MvSyncSend(double dt)
 }
 
 /* The other machines' poses, as the live pipe delivers them (its thread): the newest per sender's unit is kept. */
+static int MvWireFinite(const MvWire* w)
+{
+    float f[12]; /* pos, start, yaw, pitch, roll, speed, turning, grade: floats in a row */
+    _Static_assert(offsetof(MvWire, grade) - offsetof(MvWire, pos) == 11 * sizeof(float), "MvWire floats in a row");
+    memcpy(f, w->pos, sizeof f);
+    for (int k = 0; k < 12; k++)
+        if (!isfinite(f[k])) return 0;
+    return 1;
+}
+
 static void MvSyncReceive(uint64_t from, const uint8_t* data, uint32_t bytes)
 {
     MvWireHead head;
@@ -76,6 +86,7 @@ static void MvSyncReceive(uint64_t from, const uint8_t* data, uint32_t bytes)
     {
         MvWire w;
         memcpy(&w, data + sizeof head + k * sizeof w, sizeof w);
+        if (!MvWireFinite(&w)) continue; /* a peer's NaN pose would spread through MvSetRoot */
         uint32_t i = 0;
         while (i < g_mvInboxCount && (g_mvInbox[i].from != from || g_mvInbox[i].w.entity != w.entity)) i++;
         if (i == g_mvInboxCount && g_mvInboxCount < MV_UNITS) g_mvInboxCount++;

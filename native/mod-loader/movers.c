@@ -889,14 +889,23 @@ static int ApiAddMover(HfMod* mod, const HfMoverDef* in)
     HfMoverDef d;
     const char* why = MvRefusal(in, &d);
     if (why) { ApiLog(mod, "add_mover: refused: %s", why); return 1; }
-    for (LONG i = 0; i < g_mvDefCount; i++)
-        if (g_mvDefs[i].def.entity == d.entity) { ApiLog(mod, "add_mover(%016llx): refused: it has a mover already", (unsigned long long)d.entity); return 1; }
-    LONG at = InterlockedIncrement(&g_mvDefCount) - 1;
-    if (at >= MV_DEFS) { InterlockedDecrement(&g_mvDefCount); ApiLog(mod, "add_mover: refused: %d movers already", MV_DEFS); return 1; }
+    /* Readers walk g_mvDefs up to the count without a lock, so a slot is written whole before the count covers it. */
+    static SRWLOCK addLock = SRWLOCK_INIT;
     static const uint32_t kAxles[] = {0, 0, 0, 0, HF_AXLE_FRONT, HF_AXLE_REAR, HF_AXLE_FRONT | HF_AXLE_REAR, 0, 0, 0, 0, 0, HF_AXLE_FRONT | HF_AXLE_REAR};
     const uint32_t asked = d.mode;
     if (kAxles[d.mode]) d.mode = HF_MOVE_DRIVE; /* one driver from here on, with its axles */
-    g_mvDefs[at] = (MvDef){mod, d, 0, 3.0f, d.max_slope >= 89.9f ? 1e9f : tanf(d.max_slope * 0.0174533f), kAxles[asked], asked};
+    AcquireSRWLockExclusive(&addLock);
+    const LONG at = g_mvDefCount;
+    int dup = 0;
+    for (LONG i = 0; i < at; i++) dup |= g_mvDefs[i].def.entity == d.entity;
+    if (!dup && at < MV_DEFS)
+    {
+        g_mvDefs[at] = (MvDef){mod, d, 0, 3.0f, d.max_slope >= 89.9f ? 1e9f : tanf(d.max_slope * 0.0174533f), kAxles[asked], asked};
+        InterlockedExchange(&g_mvDefCount, at + 1);
+    }
+    ReleaseSRWLockExclusive(&addLock);
+    if (dup) { ApiLog(mod, "add_mover(%016llx): refused: it has a mover already", (unsigned long long)d.entity); return 1; }
+    if (at >= MV_DEFS) { ApiLog(mod, "add_mover: refused: %d movers already", MV_DEFS); return 1; }
     static const char* const kMode[] = {"", "walks", "drives", "hovers", "drives (FWD)", "drives (RWD)", "drives (4WD)", "flies (helicopter)", "flies (plane)", "sails (boat)", "sails (submarine)", "rides a rail", "drives (tracks)"}, * const kWater[] = {"", "wades", "stays dry", "floats", "sinks"};
     ApiLog(mod, "add_mover(%016llx): %s, %.1f m/s (%.1f back), %s at %.0f deg/s, brakes %.1f m/s2, %s (%.2f m)%s", (unsigned long long)d.entity,
         kMode[asked], (double)d.speed, (double)d.reverse_speed, d.turn_radius > 0 ? "turns like a vehicle" : "turns on the spot",

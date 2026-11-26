@@ -14,6 +14,7 @@
 #define ZN_STRIKE_EVERY 0.1f /* seconds between a disc's ray sweeps */
 #define ZN_STRIKE_AGAIN 1.0f /* seconds of lasting contact that count as another strike */
 #define ZN_DISC_HALF 0.2f    /* metres: a rotor disc's half thickness for hits (blades and their flex) */
+#define ZN_RIDER_R 4.0f      /* metres from the unit's root within which another Helldiver counts as riding it */
 
 typedef struct KitGun { HfMod* mod; HfFixedGunDef def; uint32_t slot; } KitGun;   /* slot: its index on its mover */
 typedef struct KitZone { HfMod* mod; HfDamageZoneDef def; uint32_t slot; } KitZone;
@@ -244,8 +245,8 @@ static void ZnAcross(const float n[3], float u[3], float v[3])
     v[0] = n[1] * u[2] - n[2] * u[1]; v[1] = n[2] * u[0] - n[0] * u[2]; v[2] = n[0] * u[1] - n[1] * u[0];
 }
 
-/* The first thing solid but the unit and its driver in the zone's disc: rays from the hub to the tips. */
-static int ZnTouching(const MvUnit* m, const KitZone* z, const float w[16], uint32_t driver, float hub[3], HfSightHit* hit)
+/* The first thing solid but the unit and its riders in the zone's disc: rays from the hub to the tips. */
+static int ZnTouching(const MvUnit* m, const KitZone* z, const float w[16], const uint32_t riders[3], float hub[3], HfSightHit* hit)
 {
     float n[3], u[3], v[3];
     const float* d = z->def.disc;
@@ -255,7 +256,7 @@ static int ZnTouching(const MvUnit* m, const KitZone* z, const float w[16], uint
     for (int k = 0; k < 3; k++) n[k] /= l;
     ZnAcross(n, u, v);
     KitToWorld(w, z->def.center, 1, hub);
-    HfSight how = {sizeof how, {m->unit, driver, 0, 0}, 0.3f, 0};
+    HfSight how = {sizeof how, {m->unit, riders[0], riders[1], riders[2]}, 0.3f, 0};
     for (int r = 0; r < ZN_RAYS; r++)
     {
         const float a = 6.2831853f * (float)r / ZN_RAYS, c = cosf(a) * z->def.radius, s = sinf(a) * z->def.radius;
@@ -283,12 +284,12 @@ static int ZnBump(MvUnit* m, const KitZone* z, const float hub[3], const HfSight
 }
 
 /* One zone's sweep: a strike takes `strike` of its health; a unit touched with strike_speed set is bumped instead. */
-static void ZnSweep(MvUnit* m, const KitZone* z, const float w[16], uint32_t driver, float swept)
+static void ZnSweep(MvUnit* m, const KitZone* z, const float w[16], const uint32_t riders[3], float swept)
 {
     const uint32_t s = z->slot;
     float hub[3];
     HfSightHit hit = {0};
-    if (!ZnTouching(m, z, w, driver, hub, &hit)) { m->znContact[s] = 0; return; }
+    if (!ZnTouching(m, z, w, riders, hub, &hit)) { m->znContact[s] = 0; return; }
     const int fresh = m->znContact[s] == 0 || m->znContact[s] >= ZN_STRIKE_AGAIN;
     m->znContact[s] = fresh ? swept : m->znContact[s] + swept;
     int32_t take = (int32_t)lroundf(z->def.strike_damage * (float)z->def.health);
@@ -304,21 +305,43 @@ static void ZnSweep(MvUnit* m, const KitZone* z, const float w[16], uint32_t dri
     if (m->znHealth[s] == 0) ZnBreak(m, z);
 }
 
+/* Who rides the unit: this machine's Helldiver and up to two more whose roots are within ZN_RIDER_R of the unit's,
+ * so co-op passengers are not struck by its own rotors. */
+static void ZnRiders(const float w[16], uint32_t riders[3])
+{
+    riders[0] = riders[1] = riders[2] = 0;
+    const uintptr_t game = (uintptr_t)GetModuleHandleW(L"game.dll");
+    if (!game) return;
+    ActHealth h;
+    const char* why;
+    if (ActLocalAvatar(game, 1, &h, &why)) riders[0] = h.unit;
+    EvpPlayer players[EVT_MAX_PLAYERS];
+    const int n = EvpPlayers(game, players);
+    for (int i = 0, k = 1; i < n && k < 3; i++)
+    {
+        uint32_t unit = 0, network;
+        float p[16];
+        if (players[i].local || !players[i].avatar || !WcEntity(players[i].avatar, &unit, &network) || !unit ||
+            !ApiJointPose(&g_mvMod, unit, 0, HF_POSE_WORLD, p))
+            continue;
+        const float dx = p[12] - w[12], dy = p[13] - w[13], dz = p[14] - w[14];
+        if (dx * dx + dy * dy + dz * dz < ZN_RIDER_R * ZN_RIDER_R) riders[k++] = unit;
+    }
+}
+
 /* Open rotors' strikes, every ZN_STRIKE_EVERY: a new contact, and each ZN_STRIKE_AGAIN it lasts. */
 static void ZnStrikes(MvUnit* m, const float w[16], float dt)
 {
     if ((m->znSweep += dt) < ZN_STRIKE_EVERY) return;
     const float swept = m->znSweep;
     m->znSweep = 0;
-    const uintptr_t game = (uintptr_t)GetModuleHandleW(L"game.dll");
-    ActHealth h;
-    const char* why;
-    const uint32_t driver = game && ActLocalAvatar(game, 1, &h, &why) ? h.unit : 0;
+    uint32_t riders[3];
+    ZnRiders(w, riders);
     const uint64_t resource = g_mvDefs[m->def - 1].def.entity;
     for (LONG i = 0; i < g_kitZoneCount; i++)
     {
         const KitZone* z = &g_kitZones[i];
-        if (z->def.entity == resource && z->def.strike_damage > 0 && m->znHealth[z->slot] > 0) ZnSweep(m, z, w, driver, swept);
+        if (z->def.entity == resource && z->def.strike_damage > 0 && m->znHealth[z->slot] > 0) ZnSweep(m, z, w, riders, swept);
     }
 }
 

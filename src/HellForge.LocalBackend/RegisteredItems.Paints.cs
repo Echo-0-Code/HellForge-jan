@@ -117,9 +117,11 @@ public sealed partial class RegisteredItems
     // Each weapon's paint children, at the end of its run (the client links a child to the run before it). A support
     // weapon is its stratagem's child: the client links an entry whose parent differs from the one before to the entry
     // right before it (0x136EC00), so its paints follow it, and only where it ends its stratagem's run.
-    void AddPaints(JsonArray catalogue, IReadOnlyList<uint> weapons, IReadOnlyList<Item> admitted)
+    // Returns the weapons that got a place, so their packages are the only paint packages served.
+    HashSet<uint> AddPaints(JsonArray catalogue, IReadOnlyList<uint> weapons, IReadOnlyList<Item> admitted)
     {
-        if (weapons.Count == 0) return;
+        HashSet<uint> placed = [];
+        if (weapons.Count == 0) return placed;
         var known = catalogue.Select(i => Id(i, "mixId")).ToHashSet();
         AddWeaponItems(catalogue, weapons, admitted, known);
         var index = new CatalogueIndex(catalogue);
@@ -127,9 +129,13 @@ public sealed partial class RegisteredItems
         List<(int After, JsonObject Entry)> inserts = [];
         foreach (var weapon in weapons)
             if (PaintPlace(weapon, runEnd, supports) is { } at)
+            {
+                placed.Add(weapon);
                 inserts.AddRange(PaintChildren(weapon, at.Parent, index, known).Select(child => (at.After, child)));
+            }
         foreach (var group in inserts.Select((x, n) => (x.After, x.Entry, n)).GroupBy(x => x.After).OrderByDescending(g => g.Key))
             foreach (var x in group.OrderByDescending(x => x.n)) catalogue.Insert(group.Key + 1, x.Entry);
+        return placed;
     }
 
     // A weapon's paint children, copies of the template weapon's, under parent; a paint without a template is said.
@@ -216,6 +222,13 @@ public sealed partial class RegisteredItems
                 Id(entry, "itemId") is { } item && Id(entry, "mixId") is { } mixId)
                 places.TryAdd(item, (runEnd.GetValueOrDefault(parent) == i ? i : -1, mixId));
         return places;
+    }
+
+    // A painted weapon with no paint children (PaintPlace found no place) gets no package either.
+    IReadOnlyList<uint> PaintedPlaced(Session current)
+    {
+        lock (gate)
+            return ReferenceEquals(paintPlaced.Session, current) ? current.Painted.Where(paintPlaced.Weapons.Contains).ToList() : current.Painted;
     }
 
     // Each weapon's paint package. Its 25 levels stay, so the armory's level display reads what it reads for a primary.

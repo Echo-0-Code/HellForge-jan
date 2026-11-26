@@ -121,6 +121,8 @@ public sealed partial class RegisteredItems(string path)
 
     Func<string, JsonElement?>? source;
     readonly object gate = new();
+    // The painted weapons the session's last catalogue placed; before any catalogue, every painted weapon counts.
+    (object? Session, HashSet<uint> Weapons) paintPlaced = (null, []);
     Vanilla? vanilla;
     Session? session;
     readonly Dictionary<string, (Session Session, string Body, JsonElement Served)> served = [];
@@ -525,17 +527,22 @@ public sealed partial class RegisteredItems(string path)
         {
             case "/Progression/items" when node is JsonArray catalogue:
                 AddCatalogue(catalogue, items, current.Attachments);
-                AddPaints(catalogue, current.Painted, items);
+                var placed = AddPaints(catalogue, current.Painted, items);
+                lock (gate)
+                {
+                    paintPlaced = (current, placed);
+                    served.Remove("/Progression/ProgressionPackages"); // kept from before the places were known
+                }
                 AddPatterns(catalogue, current.Patterns);
                 break;
             case "/Progression/ProgressionPackages" when node is JsonArray packages:
                 AddPackages(packages, items);
-                AddPaintPackages(packages, current.Painted);
+                AddPaintPackages(packages, PaintedPlaced(current));
                 AddPatternRewards(packages, current.Patterns);
                 break;
             case "/Progression" when node is JsonObject progression:
                 AddProgress(progression, current);
-                AddPaintProgress(progression, current.Painted);
+                AddPaintProgress(progression, PaintedPlaced(current));
                 break;
             case "/Progression/inventory" when node is JsonObject inventory && inventory["items"] is JsonArray held:
                 AddInventory(held, current);

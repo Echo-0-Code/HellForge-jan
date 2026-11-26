@@ -296,6 +296,7 @@ static float HvLiftKeys(void)
 
 /* One vehicle's record, input and lever. */
 static int ViewSeat(MvUnit* m, const float in[3], uint32_t lever, float dt); /* movers_view.c (SDK 48) */
+static int ViewLocalDriver(const MvUnit* m);                                  /* movers_view.c */
 static void HvSeat(uintptr_t record, uintptr_t input, uintptr_t leverAt, float dt)
 {
     uintptr_t r;
@@ -310,7 +311,9 @@ static void HvSeat(uintptr_t record, uintptr_t input, uintptr_t leverAt, float d
     const float throttle = lever == 0 ? -fmaxf(in[1], in[2]) : lever == 1 ? 0.0f : in[1] - in[2];
     m->seatThrottle = MvClamp(throttle, -1, 1);
     m->seatSteer = MvClamp(-in[0], -1, 1);
-    m->seatLift = m->seatAge < HV_LIFT_HOLD_S ? HvLiftKeys() : 0; /* on foot, Space is a jump: only a craft just driven here */
+    /* On foot, Space is a jump: the lift keys count only for a craft just driven here whose seat this Helldiver still
+     * sits in, else a held key would keep its seat young after the driver left. */
+    m->seatLift = m->seatAge < HV_LIFT_HOLD_S && ViewLocalDriver(m) ? HvLiftKeys() : 0;
     if (fabsf(throttle) > 0.02f || fabsf(in[0]) > 0.02f || m->seatLift != 0) m->seatAge = 0;
 }
 
