@@ -34,6 +34,9 @@ On `dev`, since 0.5.0-beta.
 
 ### Fixed
 
+- **Several mods can add camouflage shapes.** Every mod's layers on a game array texture now stack in load order,
+  instead of the top mod's copy replacing the others. A paint names its layer by PNG (`[r, g, b, "<png>"]` in a
+  `lut` cell), and HellForge writes the number that layer has on each player's machine.
 - **The editor no longer says NEXT BOOT for changes the game already took.** An attachment's or default magazine's
   stats and a status multiplier change when you apply them. A weapon takes them when it is next built. Their pages
   still said NEXT BOOT, while the CHANGES list said EDITED. A stratagem's unlimited mission uses now read "next

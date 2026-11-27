@@ -189,7 +189,21 @@ public static class ResourceEdits
 
     sealed record MaterialParameter(uint Type, uint Name, int Offset, int Size);
 
-    public sealed record LutRecolour(int? ZonesFrom, IReadOnlyDictionary<int, double[]> Columns, IReadOnlyDictionary<int, IReadOnlyDictionary<int, double[]>> Rows);
+    // Layers: cells whose alpha is a layer named in the spec (row -1: a column of every row), set by name at build time.
+    public sealed record LutRecolour(int? ZonesFrom, IReadOnlyDictionary<int, double[]> Columns, IReadOnlyDictionary<int, IReadOnlyDictionary<int, double[]>> Rows,
+        IReadOnlyDictionary<(int Row, int Column), string>? Layers = null)
+    {
+        // The named layers' numbers in the cells' alpha.
+        public LutRecolour WithLayers(Func<string, int> number)
+        {
+            if (Layers is not { Count: > 0 }) return this;
+            static double[] Set(double[] cell, int layer) => [cell[0], cell[1], cell[2], layer];
+            var columns = Columns.ToDictionary(c => c.Key, c => Layers.TryGetValue((-1, c.Key), out var n) ? Set(c.Value, number(n)) : c.Value);
+            var rows = Rows.ToDictionary(r => r.Key, r => (IReadOnlyDictionary<int, double[]>)r.Value.ToDictionary(c => c.Key,
+                c => Layers.TryGetValue((r.Key, c.Key), out var n) ? Set(c.Value, number(n)) : c.Value));
+            return new(ZonesFrom, columns, rows);
+        }
+    }
 
     // A material's colour lookup texture (R16G16B16A16_FLOAT; each row a material zone, each column a parameter: column 0
     // the base colour; hd2_model.py): optionally every row first takes one row's values (the gold Liberator takes the
