@@ -80,8 +80,8 @@ static float FlHeliHeave(MvUnit* m, const HfMoverDef* d, const float p[3], float
     m->targetHeight = m->flWant - groundAlt;
     /* The collective's floor still gives ~97 % of its weight at this H, so it would ride its gear springs at full droop.
      * Resting there with the collective down, it flattens its blades, as a pilot does, and its weight settles it. */
-    const int down = m->flWant <= groundAlt - 1.95f, near = gap < h->height_min + FL_REST;
-    const int flatten = down && near && (fabsf(vz) < 0.25f || m->flPitch < 1.0f); /* once begun, a gear bounce can't stop it */
+    const int down = m->flWant <= groundAlt - 1.95f, low = gap < h->height_min + FL_REST;
+    const int flatten = down && low && (fabsf(vz) < 0.25f || m->flPitch < 1.0f); /* once begun, a gear bounce can't stop it */
     m->flPitch = MvClamp(m->flPitch + (flatten ? -dt : dt) / FL_PITCH_S, 0, 1);
     const float thrust = m->flPitch * fminf(expf((m->flWant - alt) / scale), d->thrust_max); /* times its weight */
     float az = (1.0f - h->carried) * MV_G * thrust - 2 * h->damping * wn * vz;
