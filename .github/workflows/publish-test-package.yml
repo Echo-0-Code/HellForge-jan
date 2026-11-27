@@ -16,10 +16,10 @@ jobs:
       - name: Download the artifact and publish it
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: "46042040057"
-          TAG: "test-e08aa2a"
-          TARGET: "e08aa2a96406569f126afee6ceb206ae050bfb7d"
-          TITLE: "Test build e08aa2a, SDK 55 + camo stacking + heli flat-pitch landing (run 46042040057)"
+          RUN_ID: "46042351391"
+          TAG: "test-de7f6e5"
+          TARGET: "de7f6e53c64d2fd57de0105386ae854bb4c1fc12"
+          TITLE: "Test build de7f6e5, SDK 55 + camo layer stacking + weapon paints as data (run 46042351391)"
         run: |
           gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n test-package -D pkg
           find pkg -type f -exec ls -la {} \;
