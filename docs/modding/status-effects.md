@@ -96,6 +96,8 @@ api->add_effect_looks(mod, g_cryo, kLooks, sizeof kLooks / sizeof kLooks[0], api
 - Key materials by unit and slot, never by shader and slot: a unit's colour variants share those with different
   textures.
 - When two effects have a look on one material, the higher level shows.
+- What an enemy carries in its mount slots, such as an Automaton's gun, shows the enemy's level. Add rows for the
+  carried unit's own resource; the mod loader's log names it the first time an affected enemy carries it.
 - Until the package is resident, levels change but no texture is set.
 
 On enemies, use material looks (SDK 33). The game draws units of one kind in one instanced batch with one unit's

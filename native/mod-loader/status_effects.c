@@ -4,12 +4,17 @@
  * a flicker. An entity that loses its unit gets its own textures back while that unit is still alive and still the
  * same resource, so a reused handle is never touched. A look row with texture slot 0 swaps the whole material slot to
  * another material resource (SDK 33): instanced batches (bugs) draw every member with one member's material, so only
- * a resource of its own keeps a look on one unit. Included by world_calls.c after joint_poses.c. */
+ * a resource of its own keeps a look on one unit. The entities an enemy carries in its mount slots (an Automaton's
+ * guns) take the effect's look rows for their own units, at the enemy's level. Included by world_calls.c after
+ * joint_poses.c and behaviours.c (BhvMapFind). */
 
 #define SE_EFFECTS 64
 #define SE_TARGETS 256
 #define SE_SLOTS 4      /* effects one entity carries at once */
 #define SE_SHOWN 32     /* textures one entity shows */
+#define SE_KIDS 5       /* MountComponentData's slots */
+#define SE_KID_SHOWN 8  /* textures one carried entity shows */
+#define SE_MOUNTS 0x3326438u /* game.dll: the Mount manager (its map at +0x20, records of 6 u32 at +0x48: children 0..4) */
 #define SE_QUEUE 2048
 #define SE_CHANNEL "@hellforge.status" /* no mod can have it: mod ids start with a letter or digit */
 #define SE_WIRE_VERSION 1u
@@ -26,6 +31,7 @@ typedef struct SeEffect
 } SeEffect;
 typedef struct SeSlot { uint32_t effect, level; float meter; double lastGain, levelSince; int remote; } SeSlot;
 typedef struct SeShown { uint32_t material, texture, effect; uint64_t own, shown; } SeShown;
+typedef struct SeKid { uint32_t entity, unit, shownCount; uint64_t name; SeShown shown[SE_KID_SHOWN]; } SeKid;
 typedef struct SeTarget
 {
     uint32_t entity, unit, shownCount;
@@ -33,7 +39,10 @@ typedef struct SeTarget
     int dirty;
     SeSlot slots[SE_SLOTS];
     SeShown shown[SE_SHOWN];
+    SeKid kids[SE_KIDS];
 } SeTarget;
+/* One unit's looks: a target's own, or one it carries. */
+typedef struct SeSkin { uint32_t unit; uint64_t name; uint32_t* shownCount; SeShown* shown; uint32_t cap; } SeSkin;
 typedef struct SeNote { uint32_t entity, status, effect; float amount; uint64_t update; } SeNote; /* effect 0: a vanilla status */
 #pragma pack(push, 1)
 typedef struct SeWire { uint8_t version, level; uint16_t reserved; uint32_t network, key; } SeWire;
@@ -73,6 +82,9 @@ static SeMeshFn g_seMesh;
 static SeUnitNameFn g_seUnitName;
 static SeSetTextureFn g_seSetTexture;
 static SeSetMaterialFn g_seSetMaterial;     /* NULL: material looks are off (logged once) */
+static uintptr_t g_seGame;                  /* game.dll, for the Mount manager */
+static uint64_t g_seKidNames[64];           /* carried units already logged */
+static uint32_t g_seKidNameCount;
 /* the damage each entity takes now, for the damage consumer (rebuilt every update) */
 typedef struct SeDamageRow { uint32_t entity; float scale; } SeDamageRow;
 static SeDamageRow g_seDamage[SE_TARGETS];
@@ -117,6 +129,8 @@ static uint32_t SeUnitOf(uint32_t entity)
     return unit;
 }
 
+static void SeReleaseKid(uint32_t entity);
+
 static SeTarget* SeTargetOf(uint32_t entity, int create)
 {
     SeTarget* free_at = NULL;
@@ -128,6 +142,7 @@ static SeTarget* SeTargetOf(uint32_t entity, int create)
     if (!create || free_at == NULL) return NULL;
     uint32_t unit = SeUnitOf(entity);
     if (unit == 0) return NULL;
+    SeReleaseKid(entity);
     memset(free_at, 0, sizeof *free_at);
     *free_at = (SeTarget){entity, unit, 0, g_seUnitName(unit), 0, {{0}}, {{0}}};
     return free_at;
@@ -154,7 +169,7 @@ static const HfEffectLook* SeLookRow(const SeEffect* e, uint64_t unit, uint32_t 
 static int SeResident(const SeEffect* e) { return e->package == 0 || ApiLoadPackage(&g_seMod, e->package) == HF_PACKAGE_RESIDENT; }
 
 /* The texture a target wants on one material's texture slot: the look of its highest level there, 0 its own. */
-static uint64_t SeWanted(const SeTarget* t, uint32_t material, uint32_t texture, uint32_t* effect)
+static uint64_t SeWanted(const SeTarget* t, uint64_t name, uint32_t material, uint32_t texture, uint32_t* effect)
 {
     uint64_t best = 0;
     uint32_t bestLevel = 0;
@@ -162,7 +177,7 @@ static uint64_t SeWanted(const SeTarget* t, uint32_t material, uint32_t texture,
     {
         const SeSlot* s = &t->slots[i];
         if (s->effect == 0 || s->level <= bestLevel || ModGone(g_se[s->effect - 1].mod)) continue;
-        const HfEffectLook* row = SeLookRow(&g_se[s->effect - 1], t->name, material, texture);
+        const HfEffectLook* row = SeLookRow(&g_se[s->effect - 1], name, material, texture);
         if (row == NULL || row->level[s->level - 1] == 0 || !SeResident(&g_se[s->effect - 1])) continue;
         best = row->level[s->level - 1];
         bestLevel = s->level;
@@ -171,13 +186,16 @@ static uint64_t SeWanted(const SeTarget* t, uint32_t material, uint32_t texture,
     return best;
 }
 
-static SeShown* SeShownOf(SeTarget* t, uint32_t material, uint32_t texture, int create)
+static SeShown* SeShownOf(const SeSkin* k, uint32_t material, uint32_t texture, int create)
 {
-    for (uint32_t i = 0; i < t->shownCount; i++) if (t->shown[i].material == material && t->shown[i].texture == texture) return &t->shown[i];
-    if (!create || t->shownCount >= SE_SHOWN) return NULL;
-    t->shown[t->shownCount] = (SeShown){material, texture, 0, 0, 0};
-    return &t->shown[t->shownCount++];
+    for (uint32_t i = 0; i < *k->shownCount; i++) if (k->shown[i].material == material && k->shown[i].texture == texture) return &k->shown[i];
+    if (!create || *k->shownCount >= k->cap) return NULL;
+    k->shown[*k->shownCount] = (SeShown){material, texture, 0, 0, 0};
+    return &k->shown[(*k->shownCount)++];
 }
+
+static SeSkin SeSelf(SeTarget* t) { return (SeSkin){t->unit, t->name, &t->shownCount, t->shown, SE_SHOWN}; }
+static SeSkin SeKidSkin(SeKid* k) { return (SeSkin){k->unit, k->name, &k->shownCount, k->shown, SE_KID_SHOWN}; }
 
 /* The k-th material of a mesh when its slot is `material` and it is drawn (has a render id), else 0. */
 static uintptr_t SeMaterialAt(uintptr_t mats, uintptr_t slots, uint32_t k, uint32_t material)
@@ -231,22 +249,97 @@ static void SeSetOnUnit(uint32_t unit, uint32_t material, uint32_t texture, uint
     for (uint32_t k = 0; k < n; k++) g_seSetTexture((void*)mats[k], texture, value);
 }
 
-/* One texture slot brought to what the target wants; a texture already shown is never set again. */
-static void SeShowOne(SeTarget* t, const HfEffectLook* row)
+/* One texture slot of a unit brought to what the target wants; a texture already shown is never set again. */
+static void SeShowOne(const SeTarget* t, const SeSkin* k, const HfEffectLook* row)
 {
     uint32_t effect = 0;
-    uint64_t want = SeWanted(t, row->material_slot, row->texture_slot, &effect);
-    SeShown* s = SeShownOf(t, row->material_slot, row->texture_slot, want != 0);
+    uint64_t want = SeWanted(t, k->name, row->material_slot, row->texture_slot, &effect);
+    SeShown* s = SeShownOf(k, row->material_slot, row->texture_slot, want != 0);
     if (s == NULL || s->shown == want) return;
-    if (s->shown == 0) s->own = row->texture_slot ? row->own : SeMaterialResourceOf(t->unit, row->material_slot);
+    if (s->shown == 0) s->own = row->texture_slot ? row->own : SeMaterialResourceOf(k->unit, row->material_slot);
     if (row->texture_slot == 0 && s->own == 0) return; /* a material look it could not undo is never shown */
-    SeSetOnUnit(t->unit, row->material_slot, row->texture_slot, want ? want : s->own);
+    SeSetOnUnit(k->unit, row->material_slot, row->texture_slot, want ? want : s->own);
     s->shown = want;
     s->effect = effect;
 }
 
-/* Every look row of the target's unit, in every effect it carries, and every texture it shows now. An effect whose
- * textures are not resident yet leaves the target to be shown again next update. */
+/* Every look row of one unit, in every effect the target carries, and every texture it shows now. */
+static void SeShowSkin(const SeTarget* t, const SeSkin* k)
+{
+    for (int i = 0; i < SE_SLOTS; i++)
+    {
+        const SeEffect* e = t->slots[i].effect ? &g_se[t->slots[i].effect - 1] : NULL;
+        for (uint32_t r = 0; e != NULL && r < e->lookCount; r++) if (e->looks[r].unit == k->name) SeShowOne(t, k, &e->looks[r]);
+    }
+    for (uint32_t i = 0; i < *k->shownCount; i++)
+    {
+        SeShown* s = &k->shown[i];
+        if (s->shown == 0) continue;
+        HfEffectLook own = {k->name, s->material, s->texture, s->own, {0}};
+        SeShowOne(t, k, &own);
+    }
+}
+
+/* A unit's own textures back, when it is still alive and still the same resource. */
+static void SeRestore(const SeSkin* k)
+{
+    int same = k->unit && (g_seAlive(k->unit) & 1) && g_seUnitName(k->unit) == k->name;
+    for (uint32_t i = 0; same && i < *k->shownCount; i++)
+        if (k->shown[i].shown) SeSetOnUnit(k->unit, k->shown[i].material, k->shown[i].texture, k->shown[i].own);
+}
+
+static void SeForgetKid(SeKid* kid)
+{
+    SeSkin k = SeKidSkin(kid);
+    SeRestore(&k);
+    memset(kid, 0, sizeof *kid);
+}
+
+/* An entity some target carries, given back its own look before it gets a target of its own. */
+static void SeReleaseKid(uint32_t entity)
+{
+    for (int i = 0; i < SE_TARGETS; i++)
+        for (int k = 0; g_seTargets[i].entity && k < SE_KIDS; k++)
+            if (g_seTargets[i].kids[k].entity == entity) SeForgetKid(&g_seTargets[i].kids[k]);
+}
+
+/* The entity in one of the target's mount slots, or 0. */
+static uint32_t SeCarried(uint32_t entity, int slot)
+{
+    uintptr_t mounts = 0, records = 0;
+    uint32_t invalid = 0, child = 0;
+    if (!g_seGame || SafeRead(g_seGame + SE_MOUNTS, &mounts, 8) || !mounts || SafeRead(g_seGame + BHV_INVALID_ENTITY, &invalid, 4)) return 0;
+    int64_t mount = BhvMapFind(mounts, 0x20, entity);
+    if (mount < 0 || SafeRead(mounts + 0x48, &records, 8) || !records || SafeRead(records + (uintptr_t)mount * 24 + 4u * (uintptr_t)slot, &child, 4)) return 0;
+    return child == invalid ? 0 : child;
+}
+
+/* A carried unit's name, logged the first time: the key its look rows need. */
+static void SeNoteKid(const SeTarget* t, int slot, uint64_t name)
+{
+    for (uint32_t i = 0; i < g_seKidNameCount; i++) if (g_seKidNames[i] == name) return;
+    if (g_seKidNameCount < 64) g_seKidNames[g_seKidNameCount++] = name;
+    Note("status effects: unit %016llx carries unit %016llx (mount slot %d); look rows for it take its name", (unsigned long long)t->name, (unsigned long long)name, slot);
+}
+
+/* The units the target carries now. A carried entity with effects of its own shows its own looks instead. */
+static void SeKidsRefresh(SeTarget* t)
+{
+    for (int k = 0; k < SE_KIDS; k++)
+    {
+        SeKid* kid = &t->kids[k];
+        uint32_t child = SeCarried(t->entity, k);
+        uint32_t unit = child && child != t->entity && !SeTargetOf(child, 0) ? SeUnitOf(child) : 0;
+        if (kid->entity == child && kid->unit == unit) continue;
+        if (kid->entity) SeForgetKid(kid);
+        if (unit == 0) continue;
+        *kid = (SeKid){child, unit, 0, g_seUnitName(unit), {{0}}};
+        SeNoteKid(t, k, kid->name);
+    }
+}
+
+/* Every look row of the target's unit and the units it carries. An effect whose textures are not resident yet leaves
+ * the target to be shown again next update. */
 static void SeShow(SeTarget* t)
 {
     int waiting = 0;
@@ -254,24 +347,21 @@ static void SeShow(SeTarget* t)
     {
         const SeEffect* e = t->slots[i].effect ? &g_se[t->slots[i].effect - 1] : NULL;
         if (e != NULL && t->slots[i].level && e->lookCount && !SeResident(e)) waiting = 1;
-        for (uint32_t r = 0; e != NULL && r < e->lookCount; r++) if (e->looks[r].unit == t->name) SeShowOne(t, &e->looks[r]);
     }
-    for (uint32_t i = 0; i < t->shownCount; i++)
-    {
-        SeShown* s = &t->shown[i];
-        if (s->shown == 0) continue;
-        HfEffectLook own = {t->name, s->material, s->texture, s->own, {0}};
-        SeShowOne(t, &own);
-    }
+    SeKidsRefresh(t);
+    SeSkin self = SeSelf(t);
+    SeShowSkin(t, &self);
+    for (int k = 0; k < SE_KIDS; k++)
+        if (t->kids[k].entity) { SeSkin kid = SeKidSkin(&t->kids[k]); SeShowSkin(t, &kid); }
     t->dirty = waiting;
 }
 
-/* Its own textures back, when the unit is still alive and still the same resource, then forgotten. */
+/* Its own textures back, on it and what it carries, then forgotten. */
 static void SeForget(SeTarget* t)
 {
-    int same = t->unit && (g_seAlive(t->unit) & 1) && g_seUnitName(t->unit) == t->name;
-    for (uint32_t i = 0; same && i < t->shownCount; i++)
-        if (t->shown[i].shown) SeSetOnUnit(t->unit, t->shown[i].material, t->shown[i].texture, t->shown[i].own);
+    SeSkin self = SeSelf(t);
+    SeRestore(&self);
+    for (int k = 0; k < SE_KIDS; k++) if (t->kids[k].entity) SeForgetKid(&t->kids[k]);
     memset(t, 0, sizeof *t);
 }
 
@@ -387,6 +477,15 @@ static void SeDecay(const SeEffect* e, SeSlot* s, float dt)
     if (s->meter < 1e-4f) s->meter = 0;
 }
 
+/* Whether the target or a unit it carries still shows a look. */
+static int SeShowsAny(const SeTarget* t)
+{
+    for (uint32_t i = 0; i < t->shownCount; i++) if (t->shown[i].shown) return 1;
+    for (int k = 0; k < SE_KIDS; k++)
+        for (uint32_t i = 0; i < t->kids[k].shownCount; i++) if (t->kids[k].shown[i].shown) return 1;
+    return 0;
+}
+
 /* One entity's effects for this update; 0 when nothing is left of them. */
 static int SeTargetTick(SeTarget* t, float dt)
 {
@@ -403,8 +502,7 @@ static int SeTargetTick(SeTarget* t, float dt)
         if (s->level == 0 && s->meter <= 0) { s->effect = 0; t->dirty = 1; continue; }
         left = 1;
     }
-    for (uint32_t i = 0; i < t->shownCount && !left; i++) left = t->shown[i].shown != 0;
-    return left;
+    return left || SeShowsAny(t);
 }
 
 static float SeDamageScale(const SeTarget* t)
@@ -475,6 +573,7 @@ static int SeReady(void)
     g_seUnitName = (SeUnitNameFn)ApiFunction(&g_seMod, "UnitResourceName");
     g_seSetTexture = (SeSetTextureFn)ApiFunction(&g_seMod, "MaterialSetTexture");
     g_seSetMaterial = (SeSetMaterialFn)ApiFunction(&g_seMod, "UnitSetMaterial");
+    g_seGame = ApiModuleBase("game.dll", NULL);
     if (!g_seSetMaterial) Note("status effects: material looks are off; UnitSetMaterial is not the reviewed one");
     if (!g_seDescriptor || !g_seAlive || !g_seNumMeshes || !g_seMesh || !g_seUnitName || !g_seSetTexture)
     { g_seState = -1; Note("status effects: off; a unit or material call is not the reviewed one"); return 0; }
