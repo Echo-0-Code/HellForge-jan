@@ -8,7 +8,19 @@ namespace HellForge.Core.GameData;
 // the spec's recoloured copies, which the loader adds as add_pattern would (ModLoaderPlan's paint lines), so a paint
 // needs no code. Swaps: each of the base's material_luts and the copy that replaces it.
 public sealed record DataPaint(string Name, uint Base, string? Title, string? Description, IReadOnlyList<double[]> Swatch,
-    IReadOnlyList<(ulong From, ulong To)> Swaps, IReadOnlyList<uint> Weapons);
+    IReadOnlyList<(ulong From, ulong To)> Swaps, IReadOnlyList<uint> Weapons)
+{
+    // paint <mod> <base> <name> <title|-> <description|-> <swatch r,g,b;...|-> <swaps from:to;...> <weapons a;b|->: the
+    // loader plan's line (ModLoaderPlan), which the loader adds for the mod as add_pattern would (data_paints.c).
+    public string PlanLine(string mod)
+    {
+        var invariant = CultureInfo.InvariantCulture;
+        var swatch = Swatch.Count == 0 ? "-" : string.Join(';', Swatch.Select(c => string.Join(',', c.Select(v => v.ToString("R", invariant)))));
+        var swaps = string.Join(';', Swaps.Select(s => $"{s.From:x16}:{s.To:x16}"));
+        var weapons = Weapons.Count == 0 ? "-" : string.Join(';', Weapons.Select(w => w.ToString(invariant)));
+        return $"paint\t{mod}\t{Base:x8}\t{Name}\t{Title ?? "-"}\t{Description ?? "-"}\t{swatch}\t{swaps}\t{weapons}";
+    }
+}
 
 public static partial class DataSpecs
 {

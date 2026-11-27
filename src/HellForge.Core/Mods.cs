@@ -1003,19 +1003,7 @@ public static class ModLoaderPlan
         foreach (var e in StatsData.Edits(mod)) yield return "stat\t" + string.Join('\t', StatFields(mod, e));
         foreach (var t in mod.NetworkFieldTypes) yield return "nettype\t" + string.Join('\t', NetFields(mod, t));
         foreach (var p in mod.Packages) yield return $"package\t{mod.Id}\t{p.Id:x16}\t{(p.Session ? "session" : "request")}";
-        foreach (var paint in mod.Paints) yield return PaintLine(mod, paint);
-    }
-
-    // paint <mod> <base> <name> <title|-> <description|-> <swatch r,g,b;...|-> <swaps from:to;...> <weapons a;b|->: a data
-    // spec's weapon paint, which the loader adds for the mod as add_pattern would (paints.c).
-    public static string PaintLine(ModManifest mod, DataPaint p)
-    {
-        var invariant = CultureInfo.InvariantCulture;
-        static string Text(string? value) => value ?? "-";
-        var swatch = p.Swatch.Count == 0 ? "-" : string.Join(';', p.Swatch.Select(c => string.Join(',', c.Select(v => v.ToString("R", invariant)))));
-        var swaps = string.Join(';', p.Swaps.Select(s => $"{s.From:x16}:{s.To:x16}"));
-        var weapons = p.Weapons.Count == 0 ? "-" : string.Join(';', p.Weapons.Select(w => w.ToString(invariant)));
-        return $"paint\t{mod.Id}\t{p.Base:x8}\t{p.Name}\t{Text(p.Title)}\t{Text(p.Description)}\t{swatch}\t{swaps}\t{weapons}";
+        foreach (var paint in mod.Paints) yield return paint.PlanLine(mod.Id);
     }
 
     static string Field(string value) => value.Contains('\t') || value.Contains('\n') || value.Contains('\r')
