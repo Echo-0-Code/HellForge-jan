@@ -874,6 +874,44 @@ static class DataBuilderTests
             check(missing.Single().Contains("is not added by test.c"), "A layer no mod adds was not reported: " + string.Join(" | ", missing));
         });
 
+        test("Paints declared as data: their colour tables build into a package, and the loader plan lists them", () =>
+        {
+            var install = new InstallLayout(Path.Combine(root, "data-paints-install"));
+            install.Create("12345");
+            var gameData = Path.Combine(install.Game, "data");
+            WriteGameData(gameData);
+            var folder = Path.Combine(install.Root, "mods", "paints");
+            Directory.CreateDirectory(Path.Combine(folder, "camo"));
+            File.WriteAllText(Path.Combine(folder, ModCatalog.ManifestName), """{"format":1,"id":"test.paints","name":"Paints","version":"1"}""");
+            File.WriteAllBytes(Path.Combine(folder, "camo", "dots.png"), Png(Enumerable.Repeat((byte)40, 16 * 16 * 4).ToArray(), 16));
+            File.WriteAllText(Path.Combine(folder, DataSpecs.FileName), """
+                {"format":1,
+                 "patches":[{"archives":["1111111111111111"],"resources":[{"type":"texture","edit":"0x7777","layers":["camo/dots.png"]}]}],
+                 "paints":[{"name":"test/paints/dots","title":"Dots","description":"Pink dots.","base":"0x5D125795","luts":["0x2222"],
+                   "swatch":["#FF00CC",[0.1,0.1,0.1]],"weapons":[1234],"lut":{"columns":{"16":"#FF00CC","21":[216.625,-0.99,2,"camo/dots.png"]}}}]}
+                """);
+            var (loaded, problems) = ModCatalog.Load(Path.Combine(install.Root, "mods"));
+            var mod = loaded.Single();
+            check(problems.Count == 0 && mod.Paints.Single() is { Base: 0x5D125795, Title: "Dots", Swatch.Count: 2, Weapons: [1234] } && mod.Packages.Single().Name == "test/paints/dots/luts",
+                "The paint or its package did not parse: " + string.Join(" | ", problems));
+            var copy = EngineHash.Murmur64A("test/paints/dots/0000000000002222"u8);
+            var line = ModLoaderPlan.Text([mod], "logs", EntityProfile.Current, "1").Split('\n').Single(l => l.StartsWith("paint\t", StringComparison.Ordinal));
+            check(line == $"paint\ttest.paints\t5d125795\ttest/paints/dots\tDots\tPink dots.\t1,0,0.8;0.1,0.1,0.1\t0000000000002222:{copy:x16}\t1234", "The plan's paint line: " + line);
+            var (ready, failed) = ModDataCache.Prepare(install, loaded);
+            check(failed.Count == 0, "The paint's data did not build: " + string.Join(" | ", failed));
+            var package = Path.Combine(ready.Single().GeneratedData!, mod.Packages.Single().Id.ToString("x16"));
+            var built = ResourceArchive.Read(File.ReadAllBytes(package), File.ReadAllBytes(package + ".gpu_resources"), File.ReadAllBytes(package + ".stream"));
+            var lut = built[new(ResourceTypes.Texture, copy)].Gpu;
+            check((float)BinaryPrimitives.ReadHalfLittleEndian(lut.AsSpan((23 + 21) * 8 + 6)) == 2f && (float)BinaryPrimitives.ReadHalfLittleEndian(lut.AsSpan((23 + 16) * 8)) == 1f,
+                "The paint's colour table is not recoloured, or its camo layer is not the named one (2: after the game's two).");
+            foreach (var (bad, reason) in new[] { ("\"base\":\"plaid\"", "base is arctic_camo"), ("\"base\":\"arctic_camo\",\"luts\":[\"0x1\"]", "luts is for a base given by id") })
+            {
+                File.WriteAllText(Path.Combine(folder, DataSpecs.FileName), "{\"format\":1,\"paints\":[{\"name\":\"test/paints/x\"," + bad + ",\"lut\":{\"columns\":{\"16\":\"#FFFFFF\"}}}]}");
+                try { DataSpecs.Load(folder); throw new Exception("Accepted: " + bad); }
+                catch (InvalidDataException error) { check(error.Message.Contains(reason), "Refused for another reason: " + error.Message); }
+            }
+        });
+
         test("A data spec's package builds as a whole archive of its own id, is staged under it, and the loader plan names it", () =>
         {
             var install = new InstallLayout(Path.Combine(root, "mod-package-install"));

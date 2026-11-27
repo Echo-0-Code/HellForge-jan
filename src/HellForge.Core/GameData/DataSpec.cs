@@ -21,6 +21,8 @@ public sealed record DataSpec(IReadOnlyList<DataPatch> Patches, IReadOnlyList<st
     public bool UsesSteam => Patches.Any(p => p.Resources.Any(r => r.Steam));
     // The past builds its resources come from ("<depot>:<manifest>", AssetMigration.GameBuilds), in order.
     public IReadOnlyList<string> Builds => [.. Patches.SelectMany(p => p.Resources).Select(r => r.Build).OfType<string>().Distinct().Order(StringComparer.Ordinal)];
+    // Weapon paints declared as data (DataPaint); their colour tables are a package patch of Patches.
+    public IReadOnlyList<DataPaint> Paints { get; init; } = [];
 }
 // A patch for game archives, or (Package) a package of the mod's own: a whole archive of its own id, loaded at session
 // start or only when asked for (load_package, or a record that names it).
@@ -155,13 +157,14 @@ public static partial class DataSpecs
 
     static DataSpec Parse(JsonElement root, string? folder)
     {
-        Fields(root, "", "format", "patches");
+        Fields(root, "", "format", "patches", "paints");
         if (!root.TryGetProperty("format", out var format) || format.ValueKind != JsonValueKind.Number || !format.TryGetInt32(out var version) || version != 1)
             throw new InvalidDataException("format must be 1.");
         var patches = new List<DataPatch>();
         var inputs = new SortedSet<string>(StringComparer.Ordinal);
         var p = 0;
-        foreach (var patch in Items(root, "patches", ""))
+        var (paints, paintPatch) = ReadPaints(root);
+        foreach (var patch in paintPatch != null && !root.TryGetProperty("patches", out _) ? [] : Items(root, "patches", ""))
         {
             var at = $"patches[{p++}]";
             Fields(patch, at, "archives", "package", "load", "resources");
@@ -174,10 +177,11 @@ public static partial class DataSpecs
             if (resources.Count == 0) throw new InvalidDataException($"{at}: resources are missing.");
             patches.Add(new(archives, resources, package));
         }
+        if (paintPatch != null) patches.Add(paintPatch);
         if (patches.Count == 0) throw new InvalidDataException("patches are missing.");
         if (patches.Where(x => x.Package != null).GroupBy(x => x.Package!.Id).FirstOrDefault(g => g.Count() > 1) is { } twice)
             throw new InvalidDataException($"package {twice.First().Package!.Name} is named by two patches.");
-        return new(patches, [.. inputs]);
+        return new(patches, [.. inputs]) { Paints = paints };
     }
 
     static List<string> ReadArchives(JsonElement patch, string at)

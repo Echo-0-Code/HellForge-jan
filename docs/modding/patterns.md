@@ -10,6 +10,7 @@ textures you swap in. The player holds it from the start.
 
 - [What a pattern is](#what-a-pattern-is)
 - [Adding one](#adding-one)
+- [Weapon paints without code](#weapon-paints-without-code)
 - [Bases](#bases)
 - [Textures](#textures)
 - [Where it shows](#where-it-shows)
@@ -90,6 +91,33 @@ skin, by collection), so you know what to swap:
 add_pattern(yourname/your_mod/tiger): its base sets material_lut 6c93bf50b44efbee (material override at +0xc8)
 add_pattern(yourname/your_mod/tiger_pelican): on collection 9 its base sets pattern_masks_array 93b5d3618946cc4d (material override at +0x0)
 ```
+
+## Weapon paints without code
+
+A weapon paint needs no C: list it under `paints` in your mod's `hellforge-data.json` ([data specs](data.md#data-specs)).
+HellForge copies each of the base's colour tables with your `lut` edit into a package of your mod, and the loader adds
+the paint as `add_pattern` would. A mod can be only a manifest, this file and its PNGs:
+
+```json
+{ "format": 1,
+  "patches": [{ "archives": ["18235e0c9ec0e636", "7abbdd092bcd1bd9", "9aac8a3a538ce3b7", "b18d1859b2cc7be1", "ec0e8f0acb09d2c3", "fd920bc44f454116"],
+                "resources": [{ "type": "texture", "edit": "0xF8B2508E99FB9F28", "layers": ["camo/tiger.png"] }] }],
+  "paints": [{ "name": "yourname/your_mod/tiger", "title": "Tiger Camo", "description": "Orange with black stripes.",
+               "base": "arctic_camo", "swatch": ["#D96B14", "#080808"],
+               "lut": { "columns": { "16": "#D96B14", "17": "#080808", "21": [216.625, -0.99, 2, "camo/tiger.png"] } } }] }
+```
+
+| Field | What it is |
+|---|---|
+| `name` | unique, prefixed with your name and mod; the paint's id is its thin hash (at most 90 characters) |
+| `title`, `description` | its name and description on the card; left out, the base's |
+| `base` | `"arctic_camo"`, whose colour tables HellForge knows; or a paint's id (`"0x46A140E2"`) with `luts`, the colour tables it sets, as an `add_pattern` log lists them |
+| `swatch` | the card's swatch, 1 to 8 colours; left out, the base's |
+| `lut` | the edit of each of the base's colour tables, as a `lut` copy takes it ([copy](data.md#copy)); a camo shape by its PNG |
+| `weapons` | up to 16 loadout ids; left out, every weapon offering the base |
+
+The colour tables go in one session package, `<first paint's name>/luts`. Arctic Camo is the usual base: it is the only
+paint that also sets the rails' colours.
 
 ## Bases
 

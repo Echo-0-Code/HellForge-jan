@@ -261,6 +261,12 @@ A texture edit can instead add layers to one of the game's array textures, after
   `bc4`, `bc5`); each PNG is its size. Anything else is refused with the reason.
 - `layers` takes no `stages`, `bytes` or `gpu`, and it counts as an edit for mod sync, as other edits do.
 
+### paints
+
+A spec's `paints` list adds weapon paints without code: copies of a vanilla paint whose colour tables HellForge edits
+and packs for you. A spec with paints may leave out `patches`. The fields are on
+[patterns](patterns.md#weapon-paints-without-code).
+
 ### Packages of your own
 
 A patch with `package` becomes a whole archive of its own, `data/<id>`, where the id is the hash of the package's name.

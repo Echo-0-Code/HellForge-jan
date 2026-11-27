@@ -12,6 +12,9 @@ On `dev`, since 0.5.0-beta.
 
 ### Added
 
+- **Weapon paints without code.** A mod lists its paints under `paints` in `hellforge-data.json`: a base paint, a
+  colour table edit and camo shapes by name. HellForge builds the colour tables and adds the paints, so a paint mod
+  needs no C.
 - **Super Earth is playable.** Its seven mega cities now offer missions at every difficulty, as in the live war's
   Battle for Super Earth. Super Earth stays Super Earth's: an enemy attacks it. In All planets open the Illuminate
   attack. In Custom planets you can give Super Earth any enemy, with that enemy's subfactions and surges, like any

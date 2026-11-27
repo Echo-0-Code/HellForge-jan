@@ -55,6 +55,8 @@ public sealed record ModManifest(string Id, string Name, string Version, string 
     public bool HasDataSpec { get; init; }
     // Its data spec's own packages, which the loader may load (the plan's package lines).
     public IReadOnlyList<ModDataPackage> Packages { get; init; } = [];
+    // Its data spec's weapon paints (DataPaint), which the loader adds for it.
+    public IReadOnlyList<DataPaint> Paints { get; init; } = [];
     // Why HellForge does not check all of the data spec's output (DataSpecs.Unchecked: a "replace", or a type outside the
     // reviewed ones), or null: mod sync takes such a spec as raw data (ModSets.ClassOf).
     public string? UncheckedSpec { get; init; }
@@ -291,7 +293,7 @@ public static partial class ModCatalog
         // "url": where players get the mod; one that is not an https:// address (WebAddress) is left out
         var url = root.TryGetProperty("url", out var urlElement) && urlElement.ValueKind == JsonValueKind.String ? WebAddress(urlElement.GetString()) : null;
         var manifest = new ModManifest(id, name, version, description, gameplay, Path.GetFullPath(folder), types, writes, data)
-            { CodeDll = code, HasSource = source, Live = live, HasDataSpec = spec, Packages = dataSpec?.Patches.Select(p => p.Package).OfType<ModDataPackage>().ToList() ?? [], UncheckedSpec = dataSpec == null ? null : DataSpecs.Unchecked(dataSpec), Stats = stats, Icon = icon, Lua = lua, Url = url,
+            { CodeDll = code, HasSource = source, Live = live, HasDataSpec = spec, Packages = dataSpec?.Patches.Select(p => p.Package).OfType<ModDataPackage>().ToList() ?? [], Paints = dataSpec?.Paints ?? [], UncheckedSpec = dataSpec == null ? null : DataSpecs.Unchecked(dataSpec), Stats = stats, Icon = icon, Lua = lua, Url = url,
               CoopLevel = ReadCoopLevel(root), Premium = PremiumList(root), AssetOutputs = assets.Outputs, AssetsPending = assets.Pending ?? PastBuildsPending(folder, dataSpec) };
         return manifest with { Coop = DecideTier(root, manifest, new(code, source, data, lua, spec, stats, types, writes)) };
     }
@@ -1001,6 +1003,19 @@ public static class ModLoaderPlan
         foreach (var e in StatsData.Edits(mod)) yield return "stat\t" + string.Join('\t', StatFields(mod, e));
         foreach (var t in mod.NetworkFieldTypes) yield return "nettype\t" + string.Join('\t', NetFields(mod, t));
         foreach (var p in mod.Packages) yield return $"package\t{mod.Id}\t{p.Id:x16}\t{(p.Session ? "session" : "request")}";
+        foreach (var paint in mod.Paints) yield return PaintLine(mod, paint);
+    }
+
+    // paint <mod> <base> <name> <title|-> <description|-> <swatch r,g,b;...|-> <swaps from:to;...> <weapons a;b|->: a data
+    // spec's weapon paint, which the loader adds for the mod as add_pattern would (paints.c).
+    public static string PaintLine(ModManifest mod, DataPaint p)
+    {
+        var invariant = CultureInfo.InvariantCulture;
+        static string Text(string? value) => value ?? "-";
+        var swatch = p.Swatch.Count == 0 ? "-" : string.Join(';', p.Swatch.Select(c => string.Join(',', c.Select(v => v.ToString("R", invariant)))));
+        var swaps = string.Join(';', p.Swaps.Select(s => $"{s.From:x16}:{s.To:x16}"));
+        var weapons = p.Weapons.Count == 0 ? "-" : string.Join(';', p.Weapons.Select(w => w.ToString(invariant)));
+        return $"paint\t{mod.Id}\t{p.Base:x8}\t{p.Name}\t{Text(p.Title)}\t{Text(p.Description)}\t{swatch}\t{swaps}\t{weapons}";
     }
 
     static string Field(string value) => value.Contains('\t') || value.Contains('\n') || value.Contains('\r')
