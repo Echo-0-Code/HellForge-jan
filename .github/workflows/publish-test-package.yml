@@ -16,10 +16,10 @@ jobs:
       - name: Download the artifact and publish it
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: "45801843734"
-          TAG: "test-2f9819f"
-          TARGET: "2f9819f53008cb4f819902b73af78ff265df7909"
-          TITLE: "Test build 2f9819f, SDK 55 set visibility on SDK 54 mod values (run 45801843734)"
+          RUN_ID: "46031372516"
+          TAG: "test-c4c30fd"
+          TARGET: "c4c30fdc0a3441549b6944e3d563e1fae54f518c"
+          TITLE: "Test build c4c30fd, SDK 55 + unit positions + camo layer stacking (run 46031372516)"
         run: |
           gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n test-package -D pkg
           find pkg -type f -exec ls -la {} \;
