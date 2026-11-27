@@ -8,6 +8,8 @@
 #define FL_TILT_MAX 0.52f /* radians: the most a helicopter tilts to speed up, 30 degrees */
 #define FL_PITCH_MAX 0.35f /* radians: the steepest climb or dive a plane's nose follows, 20 degrees */
 #define FL_GEAR 0.5f      /* metres over height_min that still count as sitting on its gear */
+#define FL_PITCH_S 1.0f   /* seconds a helicopter's blades take between flat and flying pitch */
+#define FL_REST 2.0f      /* metres over height_min, its gear springs at full droop included, that count as resting */
 
 /* Rays reach past its highest height, so a cruise over hills keeps reading the ground. */
 static float FlReach(const HfMoverDef* d) { return fminf(d->hover.height_max * 1.5f + 30.0f, 800.0f); }
@@ -64,7 +66,7 @@ static float FlHeave(const MvUnit* m, const HfMoverHover* h, float gap, float vz
 /* A helicopter's collective (Jan's design): the keys move the altitude where its thrust equals its weight, and it stays
  * there when they let go. Thrust falls with air density, exp(-alt / H). Real air's H is 8.4 km; H = height_max / ln
  * thrust_max puts its ceiling at height_max over flDatum. No ground effect: at this H its real 10 % would hold it 15 m
- * up. A broken engine or tail zone (znSink) lowers the collective and holds the fall to znSink, as autorotation does. */
+ * up. A broken zone (znSink) lowers the collective and sinks it at znSink: autorotation, or a fall for a lost rotor. */
 static float FlHeliHeave(MvUnit* m, const HfMoverDef* d, const float p[3], float gap, float vz, float dt)
 {
     const HfMoverHover* h = &d->hover;
@@ -76,9 +78,14 @@ static float FlHeliHeave(MvUnit* m, const HfMoverDef* d, const float p[3], float
     else m->flWant += m->lift * h->climb_rate * dt;
     m->flWant = MvClamp(m->flWant, groundAlt - 2.0f, h->height_max); /* 2 m under the ground: it sits on its gear */
     m->targetHeight = m->flWant - groundAlt;
-    const float thrust = fminf(expf((m->flWant - alt) / scale), d->thrust_max); /* times its weight */
+    /* The collective's floor still gives ~97 % of its weight at this H, so it would ride its gear springs at full droop.
+     * Resting there with the collective down, it flattens its blades, as a pilot does, and its weight settles it. */
+    const int down = m->flWant <= groundAlt - 1.95f, low = gap < h->height_min + FL_REST;
+    const int flatten = down && low && (fabsf(vz) < 0.25f || m->flPitch < 1.0f); /* once begun, a gear bounce can't stop it */
+    m->flPitch = MvClamp(m->flPitch + (flatten ? -dt : dt) / FL_PITCH_S, 0, 1);
+    const float thrust = m->flPitch * fminf(expf((m->flWant - alt) / scale), d->thrust_max); /* times its weight */
     float az = (1.0f - h->carried) * MV_G * thrust - 2 * h->damping * wn * vz;
-    if (m->znSink > 0 && vz < -m->znSink) az = fmaxf(az, (1.0f - h->carried) * MV_G + 2.0f * (-m->znSink - vz));
+    if (m->znSink > 0) az = fmaxf(fminf(az, (1.0f - h->carried) * MV_G + 2.0f * (-m->znSink - vz)), 0); /* sinks at znSink */
     return az;
 }
 

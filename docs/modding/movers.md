@@ -181,6 +181,8 @@ How a helicopter climbs:
   harder at full lift.
 - `hover.damping` sets how fast it settles. `hover.height` and `stiffness` don't apply.
 - When nobody has driven it for 3 s, it lowers the collective at half `climb_rate` and lands.
+- Resting on its gear with the collective down, it flattens its blades in 1 s. Its whole weight then settles it on
+  its gear springs. Raising the collective brings the pitch back.
 
 How a plane takes off and lands:
 
@@ -263,8 +265,8 @@ SDK 47's `add_damage_zone` puts a sphere on a mover that takes the hits landing 
 | `scale` | 1 | × the damage the vehicle itself takes from a hit in it; negative: none |
 | `sink`, `spin` | 5 m/s, 60 °/s | The broken zone's descent and spin |
 
-- A broken engine or control zone lowers a helicopter's collective and holds its fall to `sink`, as autorotation
-  does. A plane glides down.
+- A broken engine or control zone lowers a helicopter's collective and brings it down at `sink`, as autorotation
+  does. A high `sink`, such as 30 m/s for a lost rotor, makes it fall. A plane glides down.
 - Zones see a hit before `HF_ON_DAMAGE_PRE` listeners, so listeners get the scaled amount.
 - `zone_state` reads a zone. `repair_zones` makes one, or all, whole again.
 - A mover takes up to 24 zones and 8 fixed guns. All movers together take up to 64 of each.
