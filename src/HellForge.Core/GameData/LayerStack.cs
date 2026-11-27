@@ -11,14 +11,19 @@ public sealed class LayerStack
 {
     public sealed record Layer(string Mod, string Folder, string Png);
 
-    readonly Dictionary<ulong, List<Layer>> byTexture = [];
+    readonly Dictionary<ulong, List<Layer>> byTexture;
 
-    public static readonly LayerStack Empty = new();
+    LayerStack(Dictionary<ulong, List<Layer>> layers, string self) => (byTexture, Self) = (layers, self);
+
+    // The mod whose spec is built: its own layers are named without its id.
+    public string Self { get; }
+
+    public LayerStack Seen(string self) => new(byTexture, self);
 
     // The stack of mods in load order: each mod's layers for a texture once, in the order its spec lists them.
     public static LayerStack Of(IEnumerable<(string Mod, string Folder, DataSpec Spec)> mods)
     {
-        var stack = new LayerStack();
+        var stack = new LayerStack([], "");
         foreach (var (mod, folder, spec) in mods)
             foreach (var edit in spec.Patches.SelectMany(p => p.Resources).OfType<EditResource>().Where(e => e.Layers != null))
             {
@@ -35,9 +40,10 @@ public sealed class LayerStack
 
     public IReadOnlyList<Layer> For(ulong texture) => byTexture.TryGetValue(texture, out var layers) ? layers : [];
 
-    // A layer name as a spec of mod `self` writes it: the texture it is added to and its place after the game's layers.
-    public (ulong Texture, int Added) Find(string name, string self)
+    // A layer name as Self's spec writes it: the texture it is added to and its place after the game's layers.
+    public (ulong Texture, int Added) Find(string name)
     {
+        var self = Self;
         var split = name.IndexOf(':', StringComparison.Ordinal);
         var (mod, png) = split > 0 ? (name[..split], name[(split + 1)..]) : (self, name);
         var found = byTexture.SelectMany(t => t.Value.Select((l, i) => (Texture: t.Key, Added: i, Layer: l))).Where(x => x.Layer.Mod == mod && x.Layer.Png == png).ToList();

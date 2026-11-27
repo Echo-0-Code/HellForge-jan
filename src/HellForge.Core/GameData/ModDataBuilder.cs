@@ -21,10 +21,11 @@ public static class ModDataBuilder
     // +0x40 repeat it. Every one of the game's 4821 physics resources is laid out so.
     static readonly int[] PhysicsNames = [0x08, 0x38, 0x40];
 
-    // layers: the session's stacked layers (LayerStack) and self the mod's id there; without them, the mod's own layers.
-    public static List<string> Build(DataSpec spec, string modFolder, GameDataReader game, string output, GameDataReader? steam = null, LayerStack? layers = null, string self = "")
+    // layers: the session's stacked layers (LayerStack), seen by this mod; without them, the mod's own layers.
+    public static List<string> Build(DataSpec spec, string modFolder, GameDataReader game, string output, GameDataReader? steam = null, LayerStack? layers = null)
     {
-        layers ??= LayerStack.Of([(self, modFolder, spec)]);
+        layers ??= LayerStack.Of([("", modFolder, spec)]);
+        var self = layers.Self;
         if (spec.Patches.Any(p => p.Resources.Any(r => r is ShaderResource))) spec = ShaderHosts.Current.Expand(spec);
         if (spec.UsesSteam && steam == null) throw new InvalidDataException("it takes resources from HELLDIVERS 2 as Steam has it installed, and Steam's copy was not found.");
         var (found, foundSteam) = FindSources(spec, game, steam);
@@ -204,7 +205,7 @@ public static class ModDataBuilder
         var gameLayers = new Dictionary<ulong, int>();
         int LayerNumber(string name)
         {
-            var (texture, added) = layers.Find(name, self);
+            var (texture, added) = layers.Find(name);
             if (!gameLayers.TryGetValue(texture, out var count))
             {
                 var at = game.Find([new(ResourceTypes.Texture, texture)]);
@@ -458,7 +459,7 @@ public static class ModDataCache
     {
         var spec = DataSpecs.Load(mod.Folder) ?? throw new InvalidDataException($"{DataSpecs.FileName} is missing.");
         var steamData = spec.UsesSteam ? SteamData() : null;
-        layers ??= LayerStack.Of([(mod.Id, mod.Folder, spec)]);
+        layers = (layers ?? LayerStack.Of([(mod.Id, mod.Folder, spec)])).Seen(mod.Id);
         var key = Key(spec, mod.Folder, Path.Combine(install.Game, "data"), steamData, LayerStack.Uses(spec) ? layers.Stamp() : null);
         var cache = Path.Combine(Folder(install), mod.Id);
         var target = Path.Combine(cache, key);
@@ -469,7 +470,7 @@ public static class ModDataCache
         try
         {
             using var steam = steamData == null ? null : new GameDataReader(steamData);
-            var files = ModDataBuilder.Build(spec, mod.Folder, game(), staging, steam, layers, mod.Id);
+            var files = ModDataBuilder.Build(spec, mod.Folder, game(), staging, steam, layers);
             File.WriteAllText(Path.Combine(staging, Record), JsonSerializer.Serialize(new { builder = ModDataBuilder.Version, key, mod = mod.Id, files },
                 new JsonSerializerOptions { WriteIndented = true }) + "\n");
             try { Directory.Move(staging, target); }
