@@ -12,6 +12,9 @@ On `dev`, since 0.5.0-beta.
 
 ### Added
 
+- **Weapon paints without code.** A mod lists its paints under `paints` in `hellforge-data.json`: a base paint, a
+  colour table edit and camo shapes by name. HellForge builds the colour tables and adds the paints, so a paint mod
+  needs no C.
 - **Stealth for mods (SDK 55).** `set_visibility` scales how far enemy eyes see one entity, such as a quiet vehicle
   and its riders. It is a local write on the game thread, and HellForge puts the game's value back when the mod is
   taken out.

@@ -60,6 +60,8 @@ public sealed record ModManifest(string Id, string Name, string Version, string 
     public IReadOnlyList<ulong> PatchedArchives { get; init; } = [];
     // The icons its data spec builds (texture and GUI material, by name hash): the only icons the loader lets its code name.
     public IReadOnlyList<ulong> Icons { get; init; } = [];
+    // Its data spec's weapon paints (DataPaint), which the loader adds for it.
+    public IReadOnlyList<DataPaint> Paints { get; init; } = [];
     // Why HellForge does not check all of the data spec's output (DataSpecs.Unchecked: a "replace", or a type outside the
     // reviewed ones), or null: mod sync takes such a spec as raw data (ModSets.ClassOf).
     public string? UncheckedSpec { get; init; }
@@ -296,7 +298,7 @@ public static partial class ModCatalog
         // "url": where players get the mod; one that is not an https:// address (WebAddress) is left out
         var url = root.TryGetProperty("url", out var urlElement) && urlElement.ValueKind == JsonValueKind.String ? WebAddress(urlElement.GetString()) : null;
         var manifest = new ModManifest(id, name, version, description, gameplay, Path.GetFullPath(folder), types, writes, data)
-            { CodeDll = code, HasSource = source, Live = live, HasDataSpec = spec, Packages = dataSpec?.Patches.Select(p => p.Package).OfType<ModDataPackage>().ToList() ?? [], PatchedArchives = dataSpec?.Patches.SelectMany(p => p.Archives).Distinct().Select(a => Convert.ToUInt64(a, 16)).ToList() ?? [], Icons = dataSpec?.Patches.SelectMany(p => p.Resources).OfType<IconResource>().Select(i => EngineHash.Murmur64A(Encoding.UTF8.GetBytes(i.Name))).Distinct().ToList() ?? [], UncheckedSpec = dataSpec == null ? null : DataSpecs.Unchecked(dataSpec), Stats = stats, Icon = icon, Lua = lua, Url = url,
+            { CodeDll = code, HasSource = source, Live = live, HasDataSpec = spec, Packages = dataSpec?.Patches.Select(p => p.Package).OfType<ModDataPackage>().ToList() ?? [], Paints = dataSpec?.Paints ?? [], PatchedArchives = dataSpec?.Patches.SelectMany(p => p.Archives).Distinct().Select(a => Convert.ToUInt64(a, 16)).ToList() ?? [], Icons = dataSpec?.Patches.SelectMany(p => p.Resources).OfType<IconResource>().Select(i => EngineHash.Murmur64A(Encoding.UTF8.GetBytes(i.Name))).Distinct().ToList() ?? [], UncheckedSpec = dataSpec == null ? null : DataSpecs.Unchecked(dataSpec), Stats = stats, Icon = icon, Lua = lua, Url = url,
               CoopLevel = ReadCoopLevel(root), Premium = PremiumList(root), AssetOutputs = assets.Outputs, AssetsPending = assets.Pending ?? PastBuildsPending(folder, dataSpec) };
         return manifest with { Coop = DecideTier(root, manifest, new(code, source, data, lua, spec, stats, types, writes)) };
     }
@@ -1008,6 +1010,7 @@ public static class ModLoaderPlan
         foreach (var p in mod.Packages) yield return $"package\t{mod.Id}\t{p.Id:x16}\t{(p.Session ? "session" : "request")}";
         foreach (var a in mod.PatchedArchives) yield return $"archive\t{mod.Id}\t{a:x16}";
         foreach (var i in mod.Icons) yield return $"icon\t{mod.Id}\t{i:x16}";
+        foreach (var paint in mod.Paints) yield return paint.PlanLine(mod.Id);
     }
 
     static string Field(string value) => value.Contains('\t') || value.Contains('\n') || value.Contains('\r')

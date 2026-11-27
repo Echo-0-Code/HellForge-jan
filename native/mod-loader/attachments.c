@@ -649,3 +649,4 @@ static int AttachmentItems(char* text, int n, int size)
 #include "attachment_extras.c" /* members added to vanilla attachments' deltas (stats edits) */
 #include "weapon_picks.c" /* SDK 25: a weapon's customization picks, set through the game's own call */
 #include "patterns.c" /* mods' patterns: weapon paints (as attachments) and unit skins */
+#include "data_paints.c" /* after patterns.c: weapon paints declared as data, from the plan */

@@ -317,6 +317,12 @@ such as a model only that mod adds. That mod keeps its own files; each player's 
 - Mod sync counts it as an edit. The other mod's bytes never leave the player's machine, but players need that mod too.
 - A mod changed while the game runs takes such an edit at the next session.
 
+### paints
+
+A spec's `paints` list adds weapon paints without code: copies of a vanilla paint whose colour tables HellForge edits
+and packs for you. A spec with paints may leave out `patches`. The fields are on
+[patterns](patterns.md#weapon-paints-without-code).
+
 ### Packages of your own
 
 A patch with `package` becomes a whole archive of its own, `data/<id>`, where the id is the hash of the package's name.
