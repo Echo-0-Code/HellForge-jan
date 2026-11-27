@@ -156,15 +156,15 @@ paint picks the layer in its `material_lut`, on the zone rows that carry camoufl
 | 21 | red: contrast, green: offset (the tones are `clamp((layer - 0.5) * contrast + offset)`), blue: tiling, **alpha: the layer**; a negative layer is no camouflage |
 
 Urban Camo uses layer 1 (`[216.625, -1, 1.2, 1]`), Arctic Camo layer 3 (`[216.625, -0.99, 5, 3]`). A four-value LUT
-cell sets alpha too, so a copy of a camouflaged paint's LUTs can take another layer:
+cell sets alpha too, so a copy of a camouflaged paint's LUTs can take another layer. Name a layer you add by its PNG,
+and HellForge writes its number:
 
 ```json
 { "type": "texture", "copy": "0xBEAA6A092DDE05D8", "name": "yourname/your_mod/patterns/tiger_beaa",
-  "lut": { "rows": { "1": { "21": [216.625, -1, 1.2, 5], "16": [0.6, 0.35, 0.1], "17": [0.05, 0.05, 0.05] } } } }
+  "lut": { "rows": { "1": { "21": [216.625, -1, 1.2, "patterns/tiger.png"], "16": [0.6, 0.35, 0.1], "17": [0.05, 0.05, 0.05] } } } }
 ```
 
-A shape of your own is a layer added after the game's five with a texture `edit` ([data specs](data.md#edit)), so
-layer 5 is your first. Each channel of a layer is a soft mask. The high contrast makes a sharp edge where it crosses
+A shape of your own is a layer added after the game's five with a texture `edit` ([data specs](data.md#edit)). Each channel of a layer is a soft mask. The high contrast makes a sharp edge where it crosses
 about 0.5, so paint the shapes with blurred edges (a distance field is best). The layer repeats over the weapon, so
 make each edge match the opposite one.
 The array is in six of the game's archives; list them all:
@@ -174,8 +174,10 @@ The array is in six of the game's archives; list them all:
   "resources": [{ "type": "texture", "edit": "0xF8B2508E99FB9F28", "layers": ["patterns/tiger.png"] }] }
 ```
 
-Every mod that adds layers replaces the whole array, and the top mod's wins: two mods with shapes of their own need to
-be one mod, or one of them loses its layers.
+Mods' layers stack: each mod's copy of the array holds the game's five, then every mod's added layers in load order.
+A layer's number moves when another mod with shapes comes before it, and players' load orders differ, so name it by
+PNG: `"patterns/tiger.png"` for your own, `"<mod id>:patterns/tiger.png"` for another mod's. A number still works for
+the game's own five.
 
 ## Where it shows
 

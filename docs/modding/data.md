@@ -120,7 +120,8 @@ mod, never a game resource's name. The copy can then be changed, in this order:
   makes every row first take this row's values, `columns` (`{"<column>": colour}`) sets columns in every row, and
   `rows` (`{"<row>": {"<column>": colour}}`) sets single cells. A colour keeps the cell's alpha; `[r, g, b, a]` sets
   all four values, any a 16-bit float holds, negative ones too (column 21 of a weapon's LUT picks its camouflage layer
-  by alpha, [patterns](patterns.md#camouflage-shapes-on-weapons)). The mips are rebuilt.
+  by alpha, [patterns](patterns.md#camouflage-shapes-on-weapons)). `[r, g, b, "<png>"]` sets alpha to the number of
+  a layer added with `layers`, by its PNG: your mod's own, or `"<mod id>:<png>"` for another mod's. The mips are rebuilt.
 - `mesh` (on a `unit`): your own geometry from a Wavefront OBJ in the mod folder, `{"obj": "models/cube.obj", "scale":
   1, "yUp": true, "unitSpace": false}`. Every render and shadow mesh in every LOD gets it, rigid on the unit's main bone.
   Models HellForge cannot rebuild yet are refused with the reason.
@@ -259,8 +260,10 @@ A texture edit can instead add layers to one of the game's array textures, after
 { "type": "texture", "edit": "0xF8B2508E99FB9F28", "layers": ["patterns/tiger.png", "patterns/splinter.png"] }
 ```
 
-- The game's layers keep their numbers and the PNGs become the next ones, in order (a 5-layer texture's first added
-  layer is 5). The weapons' camouflage is the use: [patterns](patterns.md#camouflage-shapes-on-weapons).
+- The game's layers keep their numbers. Every mod's added layers follow them, in load order, each mod's in the order
+  it lists them. Each mod's copy of the texture holds all of them, so no mod's shapes are lost.
+- A layer's number depends on the mods before it, and players' load orders differ, so name layers by PNG in a `lut`
+  cell, not by number. The weapons' camouflage is the use: [patterns](patterns.md#camouflage-shapes-on-weapons).
 - The game texture must be unstreamed, with a full mip chain, in a format HellForge encodes (`rgba8`, `bc1`, `bc3`,
   `bc4`, `bc5`); each PNG is its size. Anything else is refused with the reason.
 - `layers` takes no `stages`, `bytes` or `gpu`, and it counts as an edit for mod sync, as other edits do.

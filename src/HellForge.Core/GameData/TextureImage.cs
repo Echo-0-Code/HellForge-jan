@@ -68,6 +68,11 @@ public static class TextureImage
         return new(edited, gpu.ToArray(), game.Stream);
     }
 
+    // An array texture's layer count, from its DX10 header's array size (0 counts as 1).
+    public static int LayerCount(byte[] main) =>
+        main.Length >= 0xC4 + 140 && main.AsSpan(0xC0, 4).SequenceEqual("DDS "u8) ? Math.Max(1, (int)BinaryPrimitives.ReadUInt32LittleEndian(main.AsSpan(0xC4 + 136)))
+            : throw new InvalidDataException("the game texture has no DDS header where HellForge expects it.");
+
     // Halving (rounding down) to 1 x 1, as the game's 23 x 8 colour lookups have 5 levels.
     public static int MipCount(int width, int height)
     {

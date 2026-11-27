@@ -778,7 +778,7 @@ try
                 var sources = (options.GetValueOrDefault("--source-mods") ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
                     .Select(f => new ModPatches(ModCatalog.Parse(Path.GetFullPath(f), EntityProfile.Current))).ToDictionary(m => m.Id, StringComparer.Ordinal);
                 var notes = new List<string>();
-                result = new { output, files = ModDataBuilder.Build(spec, modFolder, game, output, steamGame, sources, notes), notes };
+                result = new { output, files = ModDataBuilder.Build(spec, modFolder, game, output, steamGame, new(sources), notes), notes };
             }
             else result = new { checkedSpec = Path.Combine(modFolder, DataSpecs.FileName), patches = spec.Patches.Count, resources, inputs = spec.Inputs };
             break;

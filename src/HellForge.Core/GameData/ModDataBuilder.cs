@@ -26,9 +26,16 @@ public static class ModDataBuilder
     // not among mods or no longer ships what it edits the way the edit expects; the rest of the spec still builds.
     public const string AfterFolder = "after";
 
+    // What a build takes from the session's other mods: their patches a spec may edit, and the stacked layers (LayerStack)
+    // seen by this mod; without layers, the mod's own.
+    public sealed record SessionMods(IReadOnlyDictionary<string, ModPatches>? Patches, LayerStack? Layers = null);
+
     public static List<string> Build(DataSpec spec, string modFolder, GameDataReader game, string output, GameDataReader? steam = null,
-        IReadOnlyDictionary<string, ModPatches>? mods = null, List<string>? notes = null)
+        SessionMods? session = null, List<string>? notes = null)
     {
+        var mods = session?.Patches;
+        var layers = session?.Layers ?? LayerStack.Of([("", modFolder, spec)]);
+        var self = layers.Self;
         if (spec.Patches.Any(p => p.Resources.Any(r => r is ShaderResource))) spec = ShaderHosts.Current.Expand(spec);
         if (spec.UsesSteam && steam == null) throw new InvalidDataException("it takes resources from HELLDIVERS 2 as Steam has it installed, and Steam's copy was not found.");
         var (found, foundSteam) = FindSources(spec, game, steam);
@@ -100,7 +107,7 @@ public static class ModDataBuilder
         }
         // A game resource under its own key, so the patch takes its place; not in `added`: standing for the game's is its purpose.
         void AddEdit(Dictionary<ResourceKey, ResourceParts> resources, EditResource edit, IReadOnlyList<string> archives) =>
-            AddResource(resources, edit.Where, new(edit.Type, edit.Id), Edited(edit, EditBase(new(edit.Type, edit.Id), From(edit), archives), modFolder));
+            AddResource(resources, edit.Where, new(edit.Type, edit.Id), Edited(edit, EditBase(new(edit.Type, edit.Id), From(edit), archives), modFolder, layers.For(edit.Id), self));
         // An edit of a game resource starts from the copy in the archive its patch replaces it in: packages carry their own
         // copies, and the first in name order (Find) can be an older one (a view with the resource keys of an earlier build,
         // whose edited copy lost the screen's icons). Without a copy there, the first.
@@ -144,6 +151,8 @@ public static class ModDataBuilder
         void AddCopy(Dictionary<ResourceKey, ResourceParts> resources, CopyResource copy, HashSet<ResourceKey> added)
         {
             var copied = new ResourceKey(copy.Type, Hash(copy.Name));
+            try { if (copy.Lut is { } lut) copy = copy with { Lut = lut.WithLayers(LayerNumber) }; }
+            catch (InvalidDataException error) { throw new InvalidDataException($"{copy.Where}.lut: {error.Message}"); }
             try { AddResource(resources, copy.Where, copied, Edit(copy, Read(new(copy.Type, copy.From), From(copy)), modFolder)); }
             catch (InvalidDataException error) when (!error.Message.StartsWith(copy.Where, StringComparison.Ordinal))
             {
@@ -261,6 +270,20 @@ public static class ModDataBuilder
             catch (Exception error) when (error is InvalidDataException or IOException) { notes?.Add($"patches[{p}] is left out: {error.Message}"); }
         }
 
+        // A named layer's number on this machine: the game texture's own layers, then the stack's before it.
+        var gameLayers = new Dictionary<ulong, int>();
+        int LayerNumber(string name)
+        {
+            var (texture, stacked) = layers.Find(name);
+            if (!gameLayers.TryGetValue(texture, out var count))
+            {
+                var at = game.Find([new(ResourceTypes.Texture, texture)]);
+                if (at.Count == 0) throw new InvalidDataException($"layer \"{name}\" is added to texture 0x{texture:X16}, which is not in the game data.");
+                gameLayers[texture] = count = TextureImage.LayerCount(game.Read(at.Values.First()).Main);
+            }
+            return count + stacked;
+        }
+
         var built = new List<(IReadOnlyList<string> Archives, bool Whole, byte[] Archive, byte[] Gpu, byte[] Stream)>();
         var added = new HashSet<ResourceKey>();
         for (var p = 0; p < spec.Patches.Count; p++)
@@ -281,13 +304,19 @@ public static class ModDataBuilder
         return files;
     }
 
-    // An edit applied to the resource it edits (the game's, or another mod's copy).
-    static ResourceParts Edited(EditResource edit, ResourceParts source, string modFolder)
+    // An edit applied to the resource it edits (the game's, or another mod's copy). stacked: the session's layers on a game
+    // texture (LayerStack); without them, the edit's own.
+    static ResourceParts Edited(EditResource edit, ResourceParts source, string modFolder, IReadOnlyList<LayerStack.Layer>? stacked = null, string self = "")
     {
         if (edit.Layers != null)
         {
-            try { return TextureImage.AppendLayers(source, [.. edit.Layers.Select(p => File.ReadAllBytes(Path.Combine(modFolder, p)))]); }
-            catch (InvalidDataException error) { throw new InvalidDataException($"{edit.Where} (texture 0x{edit.Id:X16}): {error.Message}"); }
+            var layers = stacked is { Count: > 0 } ? stacked : [.. edit.Layers.Select(p => new LayerStack.Layer(self, modFolder, p))];
+            try { return TextureImage.AppendLayers(source, [.. layers.Select(l => File.ReadAllBytes(Path.Combine(l.Folder, l.Png)))]); }
+            catch (InvalidDataException error)
+            {
+                var mods = string.Join(", ", layers.Select(l => l.Mod).Where(m => m.Length > 0 && m != self).Distinct());
+                throw new InvalidDataException($"{edit.Where} (texture 0x{edit.Id:X16}{(mods.Length > 0 ? ", with the layers of " + mods : "")}): {error.Message}");
+            }
         }
         if (edit.Slots != null)
         {
@@ -517,6 +546,7 @@ public static class ModDataCache
         var ready = new List<ModManifest>();
         var problems = new List<string>();
         GameDataReader? game = null;
+        var layers = Layers(loaded ?? mods);
         try
         {
             foreach (var mod in mods)
@@ -524,7 +554,7 @@ public static class ModDataCache
                 if (!mod.HasDataSpec) { ready.Add(mod); continue; }
                 try
                 {
-                    var data = Ensure(install, mod, () => game ??= new GameDataReader(Path.Combine(install.Game, "data")), log, loaded ?? mods);
+                    var data = Ensure(install, mod, () => game ??= new GameDataReader(Path.Combine(install.Game, "data")), log, loaded ?? mods, layers);
                     // the mod loads; only those patches stay out, and the Mods page says why
                     problems.AddRange(data.Notes.Select(n => $"{mod.Archive ?? Path.GetFileName(mod.Folder)}: {n}"));
                     ready.Add(mod with { GeneratedData = data.Folder });
@@ -539,15 +569,27 @@ public static class ModDataCache
         return (ready, problems);
     }
 
+    // The layers the session's data mods add, in load order; a spec that does not load is reported when its mod is built.
+    static LayerStack Layers(IReadOnlyList<ModManifest> mods)
+    {
+        var specs = new List<(string, string, DataSpec)>();
+        foreach (var mod in mods.Where(m => m.HasDataSpec))
+            try { if (DataSpecs.Load(mod.Folder) is { } spec) specs.Add((mod.Id, mod.Folder, spec)); }
+            catch (Exception error) when (error is InvalidDataException or IOException or UnauthorizedAccessException or JsonException) { }
+        return LayerStack.Of(specs);
+    }
+
     // The folder of a mod's generated patches, built first when there is none for the current key. loaded: the mods whose
-    // own patches the spec may edit; Notes: the patches left out, and why.
+    // own patches the spec may edit; Notes: the patches left out, and why. layers: the session's (LayerStack); without
+    // it, the mod's own layers only.
     public static (string Folder, IReadOnlyList<string> Files, bool Built, IReadOnlyList<string> Notes) Ensure(InstallLayout install, ModManifest mod, Func<GameDataReader> game,
-        Action<string>? log = null, IReadOnlyList<ModManifest>? loaded = null)
+        Action<string>? log = null, IReadOnlyList<ModManifest>? loaded = null, LayerStack? layers = null)
     {
         var spec = DataSpecs.Load(mod.Folder) ?? throw new InvalidDataException($"{DataSpecs.FileName} is missing.");
         var steamData = spec.UsesSteam ? SteamData() : null;
         var sources = spec.Mods.Select(id => loaded?.FirstOrDefault(m => m.Id == id && m.Id != mod.Id)).OfType<ModManifest>().ToDictionary(m => m.Id, StringComparer.Ordinal);
-        var key = Key(spec, mod.Folder, Path.Combine(install.Game, "data"), steamData, sources);
+        layers = (layers ?? LayerStack.Of([(mod.Id, mod.Folder, spec)])).Seen(mod.Id);
+        var key = Key(spec, mod.Folder, Path.Combine(install.Game, "data"), steamData, sources, LayerStack.Uses(spec) ? layers.Stamp() : null);
         var cache = Path.Combine(Folder(install), mod.Id);
         var target = Path.Combine(cache, key);
         if (File.Exists(Path.Combine(target, Record)))
@@ -561,7 +603,7 @@ public static class ModDataCache
         {
             using var steam = steamData == null ? null : new GameDataReader(steamData);
             var notes = new List<string>();
-            var files = ModDataBuilder.Build(spec, mod.Folder, game(), staging, steam, sources.ToDictionary(s => s.Key, s => new ModPatches(s.Value), StringComparer.Ordinal), notes);
+            var files = ModDataBuilder.Build(spec, mod.Folder, game(), staging, steam, new(sources.ToDictionary(s => s.Key, s => new ModPatches(s.Value), StringComparer.Ordinal), layers), notes);
             foreach (var note in notes) log?.Invoke($"{mod.Id}: {note}");
             File.WriteAllText(Path.Combine(staging, Record), JsonSerializer.Serialize(new BuildRecord(ModDataBuilder.Version, key, mod.Id, files, notes),
                 new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase }) + "\n");
@@ -593,7 +635,9 @@ public static class ModDataCache
 
     sealed record BuildRecord(int Builder, string Key, string Mod, List<string> Files, List<string>? Notes);
 
-    public static string Key(DataSpec spec, string modFolder, string gameData, string? steamData = null, IReadOnlyDictionary<string, ModManifest>? sources = null)
+    // layers: the stacked layers' stamp (LayerStack.Stamp), for a spec whose build depends on other mods' layers.
+    public static string Key(DataSpec spec, string modFolder, string gameData, string? steamData = null, IReadOnlyDictionary<string, ModManifest>? sources = null,
+        string? layers = null)
     {
         var text = new StringBuilder();
         text.Append("builder ").Append(ModDataBuilder.Version).Append('\n');
@@ -605,6 +649,7 @@ public static class ModDataCache
         foreach (var input in spec.Inputs) text.Append(input).Append(' ').Append(FileHash(Path.Combine(modFolder, input))).Append('\n');
         foreach (var id in spec.Mods)
             text.Append("mod ").Append(id).Append(' ').Append(sources?.GetValueOrDefault(id) is { } source ? ModPatches.Stamp(source) : "absent").Append('\n');
+        if (layers != null) text.Append(layers);
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString())))[..16];
     }
 

@@ -208,6 +208,7 @@ static class DataBuilderTests
             Refused("""{"archives":["1111111111111111"],"resources":[{"type":"texture","edit":"0x1","layers":[]}]}""", "a list of .png files");
             Refused("""{"archives":["1111111111111111"],"resources":[{"type":"texture","edit":"0x1","layers":["icon.png"],"bytes":[]}]}""", "an edit of its own");
             Refused("""{"archives":["1111111111111111"],"resources":[{"type":"texture","copy":"0x1","name":"test/mod/lut","lut":{"columns":{"21":[1,2,3,4,5]}}}]}""", "a cell is");
+            Refused("""{"archives":["1111111111111111"],"resources":[{"type":"texture","copy":"0x1","name":"test/mod/lut","lut":{"columns":{"21":[1,2,3,"../one.dds"]}}}]}""", "a layer is named by its .png");
             File.WriteAllText(Path.Combine(folder, DataSpecs.FileName), """{"format":1,"patches":[{"archives":["1111111111111111"],"resources":[{"type":"texture","edit":"0xF8B2508E99FB9F28","layers":["icon.png"]},""" +
                 """{"type":"texture","copy":"0x1","name":"test/mod/lut","lut":{"columns":{"21":[216.625,-1,1.2,5]}}}]}]}""");
             var layered = DataSpecs.Load(folder)!;
@@ -1115,6 +1116,50 @@ static class DataBuilderTests
             catch (InvalidDataException error) { check(error.Message.Contains("resources[0]") && error.Message.Contains("same size"), "The texture is not named: " + error.Message); }
         });
 
+        test("Two mods' layers on one game array texture stack in load order, and paints name their layers", () =>
+        {
+            var install = new InstallLayout(Path.Combine(root, "layer-stack-install"));
+            install.Create("12345");
+            var gameData = Path.Combine(install.Game, "data");
+            WriteGameData(gameData);
+            var mods = Path.Combine(install.Root, "mods");
+            byte[] Shape(byte v) => Png(Enumerable.Repeat(v, 16 * 16 * 4).ToArray(), 16);
+            void Mod(string folder, string id, string pngs, string lut)
+            {
+                var at = Path.Combine(mods, folder);
+                Directory.CreateDirectory(Path.Combine(at, "camo"));
+                File.WriteAllText(Path.Combine(at, ModCatalog.ManifestName), $$"""{"format":1,"id":"{{id}}","name":"{{id}}","version":"1"}""");
+                foreach (var (png, v) in pngs.Split(',').Select((p, i) => (p, (byte)(30 + 10 * i + id.Length)))) File.WriteAllBytes(Path.Combine(at, "camo", png), Shape(v));
+                var listed = string.Join(",", pngs.Split(',').Select(p => '"' + "camo/" + p + '"'));
+                File.WriteAllText(Path.Combine(at, DataSpecs.FileName), $$"""{"format":1,"patches":[{"archives":["1111111111111111"],"resources":[{"type":"texture","edit":"0x7777","layers":[{{listed}}]},""" +
+                    $$"""{"type":"texture","copy":"0x2222","name":"{{id}}/lut","lut":{"rows":{"1":{"21":""" + lut + "}}}}]}]}");
+            }
+            Mod("a", "test.a", "one.png", """[216.625, -1, 1.2, "camo/one.png"]""");
+            Mod("b", "test.bb", "two.png,three.png", """[216.625, -1, 1.2, "camo/three.png"]""");
+            var (loaded, problems) = ModCatalog.Load(mods);
+            var order = loaded.OrderBy(m => m.Id, StringComparer.Ordinal).ToList();
+            var (ready, failed) = ModDataCache.Prepare(install, order);
+            check(problems.Count == 0 && failed.Count == 0 && ready.Count == 2, "The layer mods did not build: " + string.Join(" | ", problems.Concat(failed)));
+            Dictionary<ResourceKey, ResourceParts> Built(ModManifest mod) => ResourceArchive.Read(File.ReadAllBytes(Path.Combine(mod.GeneratedData!, "1111111111111111.patch_0")),
+                File.ReadAllBytes(Path.Combine(mod.GeneratedData!, "1111111111111111.patch_0.gpu_resources")), []);
+            var (a, b) = (Built(ready[0]), Built(ready[1]));
+            var tiler = new ResourceKey(ResourceTypes.Texture, 0x7777);
+            check(TextureImage.LayerCount(a[tiler].Main) == 5 && a[tiler].Gpu.SequenceEqual(b[tiler].Gpu) && a[tiler].Main.SequenceEqual(b[tiler].Main),
+                "Each mod's copy of the array is not the game's 2 layers and both mods' 3.");
+            float Alpha(Dictionary<ResourceKey, ResourceParts> built, string id) =>
+                (float)BinaryPrimitives.ReadHalfLittleEndian(built[new(ResourceTypes.Texture, EngineHash.Murmur64A(Encoding.UTF8.GetBytes(id + "/lut")))].Gpu.AsSpan((23 + 21) * 8 + 6));
+            check(Alpha(a, "test.a") == 2f && Alpha(b, "test.bb") == 4f, $"The named layers are not numbered in load order: {Alpha(a, "test.a")}, {Alpha(b, "test.bb")}.");
+            // the other load order moves the numbers, and each mod is rebuilt for it
+            var (swapped, _) = ModDataCache.Prepare(install, [order[1], order[0]]);
+            check(Alpha(Built(swapped[1]), "test.a") == 4f && Alpha(Built(swapped[0]), "test.bb") == 3f, "Another load order kept the old layer numbers.");
+            Mod("b", "test.bb", "two.png,three.png", """[216.625, -1, 1.2, "test.a:camo/one.png"]""");
+            check(Alpha(Built(ModDataCache.Prepare(install, ModCatalog.Load(mods).Mods.OrderBy(m => m.Id, StringComparer.Ordinal).ToList()).Mods[1]), "test.bb") == 2f,
+                "A layer of another mod, named with its id, has the wrong number.");
+            Mod("b", "test.bb", "two.png", """[216.625, -1, 1.2, "test.c:camo/one.png"]""");
+            var (_, missing) = ModDataCache.Prepare(install, ModCatalog.Load(mods).Mods.OrderBy(m => m.Id, StringComparer.Ordinal).ToList());
+            check(missing.Single().Contains("is not added by test.c"), "A layer no mod adds was not reported: " + string.Join(" | ", missing));
+        });
+
         test("A data spec's package builds as a whole archive of its own id, is staged under it, and the loader plan names it", () =>
         {
             var install = new InstallLayout(Path.Combine(root, "mod-package-install"));
@@ -1337,6 +1382,7 @@ static class DataBuilderTests
             [bank] = new("bank-first"u8.ToArray(), [], Enumerable.Repeat((byte)9, 40).ToArray()),
             [new(ResourceTypes.Unit, EngineHash.Murmur64A("test/mod/taken"u8))] = new([1], [], []),
             [new(ResourceTypes.Unit, 0x6666)] = new(JointedUnit(), [5], []),
+            [new(ResourceTypes.Texture, 0x7777)] = TextureImage.Build([Png(Enumerable.Repeat((byte)10, 16 * 16 * 4).ToArray(), 16), Png(Enumerable.Repeat((byte)20, 16 * 16 * 4).ToArray(), 16)], "rgba8"),
         });
         var second = ResourceArchive.Write(new Dictionary<ResourceKey, ResourceParts> { [bank] = new("bank-second"u8.ToArray(), [], [1, 2, 3]) });
         WriteBundles(folder, new Dictionary<string, byte[]>

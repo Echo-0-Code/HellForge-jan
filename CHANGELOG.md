@@ -29,6 +29,9 @@ On `dev`, since 0.5.0-beta.
 
 ### Fixed
 
+- **Several mods can add camouflage shapes.** Every mod's layers on a game array texture now stack in load order,
+  instead of the top mod's copy replacing the others. A paint names its layer by PNG (`[r, g, b, "<png>"]` in a
+  `lut` cell), and HellForge writes the number that layer has on each player's machine.
 - **find_enemies and other position reads see every unit class.** A unit's position was read for two pinned classes
   only, so units of other classes were left out. The scene-graph offset now comes from each class's own getter.
 - **No crash entering the ship with Difficulty 11 and mods' attachments.** The game's entity delta table has rows

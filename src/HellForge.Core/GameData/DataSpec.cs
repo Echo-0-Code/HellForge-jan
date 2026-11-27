@@ -522,11 +522,16 @@ public static partial class DataSpecs
         if (!e.TryGetProperty("lut", out var lutSpec)) return null;
         Fields(lutSpec, $"{at}.lut", "zonesFrom", "columns", "rows");
         int? zonesFrom = lutSpec.TryGetProperty("zonesFrom", out var z) ? (z.ValueKind == JsonValueKind.Number && z.TryGetInt32(out var row) && row >= 0 ? row : throw new InvalidDataException($"{at}.lut: zonesFrom is a row number.")) : null;
-        var columns = lutSpec.TryGetProperty("columns", out var cs) ? Cells(cs, $"{at}.lut.columns") : [];
+        var layers = new Dictionary<(int Row, int Column), string>();
+        var columns = lutSpec.TryGetProperty("columns", out var cs) ? Cells(cs, $"{at}.lut.columns", -1, layers) : [];
         var rows = new Dictionary<int, IReadOnlyDictionary<int, double[]>>();
         if (lutSpec.TryGetProperty("rows", out var rs))
-            foreach (var item in Object(rs, $"{at}.lut.rows")) rows[Index(item.Name, $"{at}.lut.rows")] = Cells(item.Value, $"{at}.lut.rows");
-        return new(zonesFrom, columns, rows);
+            foreach (var item in Object(rs, $"{at}.lut.rows"))
+            {
+                var y = Index(item.Name, $"{at}.lut.rows");
+                rows[y] = Cells(item.Value, $"{at}.lut.rows", y, layers);
+            }
+        return new(zonesFrom, columns, rows, layers.Count > 0 ? layers : null);
     }
 
     static MeshFile? ReadMesh(JsonElement e, string at, ulong type, string? folder, ISet<string> inputs)
@@ -644,18 +649,27 @@ public static partial class DataSpecs
         throw new InvalidDataException($"{at}: build is a day (\"2024-03-01\") or a data manifest of the game (\"553853:<manifest>\", as an asset report names it).");
     }
 
-    static Dictionary<int, double[]> Cells(JsonElement e, string at) =>
-        Object(e, at).ToDictionary(item => Index(item.Name, at), item => LutCell(item.Value, at));
+    static Dictionary<int, double[]> Cells(JsonElement e, string at, int row, Dictionary<(int Row, int Column), string> layers) =>
+        Object(e, at).ToDictionary(item => Index(item.Name, at), item => LutCell(item.Value, at, (row, Index(item.Name, at)), layers));
 
     // A lookup texture's cell: a colour, or [r, g, b, a] to set all four of its 16-bit floats. The fourth value and
     // negative ones are data the shader reads (such as column 21's camouflage layer, or -1 for none), so any value a
-    // half float holds is taken.
-    static double[] LutCell(JsonElement e, string at)
+    // half float holds is taken. A fourth value that is text names a layer (LayerStack), whose number is set at build.
+    static double[] LutCell(JsonElement e, string at, (int Row, int Column) cell, Dictionary<(int Row, int Column), string> layers)
     {
         if (e.ValueKind == JsonValueKind.String) return Colour(e, at);
-        if (e.ValueKind != JsonValueKind.Array || e.GetArrayLength() is not (3 or 4) || !e.EnumerateArray().All(v => v.ValueKind == JsonValueKind.Number))
-            throw new InvalidDataException($"{at}: a cell is [r, g, b], [r, g, b, a] or \"#RRGGBB\".");
-        var values = e.EnumerateArray().Select(v => v.GetDouble()).ToArray();
+        var items = e.ValueKind == JsonValueKind.Array ? e.EnumerateArray().ToList() : [];
+        if (items.Count == 4 && items[3].ValueKind == JsonValueKind.String)
+        {
+            var name = items[3].GetString()!.Replace('\\', '/');
+            if (!name.EndsWith(".png", StringComparison.OrdinalIgnoreCase) || !InModFolder(name[(name.IndexOf(':', StringComparison.Ordinal) + 1)..]))
+                throw new InvalidDataException($"{at}: a layer is named by its .png, as a layers edit lists it (\"<mod id>:<png>\" for another mod's).");
+            layers[cell] = name;
+            items[3] = JsonDocument.Parse("0").RootElement;
+        }
+        if (items.Count is not (3 or 4) || !items.All(v => v.ValueKind == JsonValueKind.Number))
+            throw new InvalidDataException($"{at}: a cell is [r, g, b], [r, g, b, a], [r, g, b, \"<layer>.png\"] or \"#RRGGBB\".");
+        var values = items.Select(v => v.GetDouble()).ToArray();
         return values.All(v => double.IsFinite(v) && Math.Abs(v) <= 65504) ? values
             : throw new InvalidDataException($"{at}: a cell's values are numbers from -65504 to 65504.");
     }
