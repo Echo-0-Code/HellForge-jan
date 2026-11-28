@@ -428,7 +428,10 @@ static void KitTick(MvUnit* m, float dt)
     KitInit(m);
     float w[16];
     if (!ApiJointPose(&g_mvMod, m->unit, 0, HF_POSE_WORLD, w) || !isfinite(w[12])) return;
-    if (g_kitZoneCount > 0 && !m->remote && ApiIsAuthority(&g_mvMod, m->entity) != 0) ZnStrikes(m, w, dt);
+    /* A flier still hanging under the craft that brings it has that craft inside its rotors' reach: no strikes until
+     * it first stands over ground. */
+    const int carried = MvFlier(g_mvDefs[m->def - 1].def.mode) && !m->engaged;
+    if (g_kitZoneCount > 0 && !carried && !m->remote && ApiIsAuthority(&g_mvMod, m->entity) != 0) ZnStrikes(m, w, dt);
     if (g_kitGunCount == 0) return;
     const int joiner = MvRole() == HF_SESSION_JOINER;
     if (m->remote && !joiner) return; /* a host's copy of a joiner's walker: its guns are asked for, never this machine's */
