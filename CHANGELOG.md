@@ -57,6 +57,10 @@ On `dev`, since 0.5.0-beta.
 
 ### Fixed
 
+- **Fixes from a review of the whole code.** 96 faults found by reading the launcher, the local backend, the session
+  runner, the mod loader, the editor and the overlay are fixed. A downpatch file no longer carries a player's swapped
+  upscaler. A mod taken out live leaves no menu tabs, tips, hooks or mover parts behind. A mod settings file that
+  cannot be read is kept instead of reset.
 - **More mods can be changed while the game runs.** A paint mod or a stratagem layout mod set up again keeps the paints
   and placements its earlier load made, instead of being refused. A list search mod taken out no longer leaves its
   filter or a second band behind.
@@ -803,8 +807,6 @@ packs, and the launcher says when a newer HellForge is out.
 - **The game offers only the voices in the game copy.** Steam answered the game for the player's own install, so a voice
   whose pack the copy lacked was offered and crashed the game. HellForge now answers from the copy
   ([Steam Cloud](docs/steam-cloud.md#the-stand-in), #493).
-
-### Fixed
 
 - **Room for about 1,000 enemies.** A world now holds 4,096 entities instead of 2,048. The AI avoidance holds
   2,048 enemies instead of 512, and the ragdolls 2,048. Past about 540 and 650 live enemies, the game used to crash.
