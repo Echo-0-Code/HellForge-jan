@@ -285,12 +285,10 @@ public static class ModStaging
         var next = new Dictionary<string, int>(StringComparer.Ordinal);
         int NextIndex(string bundle)
         {
-            if (!next.TryGetValue(bundle, out var index))
-            {
-                index = 0;
-                /* after the bundle's own patches (the game's or the player's); the last session's staged ones do not count */
-                while (!previous.Contains($"{bundle}.patch_{index}") && File.Exists(Path.Combine(data, $"{bundle}.patch_{index}"))) index++;
-            }
+            var index = next.GetValueOrDefault(bundle);
+            /* past the bundle's own patches (the game's or the player's), for every group: a player's patch can sit
+               between staged ones; the last session's staged ones do not count */
+            while (!previous.Contains($"{bundle}.patch_{index}") && File.Exists(Path.Combine(data, $"{bundle}.patch_{index}"))) index++;
             next[bundle] = index + 1;
             return index;
         }

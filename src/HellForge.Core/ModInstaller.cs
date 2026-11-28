@@ -59,19 +59,21 @@ public static class ModInstaller
         return new(source, isZip, mod.Id, mod.Name, mod.Version, replaces) { InstalledFolder = current?.Folder };
     }
 
-    // Puts the mod into mods/ (after removing the copy it replaces); returns where it went.
+    // Puts the mod into mods/ (in place of the copy it replaces); returns where it went.
     public static string Add(InstallLayout install, Candidate mod)
     {
         Directory.CreateDirectory(install.Mods);
-        if (mod.Replaces != null) Delete(install, mod.Replaces);
-        var target = FreeTarget(install, mod);
         // copied under a name nothing loads (a dot folder, a .partial file), then moved in whole: the Mods page and a
         // starting session never see half a mod
         var staging = Path.Combine(install.Mods, ".adding-" + Guid.NewGuid().ToString("N")[..8] + (mod.IsZip ? ".partial" : ""));
+        string target;
         try
         {
             if (mod.IsZip) File.Copy(mod.Source, staging);
             else CopyFolder(mod.Source, staging, whole: CosmeticPacks.IsPack(mod.Source));
+            // The copy it replaces goes only once the new one is whole: a failed copy leaves the old mod in place.
+            if (mod.Replaces != null) Delete(install, mod.Replaces);
+            target = FreeTarget(install, mod);
             if (mod.IsZip) File.Move(staging, target);
             else Directory.Move(staging, target);
         }

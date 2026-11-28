@@ -184,7 +184,9 @@ public static partial class ModCatalog
         }
         foreach (var duplicate in mods.GroupBy(m => m.Id).Where(g => g.Count() > 1))
             problems.Add($"Two mods use the id {duplicate.Key}; neither is loaded.");
-        mods.RemoveAll(m => mods.Count(other => other.Id == m.Id) > 1);
+        // Collected first: RemoveAll compacts the list as it goes, so counting inside it misses a later copy.
+        var twice = mods.GroupBy(m => m.Id).Where(g => g.Count() > 1).Select(g => g.Key).ToHashSet();
+        mods.RemoveAll(m => twice.Contains(m.Id));
         // Network configuration conflicts retain their existing behavior. Stats follow mod order, last edit wins.
         RemoveNativeConflicts(mods, problems);
         var ordered = Ordered(mods, settings.Order);
@@ -334,18 +336,27 @@ public static partial class ModCatalog
         ResourceTypes.Hash("wwise_stream"), ResourceTypes.Hash("wwise_dep"), ResourceTypes.Hash("wwise_metadata"),
         ResourceTypes.Hash("wwise_properties"), ResourceTypes.Hash("font"), ResourceTypes.Hash("strings")];
 
-    // Answers kept by the mod's content hash, as the digest's zip hashes are: the same bytes are classified once.
+    // Answers kept by the data files' names, sizes and write times: hashing the mod's content on every catalogue load
+    // would cost more than the patch read it saves.
     static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> clientOnlyPatches = new(StringComparer.Ordinal);
 
     // Whether every resource of every data/ patch is one the client alone sees. A patch that cannot be read, has no
     // resources or holds any other type makes the mod shared.
     static bool ClientOnlyPatches(ModManifest mod)
     {
-        // a recipe's patches are not there to read until they are rebuilt; asked again then (the same content hash)
+        // a recipe's patches are not there to read until they are rebuilt; asked again then
         if (mod.AssetsPending != null) return false;
         string key;
-        try { key = ModSets.ContentHash(mod); }
-        catch (Exception error) when (error is InvalidDataException or IOException or UnauthorizedAccessException or ArgumentException or OverflowException or IndexOutOfRangeException)
+        try
+        {
+            var folder = Path.Combine(mod.Folder, "data");
+            key = folder + "|" + string.Join("|", mod.DataFiles.Order(StringComparer.Ordinal).Select(name =>
+            {
+                var info = new FileInfo(Path.Combine(folder, name));
+                return $"{name}:{info.Length}:{info.LastWriteTimeUtc.Ticks}";
+            }));
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
         {
             return false;
         }
@@ -1082,7 +1093,11 @@ public static partial class ModSettings
     // progression (they open warbonds).
     public const int DefaultForgeCreditChance = 30;
 
-    public static State Read(string modsFolder)
+    public static State Read(string modsFolder) => Read(modsFolder, forChange: false);
+
+    // For display a file that cannot be read gives the defaults. For a change, which writes the whole state back, that
+    // would wipe the player's choices: a file in use fails the change, and a malformed one is first kept beside it.
+    static State Read(string modsFolder, bool forChange)
     {
         var path = Path.Combine(modsFolder, FileName);
         if (!File.Exists(path)) path = Path.Combine(modsFolder, LegacyFileName);
@@ -1101,7 +1116,11 @@ public static partial class ModSettings
             state.ImportDone = root.TryGetProperty("importDone", out var imported) && imported.ValueKind == JsonValueKind.True;
             ReadModpack(root, state);
         }
-        catch (Exception error) when (error is JsonException or IOException) { }
+        catch (IOException) when (!forChange) { }
+        catch (Exception error) when (error is JsonException or InvalidOperationException)
+        {
+            if (forChange) File.Copy(path, Path.Combine(modsFolder, FileName + ".unreadable"), overwrite: true);
+        }
         return state;
     }
 
@@ -1259,7 +1278,7 @@ public static partial class ModSettings
 
     static void Change(string modsFolder, Action<State> change)
     {
-        var state = Read(modsFolder);
+        var state = Read(modsFolder, forChange: true);
         change(state);
         Directory.CreateDirectory(modsFolder);
         var path = Path.Combine(modsFolder, FileName);

@@ -153,8 +153,10 @@ public sealed record ModSet(string Digest, IReadOnlyList<ModSetEntry> Mods)
         JsonNode? root;
         try { root = JsonNode.Parse(json); }
         catch (JsonException error) { throw new InvalidDataException("The mod set is not JSON: " + error.Message); }
-        if (root is not JsonObject set || (int?)set["format"] != 1) throw new InvalidDataException("The mod set has no format 1.");
-        var digest = (string?)set["digest"] ?? "";
+        // Read by kind: a cast throws InvalidOperationException on a host's wrong kind, which no caller catches.
+        if (root is not JsonObject set || set["format"] is not JsonValue format || !format.TryGetValue<int>(out var version) || version != 1)
+            throw new InvalidDataException("The mod set has no format 1.");
+        var digest = set["digest"] is JsonValue digestValue && digestValue.TryGetValue<string>(out var text) ? text : "";
         if (digest != "none" && !ModSets.Hex(digest, 32)) throw new InvalidDataException("The mod set's digest is malformed.");
         if (set["mods"] is not JsonArray list || list.Count > MaxMods) throw new InvalidDataException("The mod set's mods are missing or too many.");
         var mods = new List<ModSetEntry>();
@@ -884,6 +886,15 @@ public sealed record ModSyncSession(string Host, string HostName, string Connect
     }
 
     public static ModSyncSession Read(string path)
+    {
+        try { return ReadChecked(path); }
+        catch (Exception error) when (error is InvalidOperationException or FormatException or JsonException)
+        {
+            throw new InvalidDataException("The mod sync file is malformed: " + error.Message);
+        }
+    }
+
+    static ModSyncSession ReadChecked(string path)
     {
         var root = JsonNode.Parse(File.ReadAllText(path)) as JsonObject ?? throw new InvalidDataException("The mod sync file is not an object.");
         if ((int?)root["format"] != 1) throw new InvalidDataException("The mod sync file has no format 1.");

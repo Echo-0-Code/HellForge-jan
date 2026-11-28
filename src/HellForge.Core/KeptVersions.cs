@@ -492,7 +492,7 @@ public static partial class KeptVersions
         {
             step?.Invoke(label);
             journal.Add(new(from, to));
-            File.WriteAllText(journalFile, JsonSerializer.Serialize(journal, CopyPreparer.JsonOptions));
+            WriteJournal(journalFile, journal);
             Directory.CreateDirectory(Path.GetDirectoryName(to)!);
             if (Directory.Exists(from)) Directory.Move(from, to);
             else File.Move(from, to);
@@ -582,14 +582,27 @@ public static partial class KeptVersions
         return failed;
     }
 
+    // The journal replaced whole: a kill while it is written must not leave half a list, which undoes nothing.
+    static void WriteJournal(string journalFile, List<Move> journal)
+    {
+        var partial = journalFile + ".partial";
+        File.WriteAllText(partial, JsonSerializer.Serialize(journal, CopyPreparer.JsonOptions));
+        File.Move(partial, journalFile, overwrite: true);
+    }
+
     // A switch a kill cut short: its journal's renames undone.
     public static void Recover(InstallLayout install)
     {
         var journalFile = Path.Combine(Root(install), JournalName);
         if (!File.Exists(journalFile)) return;
         List<Move> journal;
+        // An unreadable journal undoes nothing, so the staged folders (the app and the player's data) must stay.
         try { journal = JsonSerializer.Deserialize<List<Move>>(File.ReadAllText(journalFile), CopyPreparer.JsonOptions) ?? []; }
-        catch (JsonException) { journal = []; }
+        catch (JsonException error)
+        {
+            throw new InvalidDataException($"The switch journal cannot be read ({error.Message}): {journalFile}. " +
+                $"The folders named {IncomingPrefix}* beside it hold what the switch had moved; nothing was deleted.");
+        }
         foreach (var move in journal)
             if (!LocalInstall.Within(move.From, install.Root) || !LocalInstall.Within(move.To, install.Root))
                 throw new InvalidDataException("The switch journal names a path outside the installation: " + journalFile);

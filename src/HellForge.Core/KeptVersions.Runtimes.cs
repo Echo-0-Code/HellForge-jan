@@ -77,7 +77,7 @@ public static partial class KeptVersions
         {
             step?.Invoke(label);
             journal.Add(new(from, to));
-            File.WriteAllText(journalFile, JsonSerializer.Serialize(journal, CopyPreparer.JsonOptions));
+            WriteJournal(journalFile, journal);
             Directory.CreateDirectory(Path.GetDirectoryName(to)!);
             if (Directory.Exists(from)) Directory.Move(from, to);
             else File.Move(from, to);
