@@ -9,7 +9,7 @@
  * joint_poses.c and behaviours.c (BhvMapFind). */
 
 #define SE_EFFECTS 64
-#define SE_TARGETS 256
+#define SE_TARGETS 512
 #define SE_SLOTS 4      /* effects one entity carries at once */
 #define SE_SHOWN 32     /* textures one entity shows */
 #define SE_KIDS 5       /* MountComponentData's slots */
@@ -29,7 +29,8 @@ typedef struct SeEffect
     uint32_t lookCount;
     uint64_t package;
 } SeEffect;
-typedef struct SeSlot { uint32_t effect, level; float meter; double lastGain, levelSince; int remote; } SeSlot;
+/* unsent: its level has still to reach the other machines (the send budget was spent) */
+typedef struct SeSlot { uint32_t effect, level; float meter; double lastGain, levelSince; int remote, unsent; } SeSlot;
 typedef struct SeShown { uint32_t material, texture, effect; uint64_t own, shown; } SeShown;
 typedef struct SeKid { uint32_t entity, unit, shownCount; uint64_t name; SeShown shown[SE_KID_SHOWN]; } SeKid;
 typedef struct SeTarget
@@ -131,6 +132,23 @@ static uint32_t SeUnitOf(uint32_t entity)
 
 static void SeReleaseKid(uint32_t entity);
 
+/* What the fixed tables could not take since the last report: entities, effects on one entity, textures on one entity,
+ * other machines' levels, and levels sent late. SeTick says so once a second. */
+enum { SE_DROP_TARGET, SE_DROP_SLOT, SE_DROP_SHOWN, SE_DROP_INBOX, SE_DROP_LATE, SE_DROPS };
+static volatile LONG g_seDrops[SE_DROPS];
+static void SeDropsReport(void)
+{
+    static ULONGLONG said;
+    const ULONGLONG now = GetTickCount64();
+    if (now - said < 1000) return;
+    LONG n[SE_DROPS], any = 0;
+    for (int i = 0; i < SE_DROPS; i++) any |= n[i] = InterlockedExchange(&g_seDrops[i], 0);
+    if (!any) return;
+    said = now;
+    Note("status effects: no room for %ld entities (%d at once), %ld effects on an entity (%d), %ld textures, %ld levels from other players; %ld levels sent late",
+        (long)n[SE_DROP_TARGET], SE_TARGETS, (long)n[SE_DROP_SLOT], SE_SLOTS, (long)n[SE_DROP_SHOWN], (long)n[SE_DROP_INBOX], (long)n[SE_DROP_LATE]);
+}
+
 static SeTarget* SeTargetOf(uint32_t entity, int create)
 {
     SeTarget* free_at = NULL;
@@ -139,6 +157,7 @@ static SeTarget* SeTargetOf(uint32_t entity, int create)
         if (g_seTargets[i].entity == entity) return &g_seTargets[i];
         if (free_at == NULL && g_seTargets[i].entity == 0) free_at = &g_seTargets[i];
     }
+    if (create && free_at == NULL) InterlockedIncrement(&g_seDrops[SE_DROP_TARGET]);
     if (!create || free_at == NULL) return NULL;
     uint32_t unit = SeUnitOf(entity);
     if (unit == 0) return NULL;
@@ -154,6 +173,7 @@ static SeSlot* SeSlotOf(SeTarget* t, uint32_t effect, int create)
     if (!create) return NULL;
     for (int i = 0; i < SE_SLOTS; i++)
         if (t->slots[i].effect == 0) { t->slots[i] = (SeSlot){effect, 0, 0, g_seClock, g_seClock, 0}; return &t->slots[i]; }
+    InterlockedIncrement(&g_seDrops[SE_DROP_SLOT]);
     return NULL;
 }
 
@@ -189,6 +209,7 @@ static uint64_t SeWanted(const SeTarget* t, uint64_t name, uint32_t material, ui
 static SeShown* SeShownOf(const SeSkin* k, uint32_t material, uint32_t texture, int create)
 {
     for (uint32_t i = 0; i < *k->shownCount; i++) if (k->shown[i].material == material && k->shown[i].texture == texture) return &k->shown[i];
+    if (create && *k->shownCount >= k->cap) InterlockedIncrement(&g_seDrops[SE_DROP_SHOWN]);
     if (!create || *k->shownCount >= k->cap) return NULL;
     k->shown[*k->shownCount] = (SeShown){material, texture, 0, 0, 0};
     return &k->shown[(*k->shownCount)++];
@@ -367,23 +388,26 @@ static void SeForget(SeTarget* t)
 
 /* ---- meters and levels ---- */
 
-static void SeShare(const SeEffect* e, const SeTarget* t, uint32_t level)
+/* Tells the other machines its level. 0 when this second's send budget is spent: the slot stays unsent and
+ * SeTargetTick sends its level then, so no machine keeps a look the entity lost. */
+static int SeShare(const SeEffect* e, const SeTarget* t, uint32_t level)
 {
     uint32_t unit = 0, network = WC_NO_NETWORK;
-    if (!(e->def.flags & HF_EFFECT_SHARED_LOOK) || !WcEntity(t->entity, &unit, &network) || network == WC_NO_NETWORK) return;
+    if (!(e->def.flags & HF_EFFECT_SHARED_LOOK) || !WcEntity(t->entity, &unit, &network) || network == WC_NO_NETWORK) return 1;
     AcquireSRWLockShared(&g_sessionLock);
     const uint32_t role = g_session.role;
     ReleaseSRWLockShared(&g_sessionLock);
-    if (role == HF_SESSION_SOLO) return; /* nobody to tell: the line would only fill the pipe's queue */
+    if (role == HF_SESSION_SOLO) return 1; /* nobody to tell: the line would only fill the pipe's queue */
     ULONGLONG now = GetTickCount64();
     if (now - g_seRefilled >= 1000) { g_seTokens = CHANNEL_RATE; g_seRefilled = now; }
-    if (g_seTokens == 0) return;
+    if (g_seTokens == 0) return 0;
     g_seTokens--;
     SeWire wire = {SE_WIRE_VERSION, (uint8_t)level, 0, network, e->key};
     char hex[sizeof wire * 2 + 1], line[64 + sizeof hex];
     ChannelHex((const uint8_t*)&wire, sizeof wire, hex);
     snprintf(line, sizeof line, "send\t%s\tall\t%s", SE_CHANNEL, hex);
     LiveQueue(line);
+    return 1;
 }
 
 static void SeLevelChanged(SeTarget* t, SeSlot* s, uint32_t level)
@@ -394,7 +418,7 @@ static void SeLevelChanged(SeTarget* t, SeSlot* s, uint32_t level)
     s->levelSince = g_seClock;
     t->dirty = 1;
     if (level && (e->def.levels[level - 1].flags & HF_EFFECT_SPEND)) s->meter = 0;
-    if (!s->remote) SeShare(e, t, level);
+    if (!s->remote && (s->unsent = !SeShare(e, t, level)) != 0) InterlockedIncrement(&g_seDrops[SE_DROP_LATE]);
     if (e->def.on_level && !ModGone(e->mod)) e->def.on_level(e->mod, s->effect, t->entity, from, level, s->remote, e->def.user);
 }
 
@@ -499,7 +523,8 @@ static int SeTargetTick(SeTarget* t, float dt)
         SeDecay(e, s, dt);
         uint32_t level = s->remote ? s->level : SeLevelFor(e, s);
         if (level != s->level) SeLevelChanged(t, s, level);
-        if (s->level == 0 && s->meter <= 0) { s->effect = 0; t->dirty = 1; continue; }
+        else if (s->unsent) s->unsent = !SeShare(e, t, s->level);
+        if (s->level == 0 && s->meter <= 0 && !s->unsent) { s->effect = 0; t->dirty = 1; continue; }
         left = 1;
     }
     return left || SeShowsAny(t);
@@ -557,6 +582,7 @@ static void SeReceive(uint64_t from, const uint8_t* data, uint32_t bytes)
     if (wire.version != SE_WIRE_VERSION) return;
     AcquireSRWLockExclusive(&g_seLock);
     if (g_seInboxCount < 64) g_seInbox[g_seInboxCount++] = wire;
+    else InterlockedIncrement(&g_seDrops[SE_DROP_INBOX]);
     ReleaseSRWLockExclusive(&g_seLock);
 }
 
@@ -611,6 +637,7 @@ static void SeTick(HfMod* mod, float dt, void* user)
         if (scale != 1) g_seDamage[damage++] = (SeDamageRow){t->entity, scale};
     }
     InterlockedExchange(&g_seDamageCount, damage);
+    SeDropsReport();
     InterlockedExchange(&g_seInTick, 0);
     ReleaseSRWLockExclusive(&g_seTargetLock);
 }

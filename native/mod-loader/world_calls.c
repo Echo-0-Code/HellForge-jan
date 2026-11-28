@@ -224,7 +224,11 @@ static uint32_t ApiPlayEffect(HfMod* mod, const HfEffect* effect)
     if (g_wcNextHandle == 0) g_wcNextHandle = 1;
     uint32_t handle = e->handle;
     ReleaseSRWLockExclusive(&g_wcLock);
-    if (InterlockedExchange(&g_wcTicking, 1) == 0) ApiOnGameThread(&g_wcMod, WcTick, NULL);
+    if (InterlockedExchange(&g_wcTicking, 1) == 0)
+    {
+        g_wcStateSeen = ReadState(ApiModuleBase("game.dll", NULL)); /* or the first update would take it for a new world */
+        ApiOnGameThread(&g_wcMod, WcTick, NULL);
+    }
     if (effect->flags & HF_EFFECT_SHARED) WcShare(mod, handle, network, &p);
     return handle;
 }
@@ -267,7 +271,11 @@ static void WcReceive(uint64_t from, const uint8_t* data, uint32_t bytes)
     if (g_wcInboxCount < WC_INBOX) g_wcInbox[g_wcInboxCount++] = (WcInbox){from, wire};
     else InterlockedIncrement(&g_wcInboxDropped);
     ReleaseSRWLockExclusive(&g_wcLock);
-    if (InterlockedExchange(&g_wcTicking, 1) == 0) ApiOnGameThread(&g_wcMod, WcTick, NULL);
+    if (InterlockedExchange(&g_wcTicking, 1) == 0)
+    {
+        g_wcStateSeen = ReadState(ApiModuleBase("game.dll", NULL)); /* or the first update would take it for a new world */
+        ApiOnGameThread(&g_wcMod, WcTick, NULL);
+    }
 }
 
 static void WcPlayRemote(const WcInbox* in)

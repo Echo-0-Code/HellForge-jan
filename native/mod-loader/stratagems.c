@@ -620,7 +620,9 @@ static const char* StratagemRow(Stratagem* s, Stratagem* home, const uint8_t* ta
         memcpy(s->row + 0x48, &s->codeLength, 4);
     }
     StratagemTimes(s);
-    if (s->icon != 0) memcpy(s->row + 0xB0, &s->icon, 8);
+    if (s->icon != 0 && StratagemIconUnknown(table, s->icon))
+        ApiLog(s->mod, "stratagem %s: no icon named %s is built or in the game; it shows its base's", s->name, s->iconName);
+    else if (s->icon != 0) memcpy(s->row + 0xB0, &s->icon, 8);
     if (s->payloadCount != 0)
     {
         uint64_t* payload = home->payload; /* lives as long as the loader */

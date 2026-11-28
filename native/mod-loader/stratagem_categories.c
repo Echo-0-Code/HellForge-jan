@@ -30,6 +30,7 @@ typedef struct VanillaPlacement
     HfMod* iconMod;           /* the mod whose icon it takes, or NULL */
     uint64_t icon, original;  /* the mod's icon; the game's, once written (0: not yet) */
     char iconName[192];
+    int iconBad;              /* no material of that name: not written, said once */
 } VanillaPlacement;
 static VanillaPlacement g_vanillaPlacements[STR_VANILLA];
 static uint32_t g_vanillaPlaced, g_vanillaIcons;
@@ -224,6 +225,24 @@ static uint32_t StratagemSelectionSection(uint32_t type, uint32_t vanilla)
     return handle ? g_stratagemCategories[handle - 1].section : vanilla;
 }
 
+static int IconBuilt(uint64_t name);  /* item_icons.c */
+static int IconOfGame(uint64_t name); /* item_icons.c */
+
+/* 1 when no material of that name is known, so the game would crash drawing it: not an icon a data spec builds, a game
+ * stratagem's or a game entity's. With the entity data not in yet the last cannot be told, and it is let through. */
+static int StratagemIconUnknown(const uint8_t* table, uint64_t icon)
+{
+    if (icon == 0 || IconBuilt(icon) || g_region == 0 || IconOfGame(icon)) return 0;
+    for (uint32_t type = 1; type < STR_VANILLA; type++)
+    {
+        uint8_t* row = NULL;
+        uint64_t has = 0;
+        if (g_vanillaPlacements[type].original == icon) return 0;
+        if (!SafeRead((uintptr_t)(table + type * 8), &row, 8) && row != NULL && !SafeRead((uintptr_t)(row + 0xB0), &has, 8) && has == icon) return 0;
+    }
+    return 1;
+}
+
 /* A vanilla row's icon: the mod's, written once the game has loaded its rows, and again when the loader runs again and
  * puts new rows in the list. Called before every picker sort, so a reloaded row has it before it is drawn. */
 static void ApplyVanillaIcons(void)
@@ -235,9 +254,15 @@ static void ApplyVanillaIcons(void)
         VanillaPlacement* p = &g_vanillaPlacements[type];
         uint8_t* row = NULL;
         uint64_t icon;
-        if (p->iconMod == NULL || SafeRead((uintptr_t)(table + type * 8), &row, 8) || row == NULL ||
+        if (p->iconMod == NULL || p->iconBad || SafeRead((uintptr_t)(table + type * 8), &row, 8) || row == NULL ||
             SafeRead((uintptr_t)(row + 0xB0), &icon, 8) || icon == p->icon)
             continue;
+        if (StratagemIconUnknown(table, p->icon))
+        {
+            p->iconBad = 1;
+            ApiLog(p->iconMod, "set_stratagem_icon(%u): no icon named %s is built or in the game; it keeps its own", type, p->iconName);
+            continue;
+        }
         if (ApiWrite((uintptr_t)(row + 0xB0), &p->icon, 8)) continue;
         p->original = icon;
     }
