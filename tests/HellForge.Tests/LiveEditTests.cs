@@ -61,6 +61,37 @@ static class LiveEditTests
             check(refused, "A pipe name is letters, digits, '-' and '_' only.");
         });
     
+        test("The live editor's pipe goes on serving after a handler's error and after its name was taken", () =>
+        {
+            var run = "test" + Guid.NewGuid().ToString("N")[..12];
+            var faults = new List<string>();
+            var lines = 0;
+            // the name is taken while the server starts: it reports that and makes its pipe once the name is free
+            var taken = PipeServer.Create(LiveEditServer.PipeName(run), 1);
+            var server = new LiveEditServer(run);
+            server.Faulted += message => { lock (faults) faults.Add(message); };
+            server.Received += parts => { Interlocked.Increment(ref lines); if (parts[0] == "bad") throw new InvalidOperationException("handler failed"); };
+            server.Start();
+            var deadline = DateTime.UtcNow.AddSeconds(10);
+            bool Faults(int count) { lock (faults) return faults.Count >= count; }
+            while (!Faults(1) && DateTime.UtcNow < deadline) Thread.Sleep(10);
+            check(Faults(1), "A pipe name that is taken was not reported.");
+            taken.Dispose();
+
+            using var game = new NamedPipeClientStream(".", LiveEditServer.PipeName(run), PipeDirection.InOut);
+            game.Connect(10000);
+            var writer = new StreamWriter(game, new UTF8Encoding(false)) { NewLine = "\n", AutoFlush = true };
+            writer.WriteLine($"hello\t{LiveEditServer.Protocol}\t{StatsSchema.Current.Build}\t{StatsSchema.Fingerprint}");
+            writer.WriteLine("bad\tline");
+            writer.WriteLine("good\tline");
+            deadline = DateTime.UtcNow.AddSeconds(5);
+            while (Volatile.Read(ref lines) < 2 && DateTime.UtcNow < deadline) Thread.Sleep(10);
+            check(Volatile.Read(ref lines) == 2, "The line after a handler's error was not read.");
+            check(server.Connected && Faults(2), "A handler's error ended the connection or was not reported.");
+            lock (faults) check(faults[^1].Contains("handler failed"), "The report does not name the handler's error: " + faults[^1]);
+            server.DisposeAsync().AsTask().Wait();
+        });
+
         test("Co-op plays with the host's Local Stats: a joiner's requests to the host's values and back to its own", () =>
         {
             static string Doc(string weapons) => "{\"format\":1,\"weapons\":{" + weapons + "}}";

@@ -33,5 +33,33 @@ static class SessionEndTests
             check(SessionEnd.Crashed(unchecked((int)0xB7520003), true, false) && SessionEnd.Crashed(0, false, true),
                 "The mod loader's crash line or a dump did not count as a crash.");
         });
+
+        test("Session reads: a read that fails once while the game runs is tried again, and a second failure ends it", () =>
+        {
+            var calls = 0;
+            check(Tools.Retried(() => ++calls == 1 ? throw new SessionFailure("timed out") : 7) == 7 && calls == 2, "A read that failed once was not tried again.");
+            calls = 0;
+            check(Tools.Retried(() => { calls++; return 3; }) == 3 && calls == 1, "A read that worked ran twice.");
+            calls = 0;
+            var failed = false;
+            try { Tools.Retried<int>(() => { calls++; throw new SessionFailure("timed out"); }); }
+            catch (SessionFailure) { failed = true; }
+            check(failed && calls == 2, "A read that failed twice did not fail after its second try.");
+        });
+
+        test("Backend audit: a half-written last line waits for the next read, and a line that is not JSON is passed over", () =>
+        {
+            var log = Path.Combine(Directory.CreateDirectory(Path.Combine(root, "backend-audit")).FullName, "requests.jsonl");
+            File.WriteAllText(log, "{\"n\":1}\nnot json\n\r\n{\"n\":2}\r\n{\"n\":");
+            long offset = 0;
+            var rows = Tools.BackendRequests(log, ref offset);
+            check(rows.Count == 2 && rows[1]["n"]?.GetValue<int>() == 2, $"Read {rows.Count} complete records, not 2.");
+            check(offset == new FileInfo(log).Length - 5, $"The offset {offset} is not at the start of the half-written line.");
+            check(Tools.BackendRequests(log, ref offset).Count == 0, "The half-written line was read.");
+            File.AppendAllText(log, "3}\n");
+            rows = Tools.BackendRequests(log, ref offset);
+            check(rows.Count == 1 && rows[0]["n"]?.GetValue<int>() == 3, "The line was not read once it was complete.");
+            check(offset == new FileInfo(log).Length && Tools.BackendRequests(log, ref offset).Count == 0, "A record was read twice.");
+        });
     }
 }

@@ -242,16 +242,10 @@ try
         return options.ContainsKey("--ids");
     }
     object result;
-    // --progress: a JSON file the launcher reads for its "compiling mods" bar (written whole, then moved in place).
+    // --progress: a JSON file the launcher reads for its "compiling mods" bar.
     void WriteProgress(string? file, ModBuildProgress p)
     {
-        if (file == null) return;
-        try
-        {
-            File.WriteAllText(file + ".partial", JsonSerializer.Serialize(new { stage = p.Stage, done = p.Done, total = p.Total, mod = p.Mod }));
-            File.Move(file + ".partial", file, overwrite: true);
-        }
-        catch (IOException) { } /* the launcher is reading it: the next one */
+        if (file != null) p.WriteTo(file);
     }
     switch (args[0])
     {

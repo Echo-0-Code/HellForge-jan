@@ -48,7 +48,7 @@ public sealed partial class RegisteredItems
         var candidates = listed.Concat(admitted.Where(i => i.IsWeapon && listed.Contains(i.CopyOf)).Select(i => i.MixId)).Distinct().ToList();
         if (Game() is not { } game) return candidates;
         var room = CatalogueRoom(game, admitted, keeps);
-        var packageRoom = keeps.Packages - game.Packages - admitted.Count(i => i.IsWeapon && game.Mastery.ContainsKey(i.CopyOf));
+        var packageRoom = keeps.Packages - game.Packages - admitted.Count(i => i.IsWeapon && game.Mastery.ContainsKey(i.Base));
         List<uint> painted = [];
         foreach (var weapon in candidates)
         {
@@ -94,16 +94,8 @@ public sealed partial class RegisteredItems
         game is not null && !game.Ids.Contains(weapon) && !game.StratagemItems.ContainsKey(weapon) && !CopiedItem(game, admitted, weapon);
 
     // Whether AddWeapon gives an admitted copy an item: its base, followed through other copies, is a top-level catalogue item.
-    static bool CopiedItem(Vanilla game, IReadOnlyList<Item> admitted, uint weapon)
-    {
-        for (var depth = 0; depth <= MaxCopies; depth++)
-        {
-            if (admitted.FirstOrDefault(i => i.IsWeapon && i.MixId == weapon) is not { } copy) return false;
-            if (game.Ids.Contains(copy.CopyOf)) return !game.Parents.ContainsKey(copy.CopyOf);
-            weapon = copy.CopyOf;
-        }
-        return false;
-    }
+    static bool CopiedItem(Vanilla game, IReadOnlyList<Item> admitted, uint weapon) =>
+        admitted.FirstOrDefault(i => i.IsWeapon && i.MixId == weapon) is { } copy && game.Ids.Contains(copy.Base) && !game.Parents.ContainsKey(copy.Base);
 
     static JsonObject WeaponItem(uint weapon) => new()
     {

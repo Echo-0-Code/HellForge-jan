@@ -21,6 +21,18 @@ static class SessionJobTests
             check(limited != 7, $"With the limit the child cannot start (exit code {limited}).");
         });
 
+        test("Sessions: a stopped game job is waited for until nothing is left in it", () =>
+        {
+            if (!OperatingSystem.IsWindows()) return;
+            var cmd = Path.Combine(Environment.SystemDirectory, "cmd.exe");
+            // cmd /k stays until it is ended
+            using var job = new HostBoundedProcess(cmd, "/d /k", Environment.SystemDirectory, "", 30);
+            job.Resume();
+            check(!job.WaitEmpty(TimeSpan.Zero), "A running job counted as empty.");
+            job.Stop();
+            check(job.WaitEmpty(TimeSpan.FromSeconds(10)), "The stopped job did not empty within 10 seconds.");
+        });
+
         test("Several installations: another installation's game lets a session start only with HELLFORGE_MULTI_INSTANCE", () =>
         {
             HellForge.Core.InstallLayout Install(string name)

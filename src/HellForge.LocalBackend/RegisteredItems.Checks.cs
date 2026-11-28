@@ -41,7 +41,7 @@ public sealed partial class RegisteredItems
             ReservedStratagemId?.Invoke(item.MixId) == true))
             return $"its stable id {item.Stable} is a game stratagem's";
         IEnumerable<uint> made = item.IsStratagem ? [WeaponChild(item.Stable, item.MixId)]
-            : item.IsWeapon ? (game?.ChildIds.GetValueOrDefault(item.CopyOf) ?? []).Select(child => Rehome(child, item.CopyOf, item.MixId)) : [];
+            : item.IsWeapon ? (game?.ChildIds.GetValueOrDefault(item.Base) ?? []).Select(child => Rehome(child, item.Base, item.MixId)) : [];
         return made.Where(id => Taken(id, game)).Select(id => $"its child's id {id} is the game's or a paid item's").FirstOrDefault();
     }
 
@@ -105,6 +105,22 @@ public sealed partial class RegisteredItems
     }
 
     const int MaxCopies = 8;
+
+    // Each weapon with its Base, followed as far as GameBase follows it. An entry under one of the game's ids is no
+    // link (it is refused), so it cannot move the base of honest copies. A chain that does not end at a weapon of the
+    // game keeps a base the catalogue lacks, and gets no item.
+    List<Item> Based(List<Item> loaded)
+    {
+        var game = Game()?.Ids;
+        Dictionary<uint, uint> copies = [];
+        foreach (var item in loaded.Where(i => i.IsWeapon && game?.Contains(i.MixId) != true)) copies.TryAdd(item.MixId, item.CopyOf);
+        uint BaseOf(uint at)
+        {
+            for (var depth = 0; depth < MaxCopies && copies.TryGetValue(at, out var next); depth++) at = next;
+            return at;
+        }
+        return [.. loaded.Select(item => item.IsWeapon ? item with { Base = BaseOf(item.CopyOf) } : item)];
+    }
 
     // An attachment or a weapon pattern is held when the player may hold one of the game's children it copies: their
     // owners are the weapons they are offered on. A unit pattern follows its base skin's item.

@@ -49,6 +49,8 @@ public sealed class HostBoundedProcess : IDisposable {
     public void Resume(){if(thread==IntPtr.Zero)throw new InvalidOperationException("Already resumed");if(ResumeThread(thread)==UInt32.MaxValue)Fail("Resume");CloseHandle(thread);thread=IntPtr.Zero;}
     public uint ActiveProcesses {get{var info=new ACCOUNTING();uint returned;if(!QueryInformationJobObject(job,1,ref info,Marshal.SizeOf(typeof(ACCOUNTING)),out returned))Fail("Query job");return info.Active;}}
     public void Stop(){if(job!=IntPtr.Zero&&!TerminateJobObject(job,0xb7520003))Fail("Terminate job");}
+    // Stop returns before the job's processes are gone, so "nothing is left" is waited for, within the bound.
+    public bool WaitEmpty(TimeSpan bound){var clock=Stopwatch.StartNew();while(ActiveProcesses!=0){if(clock.Elapsed>=bound)return false;Thread.Sleep(250);}return true;}
     public void Dispose(){if(deadline!=null){using(var done=new ManualResetEvent(false)){if(deadline.Dispose(done))done.WaitOne();}deadline=null;}if(job!=IntPtr.Zero){TerminateJobObject(job,0xb7520004);CloseHandle(job);job=IntPtr.Zero;}if(thread!=IntPtr.Zero){CloseHandle(thread);thread=IntPtr.Zero;}if(Process!=null){Process.Dispose();Process=null;}}
     static void Fail(string context){throw new Win32Exception(Marshal.GetLastWin32Error(),context);}
     [StructLayout(LayoutKind.Sequential)]struct PI{public IntPtr Process,Thread;public uint Pid,Tid;}

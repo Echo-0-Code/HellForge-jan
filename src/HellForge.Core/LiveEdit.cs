@@ -55,6 +55,7 @@ public sealed class LiveEditServer : IAsyncDisposable
     NamedPipeServerStream? pipe;
     StreamWriter? writer;
     Task? serving;
+    string? lastFault;
     int sequence;
 
     public static string PipeName(string runId) => "hellforge-live-" + runId;
@@ -72,6 +73,8 @@ public sealed class LiveEditServer : IAsyncDisposable
     // game's own packages, for friends: AssetShare), and the mod channel's "send" and "share" (ModChannel)
     // (native/mod-loader/live.c).
     public event Action<string[]>? Received;
+    // A problem the server went on from, as one line for the session's log (Fault).
+    public event Action<string>? Faulted;
 
     // build: the game build the session must run (the schema's; a test harness passes its own).
     public LiveEditServer(string runId, string? build = null)
@@ -84,20 +87,25 @@ public sealed class LiveEditServer : IAsyncDisposable
 
     public void Start() => serving ??= Task.Run(ServeAsync);
 
+    // An error that is not the game going away (the pipe's name still taken, a handler's exception) is reported here
+    // and costs one line or one connection: the server goes on serving, as mod sync and the lobby browser need it all
+    // session. The same message is reported once in a row.
+    void Fault(string what, Exception error)
+    {
+        var message = $"Live editing: {what} ({error.GetType().Name}: {error.Message})";
+        if (message == lastFault) return;
+        lastFault = message;
+        Faulted?.Invoke(message);
+    }
+
     async Task ServeAsync()
     {
         while (!stop.IsCancellationRequested)
         {
-            var server = PipeServer.Create(name, 1);
-            try
-            {
-                await server.WaitForConnectionAsync(stop.Token);
-                pipe = server;
-                writer = new StreamWriter(server, new UTF8Encoding(false)) { NewLine = "\n", AutoFlush = true };
-                using var reader = new StreamReader(server, new UTF8Encoding(false));
-                while (await reader.ReadLineAsync(stop.Token) is { } line) Receive(line);
-            }
+            if (await CreateAsync() is not { } server) continue;
+            try { await ServeGameAsync(server); }
             catch (Exception error) when (error is IOException or OperationCanceledException or ObjectDisposedException) { }
+            catch (Exception error) { Fault("the connection to the game ended on an error", error); }
             finally
             {
                 Connected = false;
@@ -106,8 +114,39 @@ public sealed class LiveEditServer : IAsyncDisposable
                 pipe = null;
                 lock (pending) { foreach (var waiter in pending.Values) waiter.TrySetResult("-\trefused\tthe game disconnected"); pending.Clear(); }
                 await server.DisposeAsync();
-                if (!stop.IsCancellationRequested) StateChanged?.Invoke();
             }
+            if (stop.IsCancellationRequested) break;
+            try { StateChanged?.Invoke(); }
+            catch (Exception error) { Fault("the game's disconnect could not be handled", error); }
+        }
+    }
+
+    // The pipe for the next game; null after a second's wait when it could not be made (its name is still taken).
+    async Task<NamedPipeServerStream?> CreateAsync()
+    {
+        try
+        {
+            var server = PipeServer.Create(name, 1);
+            lastFault = null;
+            return server;
+        }
+        catch (Exception error) { Fault("the pipe could not be made; trying again each second", error); }
+        try { await Task.Delay(1000, stop.Token); }
+        catch (OperationCanceledException) { }
+        return null;
+    }
+
+    // One game, from its connect to its disconnect. A line whose handler throws is left out; the next is still read.
+    async Task ServeGameAsync(NamedPipeServerStream server)
+    {
+        await server.WaitForConnectionAsync(stop.Token);
+        pipe = server;
+        writer = new StreamWriter(server, new UTF8Encoding(false)) { NewLine = "\n", AutoFlush = true };
+        using var reader = new StreamReader(server, new UTF8Encoding(false));
+        while (await reader.ReadLineAsync(stop.Token) is { } line)
+        {
+            try { Receive(line); }
+            catch (Exception error) { Fault("a line from the game could not be handled", error); }
         }
     }
 

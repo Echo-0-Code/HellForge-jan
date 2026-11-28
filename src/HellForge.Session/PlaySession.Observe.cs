@@ -98,7 +98,7 @@ sealed partial class PlaySession
     {
         if (clock.ElapsedMilliseconds < nextBlockCheck) return;
         // blockRules is 0 only in the WFP-only mode, which has no firewall rules to re-read.
-        if (blockRules > 0 && BlockRuleCount() != blockRules) throw new SessionFailure("Network block rules or firewall profiles changed during the session.");
+        if (blockRules > 0 && Tools.Retried<int>(BlockRuleCount) != blockRules) throw new SessionFailure("Network block rules or firewall profiles changed during the session.");
         // The older firewall-rule block is read through PowerShell, a process start each time: every 30 seconds there.
         nextBlockCheck = clock.ElapsedMilliseconds + (blockRules > 0 ? 30000 : 10000);
     }

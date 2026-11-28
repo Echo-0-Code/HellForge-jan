@@ -7,6 +7,28 @@ static class ModBuildStatusTests
 {
     public static void Register(Action<string, Action> test, Action<bool, string> check, Action<Action> reject, string root)
     {
+        test("Source mod build progress is written whole, and a file that cannot be replaced loses one line, not the build", () =>
+        {
+            var folder = Directory.CreateDirectory(Path.Combine(root, "build-progress")).FullName;
+            var file = Path.Combine(folder, "mod-builds.json");
+            new ModBuildProgress("compiling", 1, 3, "tester.one").WriteTo(file);
+            using (var written = JsonDocument.Parse(File.ReadAllText(file)))
+                check(written.RootElement.GetProperty("stage").GetString() == "compiling" && written.RootElement.GetProperty("done").GetInt32() == 1 &&
+                    written.RootElement.GetProperty("total").GetInt32() == 3 && written.RootElement.GetProperty("mod").GetString() == "tester.one",
+                    "The progress file does not hold its stage, counts and mod.");
+            check(!File.Exists(file + ".partial"), "The partial file stayed after a write.");
+
+            // a folder in the file's place cannot be replaced on any system
+            var blocked = Directory.CreateDirectory(Path.Combine(folder, "blocked.json")).FullName;
+            new ModBuildProgress("done", 3, 3, "").WriteTo(blocked);
+            check(Directory.Exists(blocked) && !File.Exists(blocked + ".partial"), "A progress file that could not be replaced left its partial file.");
+            if (!OperatingSystem.IsWindows()) return;
+            // held open without delete sharing, as a scanner does: Windows refuses the move with access denied
+            using (new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read))
+                new ModBuildProgress("done", 3, 3, "").WriteTo(file);
+            check(File.ReadAllText(file).Contains("compiling") && !File.Exists(file + ".partial"), "A held progress file was replaced or left its partial file.");
+        });
+
         test("A source mod's build reads as not built, changed (keeping its old error) or failed in the tools; other mods have none", () =>
         {
             var repository = ModSdk.Find(Directory.GetCurrentDirectory())!;

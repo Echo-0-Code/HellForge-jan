@@ -105,8 +105,9 @@ sealed partial class PlaySession
         if (job != null) StopJobBounded(job);
     }
 
-    // The game's job ended, never waiting more than 10 seconds: TerminateJobObject normally returns at once, but if it
-    // does not, cleanup must still finish and write its result.
+    // The game's job ended, never waiting more than 10 seconds for the call and 10 more for the job to empty:
+    // TerminateJobObject normally returns at once, but if it does not, cleanup must still finish and write its result.
+    // It returns before the processes are gone, and a job read as not empty skips the copy-back and the restores.
     void StopJobBounded(HostBoundedProcess current)
     {
         // what was still in the job when the session ended it (the game, or what it started when it may)
@@ -128,7 +129,7 @@ sealed partial class PlaySession
             Say("Stopping the game job is taking longer than 10 seconds; cleanup goes on without it.");
             return;
         }
-        try { result["jobEmpty"] = current.ActiveProcesses == 0; }
+        try { result["jobEmpty"] = current.WaitEmpty(TimeSpan.FromSeconds(10)); }
         catch (System.ComponentModel.Win32Exception error) { result["jobStopError"] = error.Message; }
         finally
         {

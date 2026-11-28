@@ -34,6 +34,7 @@ static class RegisteredChecksTests
         Forged(file, Items, Held, log, (store, catalogue), check);
         Copies(file, Items, Held, (premium, premiumPaint.Key), catalogue, paid, check);
         Chains(file, Items, Held, premium, check);
+        CopyOfCopy(file, Items, (fixtures["/Progression/items"], fixtures["/Progression/ProgressionPackages"]), check);
         Honest(file, Items, Held, log, check);
     }
 
@@ -96,6 +97,39 @@ static class RegisteredChecksTests
         check(!inventory.Contains(RegisteredItems.WeaponChild(attachment, c)), "An attachment copied from premium weapons is held without them.");
         check(!inventory.Contains(RegisteredItems.WeaponChild(pattern, premium)) && !inventory.Any(id => id == RegisteredItems.WeaponChild(unitPattern, (uint)premiumSkin["parentId"]!)),
             "A pattern copied from premium content is held without it.");
+    }
+
+    // A copy of another mod's weapon is whole: the game's weapon's children under its own ids, in its own run, and a
+    // mastery package that unlocks those children, not the other mod's. The copy is listed first, as mods load in any order.
+    static void CopyOfCopy(string file, Func<RegisteredItems> items, (JsonElement Items, JsonElement Packages) game, Action<bool, string> check)
+    {
+        uint first = EngineHash.Id32("one/first"), second = EngineHash.Id32("two/second");
+        File.WriteAllText(file, $$"""
+            {"format":1,"items":[
+              {"mixId":{{second}},"copyOf":{{first}},"mod":"two","unit":"two/second"},
+              {"mixId":{{first}},"copyOf":{{Liberator}},"mod":"one","unit":"one/first"}]}
+            """);
+        var registered = items();
+        var catalogue = JsonNode.Parse(registered.Apply("/Progression/items", game.Items).GetRawText())!.AsArray().OfType<JsonObject>().ToList();
+        List<uint> Children(uint weapon) => [.. catalogue.Where(i => (uint?)i["parentId"] == weapon).Select(i => (uint)i["mixId"]!)];
+        var gameChildren = Children(Liberator);
+        check(gameChildren.Count > 0 && Children(first).SequenceEqual(gameChildren.Select(c => RegisteredItems.Rehome(c, Liberator, first))),
+            "A copy of the game's weapon lacks its children.");
+        var own = Children(second);
+        check(own.SequenceEqual(gameChildren.Select(c => RegisteredItems.Rehome(c, Liberator, second))), $"A copy of a mod's copy has {own.Count} children of its own, not the game's weapon's {gameChildren.Count}.");
+        var at = catalogue.FindIndex(i => (uint)i["mixId"]! == second);
+        check(at >= 0 && catalogue.Skip(at + 1).Take(own.Count).All(i => (uint?)i["parentId"] == second), "A copy of a mod's copy has no item, or its children do not follow it.");
+
+        var packages = JsonNode.Parse(registered.Apply("/Progression/ProgressionPackages", game.Packages).GetRawText())!.AsArray().OfType<JsonObject>().ToList();
+        JsonObject? Mastery(uint weapon) => packages.FirstOrDefault(p => (int)p["type"]! == 2 && p["requiredItems"]!.AsArray().Any(r => (uint)r! == weapon));
+        var basePackage = Mastery(Liberator);
+        var package = Mastery(second);
+        check(basePackage != null && package != null && (uint)package["id32"]! == RegisteredItems.PackageFor((uint)basePackage["id32"]!, Liberator, second),
+            "A copy of a mod's copy has no mastery package under its own id.");
+        var unlocks = package!["levels"]!.AsArray().SelectMany(l => l!["unlockableItems"]!.AsArray()).Select(u => (uint)u!["mixId"]!).ToList();
+        var others = Children(first).ToHashSet();
+        check(unlocks.Count > 0 && unlocks.All(own.Contains) && !unlocks.Any(others.Contains), "Its mastery package unlocks the other mod's children, not its own.");
+        check(registered.Track((uint)package["id32"]!) != null, "Its mastery package has no track to level by.");
     }
 
     // A chain is followed as the loader follows it (registry_load.c PendingBase): nine weapons to the game's, no further.

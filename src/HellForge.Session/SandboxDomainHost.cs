@@ -181,22 +181,11 @@ static class SandboxDomainHost
     {
         try
         {
-            if (WaitJobEmpty(job, TimeSpan.FromSeconds(10))) return true;
+            if (job.WaitEmpty(TimeSpan.FromSeconds(10))) return true;
             job.Stop();
-            return WaitJobEmpty(job, TimeSpan.FromSeconds(5));
+            return job.WaitEmpty(TimeSpan.FromSeconds(5));
         }
         catch (System.ComponentModel.Win32Exception) { return false; }
-    }
-
-    static bool WaitJobEmpty(HostBoundedProcess job, TimeSpan bound)
-    {
-        var clock = Stopwatch.StartNew();
-        while (job.ActiveProcesses != 0)
-        {
-            if (clock.Elapsed >= bound) return false;
-            Thread.Sleep(250);
-        }
-        return true;
     }
 
     static void ApplyEnvironment(Dictionary<string, string> values)

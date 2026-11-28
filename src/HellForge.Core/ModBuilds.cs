@@ -24,7 +24,26 @@ public sealed record ModBuildRecord(string Key, string SourceHash, string Dll, s
 
 // Where a session's source builds are, for the launcher's progress bar (HellForge.Cli mods-stage --progress): the stage
 // ("tools": fetching the compiler, "compiling", "done"), the source mods done and in all, and the one being built.
-public sealed record ModBuildProgress(string Stage, int Done, int Total, string Mod);
+public sealed record ModBuildProgress(string Stage, int Done, int Total, string Mod)
+{
+    // The JSON file the launcher reads for its "compiling mods" bar, written whole and then moved in place. Best effort:
+    // while another program holds the file (the launcher reading it, or a scanner that does not share delete) this one
+    // is left out and the next is written, since a build must not fail or lose a mod for its progress bar.
+    public void WriteTo(string file)
+    {
+        var partial = file + ".partial";
+        try
+        {
+            File.WriteAllText(partial, JsonSerializer.Serialize(new { stage = Stage, done = Done, total = Total, mod = Mod }));
+            File.Move(partial, file, overwrite: true);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            try { File.Delete(partial); }
+            catch (Exception leftover) when (leftover is IOException or UnauthorizedAccessException) { }
+        }
+    }
+}
 
 // How a build runs: InstallTools fetches Zig when it is missing or damaged (the Linux wrapper's build-source-mods may not:
 // it unpacks Zig again only from tools/downloads), and RebuildFailed compiles unchanged sources that failed (Build now).

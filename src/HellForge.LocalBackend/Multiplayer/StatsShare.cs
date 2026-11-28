@@ -119,6 +119,7 @@ public sealed class StatsShare : IAsyncDisposable
         hostMountsFile = Path.Combine(editor, HostMountsName);
         WriteHostNow(); /* a session cut short leaves its host's files behind */
         live = new LiveEditServer(runId);
+        live.Faulted += log;
         live.StateChanged += () => { lock (gate) sessionSent = false; _ = ApplyAsync(); };
         live.Start();
         timer = new Timer(_ => Tick(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));

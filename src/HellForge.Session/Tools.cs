@@ -56,6 +56,14 @@ static class Tools
     public static (int Exit, string Output, string Error) PowerShellCommand(string command, int timeoutMs = 120000) =>
         Run(PowerShell, ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command], timeoutMs: timeoutMs);
 
+    // A read while the game runs, tried once more when it fails: one PowerShell start that times out or errors on a
+    // busy PC must not end the session. A second failure is the read's own.
+    public static T Retried<T>(Func<T> read)
+    {
+        try { return read(); }
+        catch (SessionFailure) { return read(); }
+    }
+
     // A file never reached through a link (junction or symbolic link) anywhere on its path.
     public static void NoLinks(string path)
     {
@@ -71,17 +79,25 @@ static class Tools
     public static void WriteJson(string path, JsonNode node) =>
         File.WriteAllText(path, node.ToJsonString(new JsonSerializerOptions { WriteIndented = true }), new UTF8Encoding(false));
 
-    // Backend audit lines (requests.jsonl): all of them, or those after *offset, which moves past them.
+    // Backend audit lines (requests.jsonl): all of them, or those after *offset, which moves past them. The backend
+    // appends while the game runs, so a last line without its newline is half written: it stays for the next read.
+    // A line that is not JSON is passed over, as one bad audit record must not end the session.
     public static List<JsonNode> BackendRequests(string path, ref long offset)
     {
         var rows = new List<JsonNode>();
         if (!File.Exists(path)) return rows;
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        offset = Math.Clamp(offset, 0, stream.Length);
         stream.Seek(offset, SeekOrigin.Begin);
-        using var reader = new StreamReader(stream);
-        while (reader.ReadLine() is { } line)
-            if (line.Length > 0 && ParseJson(line) is { } row) rows.Add(row);
-        offset = stream.Length;
+        var bytes = new byte[stream.Length - offset];
+        var read = stream.ReadAtLeast(bytes, bytes.Length, throwOnEndOfStream: false);
+        var complete = bytes.AsSpan(0, read).LastIndexOf((byte)'\n') + 1;
+        foreach (var line in Encoding.UTF8.GetString(bytes, 0, complete).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            try { if (ParseJson(line) is { } row) rows.Add(row); }
+            catch (JsonException) { }
+        }
+        offset += complete;
         return rows;
     }
 

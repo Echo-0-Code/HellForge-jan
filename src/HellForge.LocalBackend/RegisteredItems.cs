@@ -37,6 +37,10 @@ public sealed partial class RegisteredItems(string path)
         public bool IsStratagem => Stable != 0;
         // Weapons: the items with children, mastery packages and progress of their own.
         public bool IsWeapon => !IsStratagem && !IsDifficulty;
+        // The weapon whose data a weapon copies: CopyOf, followed through other mods' weapons to the one at the end
+        // (Based). Only the game's weapons have children and a mastery package to copy, so a copy of a copy takes
+        // them from there, under its own ids.
+        public uint Base { get; init; } = CopyOf;
     }
 
     // An attachment a mod added (native/mod-loader/attachments.c): a copy of a vanilla customization item (CopyOf) offered
@@ -254,16 +258,16 @@ public sealed partial class RegisteredItems(string path)
         lock (gate)
         {
             if (session != null && bytes.AsSpan().SequenceEqual(session.File)) return session;
-            var loaded = Parse(bytes);
+            var loaded = Based(Parse(bytes));
             var keeps = Keeps(bytes);
             var admitted = Admitted(Prioritized(Checked(loaded)), keeps);
             Dictionary<uint, MasteryTrack> tracks = [], byWeapon = [];
             if (Game() is { } game)
                 foreach (var item in admitted.Where(i => i.IsWeapon))
-                    if (game.Mastery.TryGetValue(item.CopyOf, out var basePackage) && WeaponMastery.Definition(basePackage) is { } definition)
+                    if (game.Mastery.TryGetValue(item.Base, out var basePackage) && WeaponMastery.Definition(basePackage) is { } definition)
                     {
-                        var track = new MasteryTrack(WeaponIds.PackageFor(basePackage, item.CopyOf, item.MixId), definition,
-                            id => game.Parents.TryGetValue(id, out var parent) && parent == item.CopyOf ? Rehome(id, item.CopyOf, item.MixId) : id, item);
+                        var track = new MasteryTrack(WeaponIds.PackageFor(basePackage, item.Base, item.MixId), definition,
+                            id => game.Parents.TryGetValue(id, out var parent) && parent == item.Base ? Rehome(id, item.Base, item.MixId) : id, item);
                         tracks[track.Package] = track;
                         byWeapon[item.MixId] = track;
                     }
@@ -366,7 +370,7 @@ public sealed partial class RegisteredItems(string path)
     static List<uint> Offering(Vanilla? game, uint paint, IReadOnlyList<Item> admitted)
     {
         if (game == null || !game.Offering.TryGetValue(paint, out var parents)) return [];
-        return [.. parents.Concat(admitted.Where(i => i.IsWeapon && parents.Contains(i.CopyOf)).Select(i => i.MixId)).Distinct()];
+        return [.. parents.Concat(admitted.Where(i => i.IsWeapon && parents.Contains(i.Base)).Select(i => i.MixId)).Distinct()];
     }
 
     // A skin's parent item: its parentId, or (for the skins the client stores with none) the skin parent its mixId is the
@@ -506,7 +510,7 @@ public sealed partial class RegisteredItems(string path)
         foreach (var item in items)
         {
             var cost = Cost(game, item);
-            var package = item.IsWeapon && game.Mastery.ContainsKey(item.CopyOf) ? 1 : 0;
+            var package = item.IsWeapon && game.Mastery.ContainsKey(item.Base) ? 1 : 0;
             if (cost <= room && package <= packageRoom)
             {
                 (room, packageRoom) = (room - cost, packageRoom - package);
@@ -519,7 +523,7 @@ public sealed partial class RegisteredItems(string path)
     }
 
     // The catalogue items an item adds: a stratagem's two, a weapon and its base's children.
-    static int Cost(Vanilla game, Item item) => item.IsStratagem ? 2 : 1 + game.Children.GetValueOrDefault(item.CopyOf);
+    static int Cost(Vanilla game, Item item) => item.IsStratagem ? 2 : 1 + game.Children.GetValueOrDefault(item.Base);
 
     void Report(Item item, string why)
     {
@@ -638,18 +642,19 @@ public sealed partial class RegisteredItems(string path)
         }
     }
 
-    // A weapon's item, and its children right after it: the client links a child to the preceding parent run.
+    // A weapon's item, and its children right after it: the client links a child to the preceding parent run. Both
+    // are the game's weapon's (Item.Base), also for a copy of another mod's weapon; a copy is never copied from, as it
+    // would give an item without children.
     static void AddWeapon(JsonArray catalogue, Item item, HashSet<uint?> known, CatalogueIndex index)
     {
-        if (!index.Parents.TryGetValue(item.CopyOf, out var source)) return;
+        if (!index.Parents.TryGetValue(item.Base, out var source)) return;
         var copy = source.DeepClone().AsObject();
         copy["itemId"] = item.MixId;
         copy["mixId"] = item.MixId;
         catalogue.Add((JsonNode?)copy);
-        index.Parents.TryAdd(item.MixId, copy);
-        foreach (var child in index.ChildrenOf.GetValueOrDefault(item.CopyOf) ?? [])
+        foreach (var child in index.ChildrenOf.GetValueOrDefault(item.Base) ?? [])
         {
-            var mixId = Rehome(Id(child, "mixId")!.Value, item.CopyOf, item.MixId);
+            var mixId = Rehome(Id(child, "mixId")!.Value, item.Base, item.MixId);
             if (!known.Add(mixId)) continue;
             var childCopy = child.DeepClone().AsObject(); // itemId: the same attachment
             childCopy["mixId"] = mixId;
@@ -684,9 +689,9 @@ public sealed partial class RegisteredItems(string path)
         var children = Game()?.Parents ?? [];
         foreach (var item in items.Where(i => i.IsWeapon))
         {
-            if (!mastery.TryGetValue(item.CopyOf, out var source) || mastery.ContainsKey(item.MixId)) continue;
+            if (!mastery.TryGetValue(item.Base, out var source) || mastery.ContainsKey(item.MixId)) continue;
             var copy = source.DeepClone().AsObject();
-            copy["id32"] = PackageFor(Id(source, "id32")!.Value, item.CopyOf, item.MixId);
+            copy["id32"] = PackageFor(Id(source, "id32")!.Value, item.Base, item.MixId);
             copy["requiredItems"] = new JsonArray(item.MixId);
             RehomeLevels(copy, children, item);
             packages.Add((JsonNode?)copy);
@@ -697,7 +702,7 @@ public sealed partial class RegisteredItems(string path)
     // A copied mastery package's rewards and unlocks that are the base's children become the new weapon's.
     static void RehomeLevels(JsonObject package, Dictionary<uint, uint> children, Item item)
     {
-        uint Map(uint id) => children.TryGetValue(id, out var parent) && parent == item.CopyOf ? Rehome(id, item.CopyOf, item.MixId) : id;
+        uint Map(uint id) => children.TryGetValue(id, out var parent) && parent == item.Base ? Rehome(id, item.Base, item.MixId) : id;
         foreach (var level in (package["levels"] as JsonArray ?? []).OfType<JsonObject>())
         {
             foreach (var reward in (level["rewards"] as JsonArray ?? []).OfType<JsonObject>())
@@ -748,7 +753,7 @@ public sealed partial class RegisteredItems(string path)
         foreach (var item in current.Admitted.Where(i => !LeftOutHeld(i, current, withheld) && (!i.IsDifficulty || have.Contains(i.CopyOf)))) /* a difficulty not before level 10 is unlocked */
         {
             var own = HeldWith(item, current, saved, attachments);
-            var mirrored = item.IsWeapon && !current.ByWeapon.ContainsKey(item.MixId) ? heldChildren.GetValueOrDefault(item.CopyOf) ?? [] : [];
+            var mirrored = item.IsWeapon && !current.ByWeapon.ContainsKey(item.MixId) ? heldChildren.GetValueOrDefault(item.Base) ?? [] : [];
             var entries = (have.Contains(item.MixId) ? 0 : 1) + own.Count + mirrored.Count;
             if (held.Count + entries > keeps)
             {
@@ -916,7 +921,7 @@ public sealed partial class RegisteredItems(string path)
     {
         foreach (var entry in mirrored)
         {
-            var mixId = Rehome(Id(entry, "mixId")!.Value, item.CopyOf, item.MixId);
+            var mixId = Rehome(Id(entry, "mixId")!.Value, item.Base, item.MixId);
             if (!have.Add(mixId)) continue;
             var copy = entry.DeepClone().AsObject();
             copy["mixId"] = mixId;

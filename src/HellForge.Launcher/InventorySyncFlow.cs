@@ -620,29 +620,33 @@ public partial class MainWindow
         Close();
     }
 
+    // Clean up runs from a click: a failure the startup cleanup also expects (a certificate record or prefix file that
+    // cannot be read or removed) becomes the status line, and the busy flag always clears, so Sync stays usable.
     async Task CleanUpSync(string proxy)
     {
         syncStarting = true;
         SyncButton.IsEnabled = false;
         string? failure = null, folder = null;
         bool declined = false;
-        if (NativeLinux)
+        try
         {
-            SetSyncStatus("Cleaning up the Linux capture...", Gold);
-            var root = paths.InstallRoot;
-            failure = root == null ? "The installation folder is missing." : await Task.Run(() => InventorySync.CleanupLinux(root));
+            if (NativeLinux) failure = await CleanUpLinuxSync();
+            else
+            {
+                folder = Path.Combine(new InstallLayout(paths.InstallRoot!).Logs, "sync-cleanup-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
+                declined = !await CleanUpWindowsSync(proxy, folder);
+            }
         }
-        else
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException
+            or System.ComponentModel.Win32Exception)
         {
-            SetSyncStatus("Waiting for the administrator prompt...", Gold);
-            var logs = Path.Combine(new InstallLayout(paths.InstallRoot!).Logs, "sync-cleanup-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
-            folder = logs;
-            using var cleanup = await Task.Run(() => InventorySync.StartCleanup(proxy, logs));
-            if (cleanup != null) await cleanup.WaitForExitAsync();
-            else declined = true;
+            failure = error.Message;
         }
-        syncStarting = false;
-        SyncButton.IsEnabled = true;
+        finally
+        {
+            syncStarting = false;
+            SyncButton.IsEnabled = true;
+        }
         UpdateSyncStatus();
         if (declined) SetSyncStatus("Clean up needs the administrator prompt.", Orange);
         else if (failure != null) SetSyncStatus("Clean up failed: " + failure, Red);
@@ -650,5 +654,22 @@ public partial class MainWindow
             SetSyncStatus("Clean up failed: " + (folder == null ? "remove the HellForge-CaptureProxy lines from the hosts file."
                 : CaptureHosts.ReadFailure(folder) ?? "see " + Path.Combine(folder, "proxy.log") + "."), Red);
         else SetSyncStatus("Cleaned up: the normal game reaches its servers again.", Green);
+    }
+
+    async Task<string?> CleanUpLinuxSync()
+    {
+        SetSyncStatus("Cleaning up the Linux capture...", Gold);
+        var root = paths.InstallRoot;
+        return root == null ? "The installation folder is missing." : await Task.Run(() => InventorySync.CleanupLinux(root));
+    }
+
+    // False when the administrator prompt was declined.
+    async Task<bool> CleanUpWindowsSync(string proxy, string logs)
+    {
+        SetSyncStatus("Waiting for the administrator prompt...", Gold);
+        using var cleanup = await Task.Run(() => InventorySync.StartCleanup(proxy, logs));
+        if (cleanup == null) return false;
+        await cleanup.WaitForExitAsync();
+        return true;
     }
 }

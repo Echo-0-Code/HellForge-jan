@@ -57,6 +57,12 @@ On `dev`, since 0.5.0-beta.
 
 ### Fixed
 
+- **Faults the game's own code confirmed.** 18 more faults from the review, checked against the game's code, are
+  fixed. Walkers and drivers keep moving when the host leaves and another machine takes them over. A mover's unit with
+  no behaviour of its own hears comms wheel orders. Zone health is counted only where a craft is simulated. The editor
+  no longer patches a method table when another overlay is in the way. A weapon copied from another mod's copy gets its
+  attachments. The loader checks who serves the live-edit pipe, and a Steam bridge call that hangs ends after 30
+  seconds.
 - **Fixes from a review of the whole code.** 96 faults found by reading the launcher, the local backend, the session
   runner, the mod loader, the editor and the overlay are fixed. A downpatch file no longer carries a player's swapped
   upscaler. A mod taken out live leaves no menu tabs, tips, hooks or mover parts behind. A mod settings file that
