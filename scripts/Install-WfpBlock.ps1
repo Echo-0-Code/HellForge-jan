@@ -14,12 +14,16 @@ $env:TEMP=$env:TMP=(New-Item -ItemType Directory (Join-Path $HellForgeInstallRoo
 $copy=Join-Path $HellForgeInstallRoot 'game'
 . (Join-Path $PSScriptRoot 'NetworkBlock.Common.ps1')
 $state=[ordered]@{action=$(if($Uninstall){'uninstall'}else{'install'});status='preparing';block='wfp'}
-# Runs the tool and returns its report object; throws with the tool's own words on failure.
+# Runs the tool and returns its report object; throws with the tool's own words on failure. An earlier run's report is
+# deleted first: a tool that dies before it writes must not leave that one to be read as this run's.
 function Invoke-Wfp([string[]]$Arguments){
     $report=Join-Path $HellForgeBlockRoot 'wfp-tool.json'
+    if(Test-Path -LiteralPath $report){Remove-Item -LiteralPath $report -Force}
     & $HellForgeWfpTool @Arguments $report|Out-Null
+    $code=$LASTEXITCODE
     $r=if(Test-Path -LiteralPath $report){Get-Content -Raw -LiteralPath $report|ConvertFrom-Json}else{$null}
-    if(-not $r){throw 'The WFP block tool wrote no report.'}
+    if(-not $r){throw ('The WFP block tool wrote no report (exit code '+$code+').')}
+    if($code -ne 0 -and $r.status -ne 'failed'){throw ('The WFP block tool failed with exit code '+$code+'.')}
     return $r
 }
 try{
@@ -54,8 +58,12 @@ try{
         # that connect is refused by the stack (10061, or 0 if something does listen), not by the block.
         $probeReport=Join-Path $HellForgeBlockRoot 'wfp-egress.json'
         $otherPort=if($BackendPort -lt 65535){$BackendPort+1}else{$BackendPort-1}
+        # Only a report this run wrote is proof. The probe's exit code says nothing here: nothing listens on the backend's
+        # port yet, so it ends with 1 on a working block too.
+        if(Test-Path -LiteralPath $probeReport){Remove-Item -LiteralPath $probeReport -Force}
         & $HellForgeBlockProbe $BackendPort $probeReport $otherPort|Out-Null
-        $egress=if(Test-Path -LiteralPath $probeReport){Get-Content -Raw -LiteralPath $probeReport|ConvertFrom-Json}else{$null}
+        if(-not(Test-Path -LiteralPath $probeReport)){throw 'The network block''s probe wrote no report, so the block is not proved.'}
+        $egress=Get-Content -Raw -LiteralPath $probeReport|ConvertFrom-Json
         # An offline PC: the outside TCP connect fails in the stack (10050, 10051, 10065), so the block's refusal cannot show
         # there. The block still counts as proved on the outside with no route out (nothing can leave), or with the outside
         # UDP datagram refused by the block (externalIpv4UdpError 10013: judged at the same connect layer by the same
