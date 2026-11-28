@@ -705,8 +705,7 @@ static void LiveLaunch(uintptr_t game)
         EmitLooseGuard(game, stub);
         if (VirtualProtect(stub, 0x1000, PAGE_EXECUTE_READ, &old)) { FlushInstructionCache(GetCurrentProcess(), stub, 0x1000); InstallLooseGuard(game, stub); }
     }
-    ApiOnGameThread(holder->mod, SiloFrame, NULL);
-    ApiSubscribe(holder->mod, HF_ON_MISSION_END, SiloMissionEnd, NULL, 0);
+    SiloPassesRegister();
 }
 
 /* ---- removal: tombstones -------------------------------------------------------------------------------------------- */

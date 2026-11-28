@@ -531,6 +531,11 @@ static void DifficultyWatch(void)
     WatchTowns();
     WatchTerrain();
     WatchNavGrid();
+    /* The budget is per level: one for the session would silence the watches, and the patch audit WatchLevel and
+       WatchLaunch start, for every later mission. */
+    static uintptr_t budgetLevel;
+    uintptr_t levelNow = *(volatile uintptr_t*)(g_restartWatch + 0x20);
+    if (levelNow != 0 && levelNow != budgetLevel) { budgetLevel = levelNow; logged = 0; }
     if (logged >= 40) return;
     logged += WatchLevel();
     logged += WatchCapture();

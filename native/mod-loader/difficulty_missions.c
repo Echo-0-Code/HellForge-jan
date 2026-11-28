@@ -188,7 +188,9 @@ static const uint8_t kRadarStateStub[69] = {
 static int RowClass(uintptr_t row, uint32_t id)
 {
     uint8_t entries[32 * 0x18];
-    if (SafeRead(row + 0x40, entries, sizeof entries)) return -1;
+    /* in 256-byte pieces: SafeRead copies those itself, a longer read is a system call each time */
+    for (size_t at = 0; at < sizeof entries; at += 256)
+        if (SafeRead(row + 0x40 + at, entries + at, 256)) return -1;
     for (int i = 0; i < 32; i++)
     {
         uint32_t entry, cls;

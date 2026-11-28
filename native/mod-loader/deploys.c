@@ -185,6 +185,8 @@ static void* DeployBombardment(void* descriptor) { return DeployResolve(DEPLOY_B
 
 /* The copy of this kind for an entity the owner made: this machine's record with its own changes undone, then the owner's
  * values. The game's thread that spawns. */
+static volatile LONG g_deployEvicted;
+
 static void DeployMake(DeployKind* kind, int k, uint64_t resource, uint32_t entity, uint64_t owner)
 {
     uint8_t descriptor[16] = {0};
@@ -192,8 +194,19 @@ static void DeployMake(DeployKind* kind, int k, uint64_t resource, uint32_t enti
     memcpy(descriptor + 8, &entity, 4);
     uint8_t* mine = kind->original(descriptor);
     if (mine == NULL) return;
-    DeployCopy* slot = &kind->copies[kind->next];
-    kind->next = (kind->next + 1) % DEPLOY_COPIES;
+    /* A free slot or a dead entity's first, from the round-robin place on: a slot still read by a living entity is
+       taken only when every one is, and said, since that entity falls back to this machine's values. */
+    int at = kind->next;
+    for (int i = 0; i < DEPLOY_COPIES; i++)
+    {
+        int probe = (kind->next + i) % DEPLOY_COPIES;
+        LONG held = kind->copies[probe].entity;
+        if (held == 0 || !EvpAlive((uint32_t)held)) { at = probe; break; }
+    }
+    DeployCopy* slot = &kind->copies[at];
+    if (slot->entity != 0 && EvpAlive((uint32_t)slot->entity) && InterlockedIncrement(&g_deployEvicted) <= 8)
+        Note("deploys: all %d copies of %s are in use; entity %08x now reads this machine's values", DEPLOY_COPIES, kind->what, (uint32_t)slot->entity);
+    kind->next = (at + 1) % DEPLOY_COPIES;
     if (slot->record == NULL) slot->record = malloc(kind->size);
     if (slot->record == NULL) return;
     InterlockedExchange(&slot->entity, 0);

@@ -109,7 +109,14 @@ static uintptr_t DirectorRow(const char* kind, uint64_t id, int* ready)
     *ready = 1;
     size_t size = 0;
     uintptr_t game = g_directorImage(&size);
-    if (game == 0 || size != DIR_IMAGE || strcmp(g_build, "25480438")) { *ready = game == 0; return 0; }
+    if (game == 0 || size != DIR_IMAGE || strcmp(g_build, "25480438"))
+    {
+        /* not loaded: still to come; another build or image: no such row, said once instead of waiting for ever */
+        *ready = game != 0;
+        static LONG said;
+        if (game != 0 && InterlockedIncrement(&said) == 1) Note("director: the tables are not mapped for this build; roster, composition, limits and summon edits are refused");
+        return 0;
+    }
     if (!strcmp(kind, "DemolitionTemplate")) return DirectorDemolitionRow(game, id, ready);
     if (!strcmp(kind, "EnemySummon")) return SummonRowOf(game, id, ready);
     if (!strcmp(kind, "EnemyDeathExplosion")) return DeathRowOf(id, ready);

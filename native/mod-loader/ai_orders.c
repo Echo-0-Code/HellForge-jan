@@ -602,7 +602,7 @@ static void AiSpawned(HfMod* mod, const HfSpawnEvent* e, void* user)
     (void)mod; (void)user;
     if (!e->authority) return;
     for (LONG r = 0; r < g_aiRuleCount; r++)
-        if (g_aiRules[r].def.entity == e->resource) { AiPend(e->entity, e->resource, 1.0); return; }
+        if (g_aiRules[r].def.entity == e->resource && !ModGone(g_aiRules[r].mod)) { AiPend(e->entity, e->resource, 1.0); return; }
 }
 
 /* The nearest living Helldiver to a point, 0 none. */
@@ -689,7 +689,7 @@ static void AiStartOrder(AiUnit* u, const AiRule* rule, const float pos[3])
 static void AiSettled(uint32_t entity, uint64_t resource)
 {
     LONG r = 0;
-    while (r < g_aiRuleCount && g_aiRules[r].def.entity != resource) r++;
+    while (r < g_aiRuleCount && (g_aiRules[r].def.entity != resource || ModGone(g_aiRules[r].mod))) r++;
     AiCtx c;
     float pos[3];
     if (r == g_aiRuleCount) return;
@@ -878,9 +878,18 @@ static const char* AiAddRule(HfMod* mod, const HfAiObey* d)
 {
     const char* why = NULL;
     AcquireSRWLockExclusive(&g_aiLock);
-    for (LONG i = 0; i < g_aiRuleCount && !why; i++) if (g_aiRules[i].def.entity == d->entity && !ModGone(g_aiRules[i].mod)) why = "that entity obeys already";
-    if (!why && g_aiRuleCount >= AI_RULES) why = "32 entities obey already";
-    if (!why) { g_aiRules[g_aiRuleCount].mod = mod; g_aiRules[g_aiRuleCount].def = *d; InterlockedIncrement(&g_aiRuleCount); }
+    /* The entity's rule is replaced in its slot when its mod is gone or is this mod again: a live reload runs the
+       new version's init while the old one still runs, and its values must win. */
+    LONG slot = -1;
+    for (LONG i = 0; i < g_aiRuleCount && !why; i++)
+    {
+        if (g_aiRules[i].def.entity != d->entity) continue;
+        if (!ModGone(g_aiRules[i].mod) && strcmp(g_aiRules[i].mod->id, mod->id) != 0) why = "that entity obeys already";
+        else if (slot < 0) slot = i;
+    }
+    if (!why && slot < 0 && g_aiRuleCount >= AI_RULES) why = "32 entities obey already";
+    if (!why && slot >= 0) { g_aiRules[slot].mod = mod; g_aiRules[slot].def = *d; }
+    else if (!why) { g_aiRules[g_aiRuleCount].mod = mod; g_aiRules[g_aiRuleCount].def = *d; InterlockedIncrement(&g_aiRuleCount); }
     ReleaseSRWLockExclusive(&g_aiLock);
     return why;
 }
@@ -905,8 +914,15 @@ static const char* AiOrderRefusal(uint32_t entity, uint32_t order, uint32_t targ
     if (!AiReady()) return g_aiState < 0 ? "the movement calls are not the reviewed ones" : "the game is not loaded yet";
     if (order > HF_ORDER_GOTO || (order == HF_ORDER_FOLLOW && !EvpAlive(target)) || (order == HF_ORDER_GOTO && point == NULL))
         return "an order HF_ORDER_..., FOLLOW with a living target, GOTO with a point";
-    if (!EvpAlive(entity) || !AiCtxOf(entity, &c) || !AiAgentOf(entity)) return "no unit with a brain and a path agent";
-    if (!AiAuthority(&c)) return "another machine simulates it (order it there)";
+    if (!EvpAlive(entity)) return "no living unit";
+    /* A unit HellForge already routes for an ai_obey rule (a sentry the mod walks) needs no path agent of its own. */
+    AcquireSRWLockShared(&g_aiLock);
+    const AiUnit* known = AiUnitOf(entity, 0);
+    const int routed = known != NULL && (known->rule || known->route);
+    ReleaseSRWLockShared(&g_aiLock);
+    const int brain = AiCtxOf(entity, &c);
+    if (!routed && (!brain || !AiAgentOf(entity))) return "no unit with a brain and a path agent, and not a unit of an ai_obey rule";
+    if (brain && !AiAuthority(&c)) return "another machine simulates it (order it there)";
     return NULL;
 }
 

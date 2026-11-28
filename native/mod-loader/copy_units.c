@@ -18,6 +18,7 @@ typedef struct CopyNames
     uint64_t unit;    /* the unit entity's id was pointed at (0: none yet; the id itself: named after its own unit) */
     uint16_t set;     /* the types (bits of kCopyNameTypes) the id is pointed at that unit's for */
     uint16_t checked; /* 1 once the unit was loaded and its other types looked at */
+    uint16_t named;   /* 1: a unit of the id's own name is loaded, so the id is left alone (decided once) */
 } CopyNames;
 
 static CopyNames* g_copyNames; /* one per g_weapons entry */
@@ -66,10 +67,14 @@ static int CopyNamedAlready(int i, uint64_t unit)
 {
     const Weapon* w = &g_weapons[i];
     CopyNames* c = &g_copyNames[i];
+    if (c->named) return 1; /* the decision stands: a later pass must not override the id after all */
     if (unit != w->entity && (c->unit != 0 || !g_hotCanGet(g_copyTypes[0], w->entity))) return 0;
     if (unit != w->entity)
+    {
         ApiLog(w->mod, "%s: a unit named %016llx is loaded already; the game draws that one where it spawns this entity by its id",
             w->name, (unsigned long long)w->entity);
+        c->named = 1;
+    }
     c->unit = w->entity;
     c->checked = 1;
     return 1;

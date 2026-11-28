@@ -546,11 +546,12 @@ typedef struct HfDifficulty
 #define HF_DIFFICULTY_NO_BLITZ 0x10u
 /* City maps (mega cities) at the level get the strongholds (Automaton fortresses, Terminid mega nests) the level's
  * outpost counts ask for: city-only copies of the game's stronghold outposts (up to 100 m across), offered only at the
- * level. Open maps keep theirs; Illuminate has none. */
+ * level. Open maps keep theirs; Illuminate has none. Needs a map_scale above 1 (add_difficulty logs it otherwise). */
 #define HF_DIFFICULTY_CITY_STRONGHOLDS 0x20u
 /* Every city operation at the level starts with a Launch ICBM mission on the city map: three silos to launch, launch
  * codes to retrieve, power to restore and a refuelling station, beside the city's side objectives (three unused mission
- * rows of the game, one per faction, offered only at the level; city copies of the ICBM objectives' stamps). */
+ * rows of the game, one per faction, offered only at the level; city copies of the ICBM objectives' stamps). Needs a
+ * map_scale above 1 and HF_DIFFICULTY_RADAR (add_difficulty logs it otherwise). */
 #define HF_DIFFICULTY_CITY_ICBM 0x40u
 /* The SEAF Artillery side objective's shells at the level are Explosive, High-Yield Explosive and Mini Nuke only (by
  * weight 10, 5 and 5: a quarter of them nukes) instead of the game's mix with Napalm, Smoke and Static Field. */

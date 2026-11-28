@@ -950,7 +950,9 @@ static void ActShotsTick(uintptr_t game, float dt)
 /* ---- the game thread -------------------------------------------------------------------------------------------- */
 
 enum { ACT_HEAL = 1, ACT_HEAL_LIMB, ACT_INJURE, ACT_STATUS, ACT_VELOCITY, ACT_RESUPPLY, ACT_EXPLOSION, ACT_PROJECTILE, ACT_CREDIT, ACT_TIMER, ACT_PELICAN };
-typedef struct ActCall { int kind; HfMod* mod; uint32_t u[2]; int32_t i; float f[8]; } ActCall;
+/* since: when a queued call first answered HF_ACT_WAITING (0: not yet) */
+typedef struct ActCall { int kind; HfMod* mod; uint32_t u[2]; int32_t i; float f[8]; ULONGLONG since; } ActCall;
+#define ACT_WAIT_MS 15000
 #define ACT_QUEUE 64
 static ActCall g_actQueue[ACT_QUEUE];
 static int g_actQueued;
@@ -1008,7 +1010,23 @@ static void ActionsTick(void)
         for (int i = 0; i < n; i++)
         {
             int result = ActRun(&pending[i], NULL);
-            ApiLog(pending[i].mod, "action %d (queued): %s", pending[i].kind, result ? "done" : "refused");
+            /* its packages are loading: the caller only saw "queued" and cannot call again, so the queue does */
+            if (result == HF_ACT_WAITING)
+            {
+                if (pending[i].since == 0) pending[i].since = now;
+                int again = 0;
+                if (now - pending[i].since < ACT_WAIT_MS)
+                {
+                    AcquireSRWLockExclusive(&g_actQueueLock);
+                    again = g_actQueued < ACT_QUEUE;
+                    if (again) g_actQueue[g_actQueued++] = pending[i];
+                    ReleaseSRWLockExclusive(&g_actQueueLock);
+                }
+                if (!again) ApiLog(pending[i].mod, "action %d (queued): given up, its packages did not load", pending[i].kind);
+                continue;
+            }
+            ApiLog(pending[i].mod, "action %d (queued): %s", pending[i].kind,
+                result == HF_ACT_DONE ? "done" : result == HF_ACT_REQUESTED ? "requested" : result ? "taken" : "refused");
         }
     }
     uintptr_t game = ApiModuleBase("game.dll", NULL);

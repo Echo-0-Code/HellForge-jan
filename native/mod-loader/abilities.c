@@ -870,17 +870,26 @@ static const char* WriteAbilityBranch(uintptr_t game, uint8_t* stub)
     return NULL;
 }
 
-/* The silo countdowns' per-frame pass and mission end, under the first mod with a silo countdown. */
+/* The loader's own entry for the silo passes: under a mod's they would go with that mod when it is taken out live,
+   and every other mod's countdowns would stop being freed. */
+static HfMod g_siloMod;
+
+static void SiloPassesRegister(void)
+{
+    g_siloMod.api = &g_api;
+    snprintf(g_siloMod.id, sizeof g_siloMod.id, "hellforge.silo");
+    g_siloMod.log = g_log;
+    g_siloMod.loaded = 1;
+    if (!ApiOnGameThread(&g_siloMod, SiloFrame, NULL))
+        Note("abilities: the silo countdowns' per-frame pass is not running: a countdown whose missile goes early keeps its remote's link marked until the mission ends");
+    ApiSubscribe(&g_siloMod, HF_ON_MISSION_END, SiloMissionEnd, NULL, 0);
+}
+
+/* The silo countdowns' per-frame pass and mission end, once any mod has a silo countdown. */
 static void StartSiloPasses(void)
 {
     for (uint32_t i = 0; i < g_abilityCount; i++)
-        if (g_abilities[i].holdsLaunch)
-        {
-            if (!ApiOnGameThread(g_abilities[i].mod, SiloFrame, NULL))
-                Note("abilities: the silo countdowns' per-frame pass is not running: a countdown whose missile goes early keeps its remote's link marked until the mission ends");
-            ApiSubscribe(g_abilities[i].mod, HF_ON_MISSION_END, SiloMissionEnd, NULL, 0);
-            break;
-        }
+        if (g_abilities[i].holdsLaunch) { SiloPassesRegister(); break; }
 }
 
 static void WantAbilityPackages(void)

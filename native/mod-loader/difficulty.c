@@ -272,6 +272,12 @@ static int DifficultyFlags(HfMod* mod, const char* name, const HfDifficulty* def
         return 1;
     }
     d->flags = def->flags;
+    /* The city copies are made on the larger maps' level-init path, and the ICBM city missions with the radar rows:
+       a level that asks for them without those would get nothing and no line saying why. */
+    if ((d->flags & (HF_DIFFICULTY_CITY_STRONGHOLDS | HF_DIFFICULTY_CITY_ICBM)) && !(d->mapScale > 1.0f))
+        ApiLog(mod, "add_difficulty(%s): CITY_STRONGHOLDS and CITY_ICBM need a map_scale above 1; without it the cities stay the game's", name);
+    if ((d->flags & HF_DIFFICULTY_CITY_ICBM) && !(d->flags & HF_DIFFICULTY_RADAR))
+        ApiLog(mod, "add_difficulty(%s): CITY_ICBM needs RADAR too; without it no ICBM city mission is offered", name);
     return 0;
 }
 

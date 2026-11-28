@@ -17,7 +17,7 @@
 #define T_RANGE 120.0f
 #define T_FIRE_TRAVERSE 12.0f       /* a new target this close keeps the trigger pulled */
 #define T_REFILL_BELOW 200
-#define T_MINDS 16
+#define T_MINDS 64
 
 typedef char (*BhvValidFn)(void* unused, uint32_t entity, void* info);
 typedef uint8_t* (*BhvFindEntryFn)(uintptr_t perception, uint32_t perceiver, uint32_t entity);
@@ -55,6 +55,10 @@ static TurretMind* MindOf(uint32_t turret, uint64_t now)
         if (g_minds[i].turret == turret) { g_minds[i].used = now; return &g_minds[i]; }
         if (g_minds[i].used < oldest->used) oldest = &g_minds[i];
     }
+    /* A slot used within the last second belongs to a turret that still runs: it loses its reserve and its locks. */
+    static LONG said;
+    if (oldest->turret != 0 && now - oldest->used < 1000000ull && InterlockedIncrement(&said) == 1)
+        Note("turret behaviour: more than %d turrets run at once; the one idle longest starts again (reserve refilled, target lost)", T_MINDS);
     memset(oldest, 0, sizeof *oldest);
     oldest->turret = turret;
     oldest->used = now;
