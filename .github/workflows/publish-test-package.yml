@@ -16,10 +16,10 @@ jobs:
       - name: Download the artifact and publish it
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: "46121152954"
-          TAG: "test-91d455a"
-          TARGET: "91d455a52c7eb35b38c293e3581b1b9533c3a6f4"
-          TITLE: "Test build 91d455a, ornithopter gun spin-up, chin turret, flier thrust (SDK 56) (run 46121152954)"
+          RUN_ID: "46125041180"
+          TAG: "test-fd94ec5"
+          TARGET: "fd94ec53c47bfadb118458c7c124dc13badd9ae3"
+          TITLE: "Test build fd94ec5, Combined: preview fit flash fix + SDK 56 ornithopter + upstream dev + paints + heli (run 46125041180)"
         run: |
           gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n test-package -D pkg
           find pkg -type f -exec ls -la {} \;
