@@ -204,6 +204,9 @@ static uint32_t PassivesWanted(const LocalPassives* local, int s, char* status, 
     { snprintf(status, statusSize, "passive %u needs an effect package HellForge does not load yet", want); want = local->derived[s]; }
     if (s == 1 && want != local->derived[s] && PassiveIn(kPassiveArmorOnly, sizeof kPassiveArmorOnly / sizeof kPassiveArmorOnly[0], want))
     { snprintf(status, statusSize, "passive %u works only as the armor passive", want); want = local->derived[s]; }
+    /* an id with no object in this build would index the game's passive array out of range */
+    if (want != local->derived[s] && (want >= PSV_PASSIVE_IDS || !local->passiveValid[want]))
+    { snprintf(status, statusSize, "passive %u is not in this game build", want); want = local->derived[s]; }
     return want;
 }
 

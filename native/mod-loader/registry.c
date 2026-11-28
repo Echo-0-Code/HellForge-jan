@@ -1095,11 +1095,25 @@ static const char* ModTextOf(uint32_t id)
     return NULL;
 }
 
+/* The game's text before the hook is in (no mod text yet): the engine API's own slot, read each call. The loader's own
+ * readers (the armory's nameless-item filter) would take every text for empty otherwise. */
+static const char* TextDetour(uint32_t id, void* a, void* b, void* c);
+static const char* EngineTextUnhooked(uint32_t id, void* a, void* b, void* c)
+{
+    uintptr_t api = 0, table = 0, current = 0;
+    if (g_game == 0 || SafeRead(g_game + REG_ENGINE_API, &api, 8) || api == 0 || SafeRead(api + 0x10, &table, 8) || table == 0 ||
+        SafeRead(table + 1000, &current, 8) || current == 0 || current == (uintptr_t)TextDetour) return "";
+    const uintptr_t exe = (uintptr_t)GetModuleHandleA(NULL);
+    const IMAGE_NT_HEADERS64* nt = (const IMAGE_NT_HEADERS64*)(exe + ((const IMAGE_DOS_HEADER*)exe)->e_lfanew);
+    if (current < exe || current >= exe + nt->OptionalHeader.SizeOfImage) return "";
+    return ((EngineTextFn)current)(id, a, b, c);
+}
+
 /* The engine's text function with the mods' text first (the served ones: not a live change's still staged). */
 static const char* TextDetour(uint32_t id, void* a, void* b, void* c)
 {
     for (int i = (int)g_textsServed - 1; i >= 0; i--) if (g_texts[i].id == id) return g_texts[i].text; /* the newest: a live change's new version */
-    return g_engineText != NULL ? g_engineText(id, a, b, c) : "";
+    return g_engineText != NULL ? g_engineText(id, a, b, c) : EngineTextUnhooked(id, a, b, c);
 }
 
 /* The texts added so far are served (a live change was made, or none is staged). */
@@ -1132,12 +1146,24 @@ static void HookText(void)
 /* A mod text served under the given id (a game text's id: that text is the mod's from then on). 0 refused. */
 static uint32_t AddTextAs(const char* text, uint32_t id)
 {
-    if (text == NULL || text[0] == 0 || id == 0 || !StableRoom(&g_textStore, (size_t)g_textCount + 1)) return 0;
+    if (text == NULL || text[0] == 0 || id == 0) return 0;
+    /* The same id again takes its newest entry, so a text set every update adds no entries. Not while a live change
+     * holds its texts back: those must stay unseen until it is made. */
+    int again = -1;
+    for (int i = g_textCount - 1; !g_textsHeld && i >= 0 && again < 0; i--) if (g_texts[i].id == id) again = i;
+    if (again >= 0 && !strcmp(g_texts[again].text, text)) return id;
+    if (again < 0 && !StableRoom(&g_textStore, (size_t)g_textCount + 1)) return 0;
     g_texts = (ModText*)g_textStore.base;
     size_t length = strlen(text);
     char* copy = (char*)malloc(length + 1);
     if (copy == NULL) return 0;
     memcpy(copy, text, length + 1);
+    if (again >= 0)
+    {
+        /* the old text is not freed: the game may still hold the pointer a lookup gave it */
+        InterlockedExchangePointer((void* volatile*)&g_texts[again].text, copy);
+        return id;
+    }
     g_texts[g_textCount] = (ModText){id, copy};
     MemoryBarrier(); /* the game thread looks texts up while a live change adds them (TextDetour) */
     g_textCount++;
