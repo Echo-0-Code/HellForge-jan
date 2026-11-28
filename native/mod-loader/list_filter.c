@@ -683,5 +683,20 @@ static int ApiSetListBand(HfMod* mod, uint32_t list, float height)
     return 0;
 }
 
+/* A mod taken out (live_code.c ForgetOnGameThread): its rules, filters and bands leave, and both lists build again. Its
+ * rule's code is gone with its DLL, so no build may ask it again. */
+static void LfForget(const HfMod* mod)
+{
+    AcquireSRWLockExclusive(&g_lfLock);
+    uint32_t rules = 0, filters = 0, bands = 0;
+    for (uint32_t i = 0; i < g_lfRuleCount; i++) if (g_lfRules[i].mod != mod) g_lfRules[rules++] = g_lfRules[i];
+    for (uint32_t i = 0; i < g_lfFilterCount; i++) if (g_lfFilters[i].mod != mod) g_lfFilters[filters++] = g_lfFilters[i];
+    for (uint32_t i = 0; i < g_lfBandCount; i++) if (g_lfBands[i].mod != mod) g_lfBands[bands++] = g_lfBands[i];
+    const int had = rules != g_lfRuleCount || filters != g_lfFilterCount || bands != g_lfBandCount;
+    g_lfRuleCount = rules, g_lfFilterCount = filters, g_lfBandCount = bands;
+    ReleaseSRWLockExclusive(&g_lfLock);
+    for (int l = 0; had && l < LF_LISTS; l++) InterlockedExchange(&g_lfRebuild[l], 1);
+}
+
 /* The table's entries from SDK 38 on (ApiInit). */
 #define LF_API ApiAddListRule, ApiSetListFilter, ApiRebuildList, ApiListState, ApiSetListBand

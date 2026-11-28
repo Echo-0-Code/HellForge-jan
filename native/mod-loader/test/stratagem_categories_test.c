@@ -209,6 +209,11 @@ static void VanillaStratagemPlacementFixture(void)
     assert(ApiSetStratagemIcon(&a, 3, NULL) == 1 && ApiSetStratagemIcon(&a, 3, "") == 1 && ApiSetStratagemIcon(&a, 200, "x") == 1);
     g_fired[HF_EVENT_GAME_LOADED] = 1;
     assert(ApiPlaceStratagem(&a, 6, eagles, 0) == 1 && ApiSetStratagemIcon(&a, 6, "x") == 1); /* after init */
+    HfMod again = {0}; strcpy(again.id, "test.a"); /* test.a set up again while the game runs */
+    g_liveSetup = &again;
+    assert(ApiPlaceStratagem(&again, 2, eagles, 5) == 0 && g_vanillaPlacements[2].mod == &again); /* as before: kept */
+    assert(ApiPlaceStratagem(&again, 2, orbitals, 5) == 1 && ApiPlaceStratagem(&again, 6, eagles, 0) == 1); /* changed, new */
+    g_liveSetup = NULL;
     g_fired[HF_EVENT_GAME_LOADED] = 0;
 
     /* The game's rows: types 1 .. 6 pickable, all in vanilla section 0 (offensive), with icon 0x1111. */

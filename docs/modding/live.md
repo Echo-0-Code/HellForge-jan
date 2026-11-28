@@ -57,6 +57,9 @@ Then your mod may be set up after the game has started, and taken out before it 
   Return 0 once your threads and timers are stopped. Without the export, HellForge takes the mod out only when none of
   its own threads still runs. Your DLL is never unloaded (a thread may still be returning into it), so a new version is
   a new file (HellForge loads each build from its own path).
+- **What the game has already built stays.** `add_pattern`, `place_stratagem`, `place_mod_stratagem` and
+  `set_stratagem_icon` take, in a live set-up, what this mod's earlier load asked: those stay as they were, now yours.
+  A new or changed one shows after a restart. Taking a mod out also takes its list rules, filters and bands away.
 - **Writes outside `api->write`** (a raw `memcpy` into game code) cannot be put back: a mod that made one is never taken
   out live.
 - **Use `api->write`'s result** in a game-thread callback or a hook's detour. HellForge knows whose write it is from

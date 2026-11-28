@@ -278,12 +278,15 @@ static int (*g_liveOnGameThread)(void (*fn)(void*), void* arg) = LiveOnGameThrea
 /* ---- what a mod made through the API, taken away ------------------------------------------------------------------- */
 
 static void VisForget(const HfMod* mod); /* visibility.c */
+static void LfForget(const HfMod* mod);  /* list_filter.c */
 
-/* On the game thread: its game-thread callbacks, listeners, queued actions and shot rules, and its visibility scales. */
+/* On the game thread: its game-thread callbacks, listeners, queued actions and shot rules, its visibility scales, and
+ * its list rules, filters and bands. */
 static void ForgetOnGameThread(void* arg)
 {
     const HfMod* mod = (const HfMod*)arg;
     VisForget(mod);
+    LfForget(mod);
     /* in place: TickDetour, which reads the table without the lock, runs on this thread and not now */
     AcquireSRWLockExclusive(&g_lock);
     TickTable* ticks = g_ticks;

@@ -502,11 +502,34 @@ static uint32_t PatAddUnit(HfMod* mod, const HfPattern* def, const char* key)
     return p.id;
 }
 
+/* After the entities are up no pattern can join the game. A mod set up again while the game runs (a new version, or
+ * switched off and on) may name the patterns its earlier load added: those are kept as they are (a new look waits for a
+ * restart) and their id comes back. 0 for a new one (logged). */
+static uint32_t PatLive(HfMod* mod, const HfPattern* def)
+{
+    for (int i = 0; i < g_attachmentCount; i++)
+        if (g_attachments[i].pattern && !strcmp(g_attachments[i].name, def->name) && g_attachments[i].mod && !strcmp(g_attachments[i].mod->id, mod->id))
+        {
+            g_attachments[i].mod = mod, g_attachments[i].copy.log = mod;
+            ApiLog(mod, "add_pattern(%s): in the game from this mod's earlier load, kept (a changed look shows after a restart)", def->name);
+            return g_attachments[i].id;
+        }
+    for (int i = 0; i < g_patternCount; i++)
+        if (!strcmp(g_patterns[i].name, def->name) && g_patterns[i].mod && !strcmp(g_patterns[i].mod->id, mod->id))
+        {
+            g_patterns[i].mod = mod, g_patterns[i].copy.log = mod;
+            ApiLog(mod, "add_pattern(%s): in the game from this mod's earlier load, kept (a changed look shows after a restart)", def->name);
+            return g_patterns[i].id;
+        }
+    ApiLog(mod, "add_pattern(%s): too late; a new pattern joins at the next start (call it from hellforge_mod_init)", def->name);
+    return 0;
+}
+
 static uint32_t ApiAddPattern(HfMod* mod, const HfPattern* def)
 {
     if (mod == NULL || def == NULL || def->size < sizeof(HfPattern)) { ApiLog(mod, "add_pattern: no pattern, or its size is not set (HfPattern p = {sizeof p})"); return 0; }
     if (def->name == NULL || def->name[0] == 0 || strlen(def->name) >= sizeof g_patterns[0].name) { ApiLog(mod, "add_pattern: it needs a name (under 96 bytes)"); return 0; }
-    if (g_fired[HF_EVENT_ENTITIES_READY]) { ApiLog(mod, "add_pattern(%s): too late; call it from hellforge_mod_init", def->name); return 0; }
+    if (g_fired[HF_EVENT_ENTITIES_READY]) return PatLive(mod, def);
     if (def->base == 0) { ApiLog(mod, "add_pattern(%s): it needs a base, a vanilla pattern's id", def->name); return 0; }
     char key[160];
     snprintf(key, sizeof key, "hellforge/pattern/%s", def->name);

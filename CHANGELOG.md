@@ -57,6 +57,9 @@ On `dev`, since 0.5.0-beta.
 
 ### Fixed
 
+- **More mods can be changed while the game runs.** A paint mod or a stratagem layout mod set up again keeps the paints
+  and placements its earlier load made, instead of being refused. A list search mod taken out no longer leaves its
+  filter or a second band behind.
 - **Armory previews with a fit no longer show too big at first.** On a pick, the camera framed the new item with the
   last item's box, or with the box of a unit still loading, for about half a second. An item with `set_preview_fit` now
   shows its last fitted box until it is framed again.

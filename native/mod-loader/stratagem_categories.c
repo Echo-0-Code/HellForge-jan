@@ -88,12 +88,22 @@ static uint32_t ApiAddStratagemCategory(HfMod* mod, const HfStratagemCategory* d
     return g_stratagemCategoryCount;
 }
 
-/* Both SDK 23 calls: from hellforge_mod_init only (a live set-up cannot change the rows the game has already drawn), and
- * for a vanilla type. The rows are checked once the game has loaded them (ApplyVanillaStratagems). */
+static int StratagemRowsDrawn(void) { return g_stratagemState != 0 || g_fired[HF_EVENT_GAME_LOADED]; }
+
+/* A live set-up (a new version, or switched off and on) may ask again what this mod's earlier load asked: that stays,
+ * now this load's. Anything new would change rows the game has already drawn, so it waits for the next start. */
+static int StratagemAskedBefore(HfMod* mod, HfMod** owner, int same, const char* call, const char* what)
+{
+    if (g_liveSetup == mod && same && *owner != NULL && !strcmp((*owner)->id, mod->id)) { *owner = mod; return 1; }
+    ApiLog(mod, "%s(%s): the game has drawn its rows; a new or changed one shows after a restart (call it from hellforge_mod_init)", call, what);
+    return 0;
+}
+
+/* Both SDK 23 calls: from hellforge_mod_init (a live set-up only as its mod's earlier load asked), and for a vanilla
+ * type. The rows are checked once the game has loaded them (ApplyVanillaStratagems). */
 static int VanillaStratagemCall(HfMod* mod, const char* call, uint32_t type)
 {
     if (mod == NULL) return 0;
-    if (g_stratagemState != 0 || g_fired[HF_EVENT_GAME_LOADED]) { ApiLog(mod, "%s(%u): call from hellforge_mod_init", call, type); return 0; }
     if (type == 0 || type >= STR_VANILLA) { ApiLog(mod, "%s(%u): not a vanilla stratagem type (1 .. %u)", call, type, STR_VANILLA - 1); return 0; }
     return 1;
 }
@@ -104,6 +114,9 @@ static int ApiPlaceStratagem(HfMod* mod, uint32_t type, uint32_t selectionCatego
     if (selectionCategory == 0 || selectionCategory > g_stratagemCategoryCount)
     { ApiLog(mod, "place_stratagem(%u): %u is not a registered category handle", type, selectionCategory); return 1; }
     VanillaPlacement* p = &g_vanillaPlacements[type];
+    char what[16];
+    snprintf(what, sizeof what, "%u", type);
+    if (StratagemRowsDrawn()) return !StratagemAskedBefore(mod, &p->mod, p->handle == selectionCategory && p->order == selectionOrder, "place_stratagem", what);
     if (p->mod != NULL && (p->handle != selectionCategory || p->order != selectionOrder))
     {
         ApiLog(mod, "place_stratagem(%u): %s already lists it under %s", type, p->mod->id, g_stratagemCategories[p->handle - 1].name);
@@ -122,6 +135,9 @@ static int ApiSetStratagemIcon(HfMod* mod, uint32_t type, const char* icon)
     { ApiLog(mod, "set_stratagem_icon(%u): it needs an icon's resource name (under 192 bytes)", type); return 1; }
     VanillaPlacement* p = &g_vanillaPlacements[type];
     uint64_t hash = Murmur64A(icon, strlen(icon));
+    char what[16];
+    snprintf(what, sizeof what, "%u", type);
+    if (StratagemRowsDrawn()) return !StratagemAskedBefore(mod, &p->iconMod, p->icon == hash, "set_stratagem_icon", what);
     if (p->iconMod != NULL && p->icon != hash)
     { ApiLog(mod, "set_stratagem_icon(%u): %s already gives it %s", type, p->iconMod->id, p->iconName); return 1; }
     if (p->iconMod == NULL) g_vanillaIcons++;
@@ -131,20 +147,27 @@ static int ApiSetStratagemIcon(HfMod* mod, uint32_t type, const char* icon)
     return 0;
 }
 
+static NamedPlacement* NamedPlaceFind(const char* name)
+{
+    for (uint32_t i = 0; i < g_namedPlaced; i++) if (!strcmp(g_namedPlacements[i].name, name)) return &g_namedPlacements[i];
+    return NULL;
+}
+
 static int ApiPlaceModStratagem(HfMod* mod, const char* name, uint32_t selectionCategory, int32_t selectionOrder)
 {
     if (mod == NULL) return 1;
     if (name == NULL || !name[0] || strlen(name) >= sizeof g_namedPlacements[0].name)
     { ApiLog(mod, "place_mod_stratagem: it needs a stratagem's name (under 192 bytes)"); return 1; }
-    if (g_stratagemState != 0 || g_fired[HF_EVENT_GAME_LOADED]) { ApiLog(mod, "place_mod_stratagem(%s): call from hellforge_mod_init", name); return 1; }
     if (selectionCategory == 0 || selectionCategory > g_stratagemCategoryCount)
     { ApiLog(mod, "place_mod_stratagem(%s): %u is not a registered category handle", name, selectionCategory); return 1; }
-    for (uint32_t i = 0; i < g_namedPlaced; i++)
+    NamedPlacement* before = NamedPlaceFind(name);
+    HfMod* none = NULL;
+    const int same = before != NULL && before->handle == selectionCategory && before->order == selectionOrder;
+    if (StratagemRowsDrawn()) return !StratagemAskedBefore(mod, before != NULL ? &before->mod : &none, same, "place_mod_stratagem", name);
+    if (same) return 0;
+    if (before != NULL)
     {
-        NamedPlacement* p = &g_namedPlacements[i];
-        if (strcmp(p->name, name)) continue;
-        if (p->handle == selectionCategory && p->order == selectionOrder) return 0;
-        ApiLog(mod, "place_mod_stratagem(%s): %s already lists it under %s", name, p->mod->id, g_stratagemCategories[p->handle - 1].name);
+        ApiLog(mod, "place_mod_stratagem(%s): %s already lists it under %s", name, before->mod->id, g_stratagemCategories[before->handle - 1].name);
         return 1;
     }
     if (g_namedPlaced == STR_NAMED_MAX) { ApiLog(mod, "place_mod_stratagem(%s): all %u places are used", name, STR_NAMED_MAX); return 1; }
