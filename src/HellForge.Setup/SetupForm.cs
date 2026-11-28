@@ -206,6 +206,11 @@ sealed class SetupForm : Form
         if (payload == null) return 2;
         try
         {
+            if (Process.GetProcesses().Any(process => IsFrom(process, LocalInstall.FullPath(folder))))
+            {
+                Console.Error.WriteLine("Close HellForge (launcher and any session) first.");
+                return 1;
+            }
             var payloadBytes = payload.Length;
             Console.WriteLine(Unpack(payload, LocalInstall.FullPath(folder), null));
             if (KeepSelf(LocalInstall.FullPath(folder), payloadBytes) is { } notKept) Console.Error.WriteLine("No copy of this setup was kept: " + notKept);
@@ -240,15 +245,23 @@ sealed class SetupForm : Form
         // The app replaced is kept in app-versions when there is room, for Settings > Installation's go back. The new
         // version carries on with the mod list of the version before (this fork's choice; upstream starts it empty).
         var kept = KeptVersions.KeepCurrent(layout, Path.Combine(staging, "app"), freshModList: false);
-        if (Directory.Exists(layout.App)) Directory.Delete(layout.App, recursive: true);
+        // The app in place is moved aside, not deleted, until the new one is in: a file in use fails the move with
+        // nothing changed, and a failed swap puts the old app back.
+        var replaced = Path.Combine(layout.Temp, "setup-replaced-app");
+        if (Directory.Exists(replaced)) Directory.Delete(replaced, recursive: true);
+        var had = Directory.Exists(layout.App);
+        if (had) Directory.Move(layout.App, replaced);
         try { Directory.Move(Path.Combine(staging, "app"), layout.App); }
-        catch (Exception) when (kept is { Kept: true, Name: { } name })
+        catch (Exception)
         {
-            KeptVersions.Unkeep(layout, name);
+            if (had && !Directory.Exists(layout.App)) Directory.Move(replaced, layout.App);
+            if (kept is { Kept: true, Name: { } name }) KeptVersions.Unkeep(layout, name);
             throw;
         }
         File.Move(Path.Combine(staging, ProgramName), Path.Combine(target, ProgramName), overwrite: true);
         Directory.Delete(staging, recursive: true);
+        try { if (had) Directory.Delete(replaced, recursive: true); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { /* a later setup clears it */ }
         return kept.Message;
     }
 
