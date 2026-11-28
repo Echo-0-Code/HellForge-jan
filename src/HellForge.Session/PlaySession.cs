@@ -754,7 +754,6 @@ sealed partial class PlaySession(PlayOptions options)
         Ownership(Path.Combine(copy, "bin", CloudName), Path.Combine(run, "ownership.json"));
         result["ownershipConfirmed"] = true;
         var realTarget = SwapInCloud(build);
-        var authorization = Stopwatch.StartNew();
         ThrowIfStopRequested();
         HoldInstalledGame();
         WriteAppIdHint();
@@ -766,7 +765,6 @@ sealed partial class PlaySession(PlayOptions options)
         // Confirm genuine Steam sign-in and ownership with the game's rules active.
         Ownership(realTarget, Path.Combine(run, "ownership-with-firewall.json"));
         result["steamOwnershipWithRules"] = true;
-        if (authorization.Elapsed.TotalSeconds >= 120) throw new SessionFailure("Ownership authorization expired.");
         ThrowIfStopRequested();
         var requestLog = PrepareProfileFolder();
         if (linuxSandbox)

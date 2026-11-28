@@ -26,6 +26,7 @@ static class SandboxDomainHost
         };
         SandboxDomainStatus.Write(statusPath, clean);
         HostBoundedProcess? job = null;
+        SessionEndSignal? endSignal = null;
         Thread? applier = null;
         HellForgeLocalRoutingPatch.PlayFabRedirect? playFab = null;
         SandboxPipeRelayDomain? relay = null;
@@ -56,6 +57,13 @@ static class SandboxDomainHost
                 0, singleProcess: true);
             clean = clean with { GamePid = job.Process.Id, State = "starting" };
             SandboxDomainStatus.Write(statusPath, clean);
+            // Made before the game runs, as on Windows, so a stop from the launcher reaches the mods' session-end
+            // event. Without them (Wine refusing the events) the stop works as before.
+            try { endSignal = SessionEndSignal.Create(job.Process.Id); }
+            catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException)
+            {
+                Console.Error.WriteLine("sandbox host: no session-end events: " + error.Message);
+            }
             job.Resume();
             playFab = spec.LocalPlayFab
                 ? HellForgeLocalRoutingPatch.StartPlayFabRedirect(job.Process.Id, spec.GameExeWine, spec.BackendOrigin + "/playfab", -1)
@@ -78,7 +86,7 @@ static class SandboxDomainHost
             ApplyRouting(spec, job);
             clean = clean with { State = "running" };
             SandboxDomainStatus.Write(statusPath, clean);
-            ObserveGame(spec, job, statusPath, stopPath, playFab, applier, ref clean);
+            ObserveGame(spec, job, endSignal, statusPath, stopPath, playFab, applier, ref clean);
             return 0;
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException or InvalidOperationException or
@@ -95,12 +103,28 @@ static class SandboxDomainHost
         finally
         {
             relay?.Stop();
+            endSignal?.Dispose();
             try { job?.Dispose(); }
             catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException) { }
         }
     }
 
-    static void ObserveGame(SandboxLaunchSpec spec, HostBoundedProcess job, string statusPath, string stopPath,
+    // The mods hear the session's end and the game is asked to close (it then writes its shader cache) before the
+    // job is stopped. The runner waits 25 seconds for this host, so both waits together stay well below that.
+    static void EndGently(HostBoundedProcess job, SessionEndSignal? endSignal)
+    {
+        try
+        {
+            endSignal?.Signal(TimeSpan.FromSeconds(2));
+            GameClose.CloseAndWait(job.Process, TimeSpan.FromSeconds(15), out _);
+        }
+        catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            Console.Error.WriteLine("sandbox host: the game was not asked to close: " + error.Message);
+        }
+    }
+
+    static void ObserveGame(SandboxLaunchSpec spec, HostBoundedProcess job, SessionEndSignal? endSignal, string statusPath, string stopPath,
         HellForgeLocalRoutingPatch.PlayFabRedirect? playFab, Thread? applier, ref SandboxDomainStatus clean)
     {
         var clock = Stopwatch.StartNew();
@@ -116,6 +140,7 @@ static class SandboxDomainHost
                 stopped = true;
                 clean = clean with { State = "stopping" };
                 SandboxDomainStatus.Write(statusPath, clean);
+                EndGently(job, endSignal);
                 job.Stop();
                 break;
             }

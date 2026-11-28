@@ -93,13 +93,14 @@ sealed partial class PlaySession
         Save();
     }
 
-    // The persistent block is re-read every 10 seconds; the game is stopped if a rule or profile goes away.
+    // The persistent block is re-read as the session runs; the game is stopped if a rule or profile goes away.
     void CheckBlock(Stopwatch clock, int blockRules, ref long nextBlockCheck)
     {
         if (clock.ElapsedMilliseconds < nextBlockCheck) return;
         // blockRules is 0 only in the WFP-only mode, which has no firewall rules to re-read.
         if (blockRules > 0 && BlockRuleCount() != blockRules) throw new SessionFailure("Network block rules or firewall profiles changed during the session.");
-        nextBlockCheck = clock.ElapsedMilliseconds + 10000;
+        // The older firewall-rule block is read through PowerShell, a process start each time: every 30 seconds there.
+        nextBlockCheck = clock.ElapsedMilliseconds + (blockRules > 0 ? 30000 : 10000);
     }
 
     // The network block's probe while the session started offline (NoteOffline), and the watch that says when it runs
