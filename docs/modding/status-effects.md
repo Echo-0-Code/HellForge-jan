@@ -69,6 +69,7 @@ The callback runs on the game thread for every level change. With several effect
 - **From vanilla statuses.** A feed adds `buildup * scale` for every `ApplyStatus` of its `status`. With
   `with_status` set, only hits that bring both statuses to one entity in one game update count. That is how a cryo
   round tells itself apart: it applies the flamer slow (67) and a stun together.
+  A status a mod applies itself with `apply_status` feeds no meter.
 - **From the mod.** `add_effect_buildup(mod, effect, entity, amount)` adds to the meter, or drains it with a negative
   amount. Call it on the machine that owns the entity (the host, for enemies).
 

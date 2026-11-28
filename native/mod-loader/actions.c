@@ -208,6 +208,7 @@ static int ActStatusApplies(uint32_t status)
     for (size_t i = 0; i < sizeof kActStatuses / sizeof kActStatuses[0]; i++) if (kActStatuses[i] == status) allowed = 1;
     return allowed;
 }
+static void SeOwnStatus(uint32_t entity, uint32_t status, float buildup);
 static int ActStatusNow(HfMod* mod, uintptr_t game, uint32_t target, uint32_t status, float buildup)
 {
     static const ActPin pins[] = {{0, 0x129F218u, "8b8634112000"}, {0, 0x129F21Eu, "3d00100000"}};
@@ -226,6 +227,7 @@ static int ActStatusNow(HfMod* mod, uintptr_t game, uint32_t target, uint32_t st
     if (!EvpPtr(game + 0x3326620u, &manager) || !EvpPtr(game + 0x37C5C50u + status * 8, &row) || EvpU32(row, 0) != status)
     { ApiLog(mod, "apply_status: status %u is not loaded", status); return 0; }
     ((void (*)(void*, uint32_t, uint32_t, float, uint32_t, uint32_t))fn)(NULL, status, target, buildup, instigator, 0);
+    SeOwnStatus(target, status, buildup);
     return HF_ACT_REQUESTED;
 }
 

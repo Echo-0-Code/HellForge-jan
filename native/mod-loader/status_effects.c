@@ -113,10 +113,34 @@ static int SeFeedsStatus(uint32_t status)
     return 0;
 }
 
-/* Passes every call straight on; a status some effect counts is noted for the game thread. */
+/* Statuses the loader queued for a mod's apply_status, until the game applies them. They are a mod's own doing, often
+ * an effect's level answering its meter, so they feed no meter: counted, a mod's stun would pair with another source's
+ * slow on the same entity and fill a meter no hit filled. Game thread only. */
+enum { SE_OWN = 64 };
+static struct { uint32_t entity, status; float buildup; } g_seOwn[SE_OWN];
+static int g_seOwnCount;
+static void SeOwnStatus(uint32_t entity, uint32_t status, float buildup)
+{
+    if (g_seOwnCount == SE_OWN) memmove(g_seOwn, g_seOwn + 1, sizeof g_seOwn[0] * (size_t)--g_seOwnCount);
+    g_seOwn[g_seOwnCount].entity = entity;
+    g_seOwn[g_seOwnCount].status = status;
+    g_seOwn[g_seOwnCount++].buildup = buildup;
+}
+static int SeOwnTake(uint32_t entity, uint32_t status, float buildup)
+{
+    for (int i = 0; i < g_seOwnCount; i++)
+    {
+        if (g_seOwn[i].entity != entity || g_seOwn[i].status != status || g_seOwn[i].buildup != buildup) continue;
+        memmove(g_seOwn + i, g_seOwn + i + 1, sizeof g_seOwn[0] * (size_t)(--g_seOwnCount - i));
+        return 1;
+    }
+    return 0;
+}
+
+/* Passes every call straight on; a status some effect counts is noted for the game thread, the loader's own left out. */
 static void SeApplyStatusDetour(void* receivers, uint32_t entity, uint32_t type, uint32_t r9, float buildup, uint32_t s6, uint64_t s7)
 {
-    if (entity != 0 && buildup > 0.0f && SeFeedsStatus(type)) SeQueue((SeNote){entity, type, 0, buildup, g_seUpdate});
+    if (entity != 0 && buildup > 0.0f && SeFeedsStatus(type) && !SeOwnTake(entity, type, buildup)) SeQueue((SeNote){entity, type, 0, buildup, g_seUpdate});
     g_seApplyStatus(receivers, entity, type, r9, buildup, s6, s7);
 }
 

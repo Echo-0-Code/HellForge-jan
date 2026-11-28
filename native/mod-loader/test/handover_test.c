@@ -93,6 +93,19 @@ static void HandoverMindFixture(void)
     memcpy(g_minds, kept, sizeof kept);
 }
 
+/* A status the loader queued for a mod is left out of the feeds once, and only for the same entity, status and
+ * buildup; a full list forgets its oldest. */
+static void HandoverOwnStatusFixture(void)
+{
+    g_seOwnCount = 0;
+    SeOwnStatus(7, 39, 100.0f);
+    assert(!SeOwnTake(8, 39, 100.0f) && !SeOwnTake(7, 67, 100.0f) && !SeOwnTake(7, 39, 50.0f));
+    assert(SeOwnTake(7, 39, 100.0f) && !SeOwnTake(7, 39, 100.0f) && g_seOwnCount == 0);
+    for (uint32_t i = 0; i <= SE_OWN; i++) SeOwnStatus(100 + i, 39, 1.0f);
+    assert(g_seOwnCount == SE_OWN && !SeOwnTake(100, 39, 1.0f) && SeOwnTake(100 + SE_OWN, 39, 1.0f));
+    g_seOwnCount = 0;
+}
+
 static void HandoverFixture(void)
 {
     ChannelFakeGame fake = ChannelFakeGameStart();
@@ -102,4 +115,5 @@ static void HandoverFixture(void)
     ChannelFakeGameEnd(&fake);
     HandoverSet(0);
     HandoverMindFixture();
+    HandoverOwnStatusFixture();
 }
