@@ -12,9 +12,16 @@
 static int g_failures;
 static void Check(bool ok, const char* what) { printf("%s %s\n", ok ? "  ok  " : "  FAIL", what); if (!ok) g_failures++; }
 
+/* The folder is UTF-8, as a mod's folder is, with a character outside every ANSI code page's ASCII half in it. */
+static std::wstring Wide(const std::string& text)
+{
+    wchar_t out[MAX_PATH * 2];
+    return MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, out, MAX_PATH * 2) > 0 ? std::wstring(out) : std::wstring();
+}
+
 static void Write(const std::string& path, const std::string& text)
 {
-    FILE* file = fopen(path.c_str(), "wb");
+    FILE* file = _wfopen(Wide(path).c_str(), L"wb");
     fwrite(text.data(), 1, text.size(), file);
     fclose(file);
 }
@@ -94,12 +101,14 @@ int main()
     tr::LoadText("", "");
     Check(!tr::Active() && tr::Get("Settings") == "Settings" && tr::Generation() != before, "English: nothing changes, the generation moves");
 
-    char temp[MAX_PATH];
-    GetTempPathA(sizeof temp, temp);
-    std::string folder = std::string(temp) + "hellforge-translate-test-" + std::to_string(GetCurrentProcessId());
-    CreateDirectoryA(folder.c_str(), NULL);
+    wchar_t wideTemp[MAX_PATH];
+    char temp[MAX_PATH * 4] = {};
+    GetTempPathW(MAX_PATH, wideTemp);
+    WideCharToMultiByte(CP_UTF8, 0, wideTemp, -1, temp, sizeof temp, NULL, NULL);
+    std::string folder = std::string(temp) + "hellforge-translate-test-\xC3\xA9\xE8\xAE\xBE-" + std::to_string(GetCurrentProcessId());
+    CreateDirectoryW(Wide(folder).c_str(), NULL);
     Check(tr::Available(folder).empty() && tr::AutoTag(folder, "zh-CN").empty(), "no translations folder: English");
-    CreateDirectoryA((folder + "\\translations").c_str(), NULL);
+    CreateDirectoryW(Wide(folder + "\\translations").c_str(), NULL);
     Write(folder + "\\translations\\zh-CN.tsv", "Settings\t" SETTINGS "\n");
     Write(folder + "\\translations\\de.tsv", "Settings\tEinstellungen\n");
     std::vector<std::string> tags = tr::Available(folder);
@@ -114,10 +123,10 @@ int main()
     Check(tr::ValidTag("zh-cn") && !tr::ValidTag("..\\..\\x") && !tr::ValidTag("zh/cn") && !tr::ValidTag("ZH") && !tr::ValidTag(""),
           "a tag is a-z, 0-9 and '-' only");
     Check(!tr::Load(folder, "..\\translations\\zh-cn") && !tr::Active(), "a tag that is a path is refused, not opened");
-    DeleteFileA((folder + "\\translations\\zh-CN.tsv").c_str());
-    DeleteFileA((folder + "\\translations\\de.tsv").c_str());
-    RemoveDirectoryA((folder + "\\translations").c_str());
-    RemoveDirectoryA(folder.c_str());
+    DeleteFileW(Wide(folder + "\\translations\\zh-CN.tsv").c_str());
+    DeleteFileW(Wide(folder + "\\translations\\de.tsv").c_str());
+    RemoveDirectoryW(Wide(folder + "\\translations").c_str());
+    RemoveDirectoryW(Wide(folder).c_str());
 
     printf("%s\n", g_failures ? "FAILED" : "all passed");
     return g_failures ? 1 : 0;

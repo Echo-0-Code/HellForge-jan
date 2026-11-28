@@ -7,6 +7,7 @@
 #include <map>
 #include <set>
 #include "canvas.h"
+#include "json.h"
 #include "translate.h"
 
 namespace ui
@@ -36,13 +37,18 @@ int g_languageGlyphs = 0;
 std::map<std::string, std::vector<unsigned char>> g_fontData;
 std::set<std::string> g_fontsUsed;
 
+/* Font paths are UTF-8, as the mod's folder is (hellforge_mod.h): Windows' narrow file functions take the ANSI code
+ * page, and find nothing under a folder with other characters. */
+bool FileExists(const std::string& path) { return GetFileAttributesW(hfjson::Wide(path).c_str()) != INVALID_FILE_ATTRIBUTES; }
+
 std::string WindowsFont(const char* name)
 {
-    char folder[MAX_PATH];
-    UINT n = GetWindowsDirectoryA(folder, MAX_PATH);
-    if (n == 0 || n >= MAX_PATH) return "";
-    std::string path = std::string(folder) + "\\Fonts\\" + name;
-    return GetFileAttributesA(path.c_str()) != INVALID_FILE_ATTRIBUTES ? path : "";
+    wchar_t folder[MAX_PATH];
+    char utf8[MAX_PATH * 4];
+    UINT n = GetWindowsDirectoryW(folder, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH || WideCharToMultiByte(CP_UTF8, 0, folder, -1, utf8, sizeof utf8, NULL, NULL) <= 0) return "";
+    std::string path = std::string(utf8) + "\\Fonts\\" + name;
+    return FileExists(path) ? path : "";
 }
 
 uint16_t U16(const unsigned char* p) { return (uint16_t)(p[0] << 8 | p[1]); }
@@ -52,7 +58,7 @@ int16_t I16(const unsigned char* p) { return (int16_t)U16(p); }
 std::vector<unsigned char> FileBytes(const std::string& file)
 {
     std::vector<unsigned char> data;
-    FILE* f = fopen(file.c_str(), "rb");
+    FILE* f = _wfopen(hfjson::Wide(file).c_str(), L"rb");
     if (!f) return data;
     for (size_t n = 1; n > 0;)
     {
@@ -135,7 +141,7 @@ static void FindFontFiles()
 {
     auto own = [](const char* name) {
         std::string path = g_folder + "\\" + name;
-        return !g_folder.empty() && GetFileAttributesA(path.c_str()) != INVALID_FILE_ATTRIBUTES ? path : std::string();
+        return !g_folder.empty() && FileExists(path) ? path : std::string();
     };
     g_fallbackFile = WindowsFont("bahnschrift.ttf");
     if (g_fallbackFile.empty()) g_fallbackFile = WindowsFont("segoeui.ttf");

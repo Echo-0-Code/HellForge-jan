@@ -265,19 +265,36 @@ bool ValidTag(const std::string& tag)
     return std::all_of(tag.begin(), tag.end(), [](char c) { return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-'; });
 }
 
+/* The mod's folder is UTF-8 (hellforge_mod.h), which Windows' narrow file functions do not read: under a path with
+ * other than ASCII characters they find nothing. (Its own copies: this file is also built alone, into its test.) */
+static std::wstring Wide(const std::string& text)
+{
+    std::wstring out(text.size() + 1, L'\0');
+    int n = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, &out[0], (int)out.size());
+    out.resize(n > 0 ? (size_t)n - 1 : 0);
+    return out;
+}
+
+static std::string Utf8(const wchar_t* text)
+{
+    char out[MAX_PATH * 4];
+    int n = WideCharToMultiByte(CP_UTF8, 0, text, -1, out, sizeof out, NULL, NULL);
+    return n > 0 ? std::string(out) : std::string();
+}
+
 std::vector<std::string> Available(const std::string& folder)
 {
     std::vector<std::string> tags;
-    WIN32_FIND_DATAA found;
-    HANDLE h = FindFirstFileA((folder + "\\translations\\*.tsv").c_str(), &found);
+    WIN32_FIND_DATAW found;
+    HANDLE h = FindFirstFileW(Wide(folder + "\\translations\\*.tsv").c_str(), &found);
     if (h == INVALID_HANDLE_VALUE) return tags;
     do
     {
-        std::string name = found.cFileName;
+        std::string name = Utf8(found.cFileName);
         if (found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY || name.size() <= 4) continue;
         std::string tag = Lower(name.substr(0, name.size() - 4));
         if (ValidTag(tag)) tags.push_back(tag);
-    } while (FindNextFileA(h, &found));
+    } while (FindNextFileW(h, &found));
     FindClose(h);
     std::sort(tags.begin(), tags.end());
     return tags;
@@ -331,7 +348,7 @@ bool Load(const std::string& folder, const std::string& tag)
     /* the tag comes from editor-settings.json: never a path out of the translations folder */
     if (!ValidTag(tag)) { LoadText("", ""); return false; }
     std::string text;
-    FILE* f = fopen((folder + "\\translations\\" + tag + ".tsv").c_str(), "rb");
+    FILE* f = _wfopen(Wide(folder + "\\translations\\" + tag + ".tsv").c_str(), L"rb");
     if (!f) { LoadText("", ""); return false; }
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
