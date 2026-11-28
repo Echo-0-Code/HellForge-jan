@@ -91,8 +91,8 @@ client's IPC objects are at the player's normal integrity, so a low-integrity pr
   - The broker writes every callback and call result (`SteamAPICallCompleted_t`, then `GetAPICallResult`) into a
     shared-memory ring: an unnamed section the broker duplicates into the checked game process only.
   - The game can write the ring, so each side keeps its own position and only publishes it there. The broker clamps
-    the game's read position before it uses it, and a slot index is always an unsigned position modulo 60. Callbacks
-    that find the ring full are counted and logged.
+    the game's read position before it uses it, and a slot index is always an unsigned position modulo 60. While
+    the ring is full, the broker takes no callback from Steam: they wait there until the game reads.
   - The stand-in's `RunCallbacks` reads the ring and calls the game's registered `CCallbackBase` objects (phase 3:
     until then they are read and dropped).
   - An idle frame is one read of the ring's sequence number: no system call.
@@ -290,8 +290,8 @@ reaches only the game's **co-op peers**, so the game has no way to send to any o
 - **In:** the broker reads channels 0-7 every pump, up to 32 packets a channel. A packet from a peer goes into the ring
   under `BRIDGE_P2P_PACKET`, in pieces of up to 996 bytes. Packets from anyone else, or over 8192 bytes, are read and
   dropped, so they never pile up in Steam. The stand-in puts each whole packet in a queue of 32 (a static array, no
-  allocation). `ReadP2PPacket` and `IsP2PPacketAvailable` answer from the queue with no system call. A full ring or
-  queue loses the packet, and it is logged.
+  allocation). `ReadP2PPacket` and `IsP2PPacketAvailable` answer from the queue with no system call. A packet the
+  ring has no room for stays in Steam until a later pump. A full queue loses the packet, and it is logged.
 - **A squadmate the game cannot reach** (static reading of the game's 2026-10-30 memory dumps, not confirmed live):
   - Co-op is a full mesh. Each game opens its own Steam P2P session to every other player, not only to the host.
   - A session that never becomes active (`GetP2PSessionState`, which the bridge refuses for a SteamID not listed) gets

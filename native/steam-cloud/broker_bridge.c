@@ -344,7 +344,8 @@ static bool DropUnwanted(BrokerBridge* b, uint32_t size, uint32_t capacity, uint
     return true;
 }
 
-/* A co-op peer's packet into the ring, in pieces (BridgeP2PPiece); a full ring loses the rest of it. */
+/* A co-op peer's packet into the ring, in pieces (BridgeP2PPiece). PollP2P reads a packet only when the ring has room
+ * for all of it, so a push that fails here is the game moving its read position back. */
 static void PassPacket(BrokerBridge* b, BrokerChannel* ch, const uint8_t* packet, uint32_t size, uint64_t remote, int32_t channel)
 {
     uint8_t piece[BRIDGE_RING_DATA_SIZE];
@@ -364,7 +365,8 @@ static void PassPacket(BrokerBridge* b, BrokerChannel* ch, const uint8_t* packet
 }
 
 /* Packets waiting for the game, from its co-op peers, into the ring in pieces (BridgeP2PPiece). Others are read and
- * dropped, so they never pile up in Steam. */
+ * dropped, so they never pile up in Steam. A packet the ring has no room for stays in Steam for a later pump: once
+ * read it could only be thrown away, and a reliable packet lost that way is never sent again. */
 static void PollP2P(BrokerBridge* b, BrokerChannel* ch)
 {
     typedef bool (*AvailableFn)(void*, uint32_t*, int32_t);
@@ -381,7 +383,9 @@ static void PollP2P(BrokerBridge* b, BrokerChannel* ch)
         {
             uint32_t size = 0;
             uint64_t remote = 0;
-            if (!available(networking, &size, channel) || !read(networking, packet, sizeof packet, &size, &remote, channel)) break;
+            if (!available(networking, &size, channel)) break;
+            if (size <= BRIDGE_P2P_MAX && BrokerChannelFree(ch) < (size + BRIDGE_P2P_PIECE - 1) / BRIDGE_P2P_PIECE + (size == 0)) break;
+            if (!read(networking, packet, sizeof packet, &size, &remote, channel)) break;
             if (DropUnwanted(b, size, sizeof packet, remote, channel)) continue;
             PassPacket(b, ch, packet, size, remote, channel);
         }
@@ -457,7 +461,7 @@ static void PassCallback(BrokerBridge* b, BrokerChannel* ch, const CallbackMsg* 
 static void PassLocalResults(BrokerBridge* b, BrokerChannel* ch)
 {
     BrokerLocalResult local;
-    while (b->localLobbies && BrokerLobbiesNext(b->localLobbies, &local))
+    while (b->localLobbies && BrokerChannelFree(ch) > 0 && BrokerLobbiesNext(b->localLobbies, &local))
     {
         uint8_t slot[BRIDGE_CALL_RESULT_HEADER + sizeof local.data];
         memset(slot, 0, sizeof slot);
@@ -473,14 +477,20 @@ static void Pump(void* context, BrokerChannel* ch)
     NextFn next = (NextFn)b->next;
     b->runFrame(b->hPipe);
     CallbackMsg msg;
-    static uint32_t reportedDrops;
-    while (next(b->hPipe, &msg))
+    static uint32_t reportedFull;
+    /* Each callback takes at most one slot. With none free it stays in Steam: taken out, a call result the game waits
+     * for (LobbyCreated_t, LobbyEnter_t) would be gone for good. */
+    while (BrokerChannelFree(ch) > 0 && next(b->hPipe, &msg))
     {
         PassCallback(b, ch, &msg);
         b->freeLast(b->hPipe);
     }
     PassLocalResults(b, ch);
-    if (ch->dropped > 0 && reportedDrops == 0) { fprintf(stderr, "broker: the ring is full; callbacks are being dropped\n"); reportedDrops = 1; }
+    if (BrokerChannelFree(ch) == 0 && reportedFull == 0)
+    {
+        fprintf(stderr, "broker: the ring is full; Steam's callbacks and packets wait until the game reads it\n");
+        reportedFull = 1;
+    }
     PollP2P(b, ch);
     CheckStrangers(b, 0);
     DWORD now = GetTickCount();

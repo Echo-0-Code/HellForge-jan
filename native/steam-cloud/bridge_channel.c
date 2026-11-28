@@ -316,6 +316,12 @@ int BrokerChannelAccept(BrokerChannel* ch, DWORD expectedPid, HANDLE game, DWORD
     }
 }
 
+uint32_t BrokerChannelFree(const BrokerChannel* ch)
+{
+    uint64_t read = BridgeRingClampRead(ch->ring->readSeq, ch->writeSeq);
+    return BRIDGE_RING_SLOT_COUNT - (uint32_t)(ch->writeSeq - read);
+}
+
 int BrokerChannelPushCallback(BrokerChannel* ch, uint32_t callbackId, const void* data, uint32_t dataSize)
 {
     if (dataSize > BRIDGE_RING_DATA_SIZE) return 0;
