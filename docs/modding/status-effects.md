@@ -153,6 +153,9 @@ Statuses resolve on the entity's owner, so the meters, feeds and damage run ther
 level change goes to the other players by the entity's network id. Their games show the look and call `on_level`
 with `remote` 1; gameplay stays on the owner. The other players need the same mod.
 
+A level another game sent is taken over by the game that simulates the entity, as when its owner leaves. Its meter
+starts where that level starts, holds for `hold_s`, then decays and is shared from there.
+
 ## What HellForge guarantees
 
 - A texture or material is set once, when the shown level changes, and never again while it stays.

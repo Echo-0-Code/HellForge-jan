@@ -510,6 +510,18 @@ static int SeShowsAny(const SeTarget* t)
     return 0;
 }
 
+/* A level another machine sent is that machine's to end. Where the entity is simulated no other machine is sure to
+ * (its owner left, or two machines fed it and each took the other's level), so this one takes the slot over: the
+ * meter at least where the level starts, held as after a gain, then decay and sharing as for its own. */
+static void SeAdopt(const SeEffect* e, const SeTarget* t, SeSlot* s)
+{
+    if (!s->remote || ApiIsAuthority(NULL, t->entity) != 1) return;
+    s->remote = 0;
+    const HfEffectLevel* level = s->level ? &e->def.levels[s->level - 1] : NULL;
+    if (level != NULL && !(level->flags & HF_EFFECT_SPEND) && s->meter < level->enter) s->meter = level->enter;
+    s->lastGain = g_seClock;
+}
+
 /* One entity's effects for this update; 0 when nothing is left of them. */
 static int SeTargetTick(SeTarget* t, float dt)
 {
@@ -520,6 +532,7 @@ static int SeTargetTick(SeTarget* t, float dt)
         if (s->effect == 0) continue;
         const SeEffect* e = &g_se[s->effect - 1];
         if (ModGone(e->mod)) { s->effect = 0; t->dirty = 1; continue; }
+        SeAdopt(e, t, s);
         SeDecay(e, s, dt);
         uint32_t level = s->remote ? s->level : SeLevelFor(e, s);
         if (level != s->level) SeLevelChanged(t, s, level);

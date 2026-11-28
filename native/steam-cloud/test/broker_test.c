@@ -1,6 +1,6 @@
 /* Tests for the Steam bridge (bridge_channel.c, bridge_broker.c): the ring and its bounds against a game that writes
  * the header, the pipe's security, the client check (a second process with the wrong pid, a lying HELLO), the serving
- * loop with a malformed and an oversized message, a late broker, a dead broker and a game that exits. No Valve DLL: a
+ * loop with a malformed and an oversized message, a late broker, a dead broker, a broker that hangs and a game that exits. No Valve DLL: a
  * fake Steam pumps one callback.
  *
  * Usage: broker_test.exe [stand-in steam_api64.dll]   (the tests; with the stand-in, its bridge mode too: a fake
@@ -107,6 +107,7 @@ typedef struct Broker {
     HANDLE game;        /* optional: a waitable handle standing for the game's process */
     DWORD delayMs;      /* before the channel exists: a broker that starts late */
     int serve;          /* 0: close right after accepting (a broker that dies) */
+    DWORD hangMs;       /* with serve 0: how long it keeps the pipe first, answering nothing (a broker that hangs) */
     HANDLE ready;
     int created, accepted, ended;
     uint32_t refused;
@@ -128,6 +129,7 @@ static DWORD WINAPI BrokerThread(void* param)
         BrokerSteam steam = { &b->fake, FakePump, FakeRunning };
         b->ended = BrokerServe(ch, &steam, b->game);
     }
+    else if (b->accepted == BROKER_ACCEPTED && b->hangMs) Sleep(b->hangMs);
     BrokerChannelClose(ch);
     free(ch);
     return 0;
@@ -184,7 +186,11 @@ static void TestServe(void)
     uint32_t type = BRIDGE_CALL;
     memcpy(big, &type, 4);
     DWORD written = 0;
-    CHECK(WriteFile(game.pipe, big, sizeof big, &written, NULL) && written == sizeof big &&
+    OVERLAPPED raw = { .hEvent = CreateEventW(NULL, TRUE, FALSE, NULL) }; /* the game's pipe is overlapped */
+    int wrote = WriteFile(game.pipe, big, sizeof big, &written, &raw) ||
+        (GetLastError() == ERROR_IO_PENDING && GetOverlappedResult(game.pipe, &raw, &written, TRUE));
+    CloseHandle(raw.hEvent);
+    CHECK(wrote && written == sizeof big &&
         BridgePipeRecv(game.pipe, reply, sizeof reply, &replySize) == BRIDGE_RESULT && replySize == 8 &&
         (memcpy(&seq, reply, 4), memcpy(&replyStatus, reply + 4, 4), seq == 0 && replyStatus == BRIDGE_STATUS_MALFORMED),
         "serve: an oversized message is read to its end and answered as malformed");
@@ -333,6 +339,25 @@ static void TestDeadBroker(void)
     GameChannelClose(&game);
 }
 
+static void TestHungBroker(void)
+{
+    Broker b = { .suffix = Name(L"test-hung"), .expectedPid = GetCurrentProcessId(), .serve = 0, .hangMs = 1500 };
+    HANDLE thread = StartBroker(&b);
+    GameChannel game;
+    CHECK(GameChannelConnect(&game, Name(L"test-hung"), 2000) && game.callTimeoutMs == BRIDGE_CALL_TIMEOUT_MS, "hung broker: connected");
+    game.callTimeoutMs = 200;
+    uint8_t running = 1;
+    GameChannelReply answer = { &running, 1, 0, 0 };
+    DWORD start = GetTickCount();
+    CHECK(!GameChannelCall(&game, BRIDGE_FN_IS_STEAM_RUNNING, NULL, 0, &answer) && game.dead && game.timedOut &&
+        GetTickCount() - start < 1200, "hung broker: the call is given up after its time limit, with the pipe intact");
+    start = GetTickCount();
+    CHECK(!GameChannelCall(&game, BRIDGE_FN_IS_STEAM_RUNNING, NULL, 0, &answer) && GetTickCount() - start < 100,
+        "hung broker: later calls fail at once");
+    GameChannelClose(&game);
+    Join(thread, &b);
+}
+
 static void TestGameGone(void)
 {
     HANDLE game = CreateEventW(NULL, TRUE, FALSE, NULL);
@@ -412,6 +437,7 @@ int wmain(int argc, wchar_t* argv[])
     TestWrongClient(self);
     TestLateBroker();
     TestDeadBroker();
+    TestHungBroker();
     TestGameGone();
     if (argc == 2) TestStandIn(argv[1]);
     else puts("  (no stand-in given: its bridge-mode test skipped)");

@@ -234,7 +234,8 @@ alive.
 | `modify_shots`, `homing`, `stop_shots` | rules for the local player's shots of a projectile type: damage, penetration, speed, gravity, drag, or steering | solo, or `HF_SHOT_MULTIPLAYER` |
 
 The host-only actions also need a mission in progress. The limits on each call's values (an injury's damage, a push's
-speed, a shot rule's multipliers) are in `hellforge_mod.h`.
+speed, a shot rule's multipliers) are in `hellforge_mod.h`. A `homing` rule steers up to 256 of the player's shots at
+once. A shot fired past that flies straight, and the mod's log says so once a session.
 
 An action called from a game event listener runs at once. Here a big heal also mends a leg:
 

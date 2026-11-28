@@ -1044,7 +1044,9 @@ static OwnedTable* OwnedCopy(uint8_t* state, uint32_t c, uint32_t stride, uint32
     size_t size = vanillaBytes + ((size_t)room + 1) * stride;
     uint8_t* copy = (uint8_t*)VirtualAlloc(NULL, size, MEM_RESERVE, PAGE_READWRITE);
     if (copy == NULL) return NULL;
-    if (VirtualAlloc(copy, vanillaBytes, MEM_COMMIT, PAGE_READWRITE) == NULL) { VirtualFree(copy, 0, MEM_RELEASE); return NULL; }
+    /* a record's worth after the vanilla ones, as OwnRecord commits after each of its own: the game is pointed at the
+     * copy from here on, whether or not a record follows, and it reads past a record into the next */
+    if (VirtualAlloc(copy, vanillaBytes + stride, MEM_COMMIT, PAGE_READWRITE) == NULL) { VirtualFree(copy, 0, MEM_RELEASE); return NULL; }
     memcpy(copy, table - 32, 32 + (size_t)bytes);
     owned = &g_owned[g_ownedCount++];
     *owned = (OwnedTable){c, stride, first, first, first + room, copy + 32, table, bytes};

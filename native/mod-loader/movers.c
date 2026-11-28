@@ -618,6 +618,21 @@ static void MvBodyTick(MvUnit* m, const MvDef* def, float dt)
     MvTrace(m, def, dt);
 }
 
+/* The game hands a living entity to another machine with no new spawn (a host leaves), so who moves a walker or driver
+ * is asked each update. Taken over, it goes on from the pose shown here; handed away, it waits for the new sender. */
+static void MvWhoMoves(MvUnit* m, const MvDef* def)
+{
+    if (MvPhysical(def->def.mode)) return;
+    const int mine = ApiIsAuthority(&g_mvMod, m->entity);
+    if (mine < 0 || (mine == 1) == !m->remote) return;
+    m->remote = mine != 1;
+    m->synced = 0; m->peerEntity = 0; m->peerFrom = 0; m->syncAge = 0;
+    m->throttle = 0; m->steer = 0;
+    if (mine == 1 && m->started && !MvParent(m)) m->started = 0;
+    ApiLog(def->mod, "mover: unit %u is now %s", m->entity, mine == 1 ? "moved by this machine: it goes on from where it shows" :
+        "simulated by another machine: this is its copy");
+}
+
 /* A hover, a walker or driver its body drives, or another machine's copy: 1 when it had its update here. */
 static int MvBodyModes(MvUnit* m, const MvDef* def, float dt)
 {
@@ -645,6 +660,7 @@ static void MvUnitTick(MvUnit* m, float dt)
         m->unit = unit; m->started = 0;
     }
     if (m->age < def->def.start_delay) { m->status = HF_MOVER_WAITING; return; }
+    MvWhoMoves(m, def);
     if (MvBodyModes(m, def, dt)) return;
     if (!m->started)
     {

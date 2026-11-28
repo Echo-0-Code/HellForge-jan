@@ -17,14 +17,24 @@ static GameChannel* g_channel;
 
 void BridgeLocalAttach(GameChannel* channel) { g_channel = channel; }
 
+/* The call the channel died at, said once: every Steam call fails from then on, which the log would not show. */
+static void BridgeDeadNote(uint32_t method)
+{
+    static volatile LONG said;
+    if (!g_channel->dead || InterlockedExchange(&said, 1)) return;
+    if (g_channel->timedOut)
+        BridgeLog("bridge: the broker did not answer call %u within %lu s: the channel is given up, Steam calls fail from here on",
+            method, (unsigned long)(g_channel->callTimeoutMs / 1000));
+    else BridgeLog("bridge: the broker went away at call %u: Steam calls fail from here on", method);
+}
+
 int BridgeInvoke(uint32_t method, BridgeWriter* w, BridgeReader* r)
 {
     GameChannelReply reply = { w->data, sizeof w->data, 0, BRIDGE_STATUS_UNKNOWN };
     if (!g_channel || w->failed) return 0;
     /* the reply is read into the writer's buffer: GameChannelCall copies the arguments out before it reads */
-    if (!GameChannelCall(g_channel, method, w->data, w->size, &reply) ||
-        reply.status != BRIDGE_STATUS_OK || reply.size > sizeof w->data)
-        return 0;
+    if (!GameChannelCall(g_channel, method, w->data, w->size, &reply)) { BridgeDeadNote(method); return 0; }
+    if (reply.status != BRIDGE_STATUS_OK || reply.size > sizeof w->data) return 0;
     r->data = w->data;
     r->size = reply.size;
     r->at = 0;

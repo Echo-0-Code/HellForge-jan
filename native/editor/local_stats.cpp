@@ -4,6 +4,7 @@
 #include <windows.h>
 #include <map>
 #include <mutex>
+#include <tuple>
 #include "json.h"
 #include "local_stats.h"
 
@@ -23,12 +24,31 @@ unsigned g_version = 1;
 bool g_hostShown;                        /* joined: Get and Entries show the host's */
 Value g_hostSaved, g_hostModSaved;       /* the host's Local Stats file and mod content values */
 
+/* Get is asked for every row of an open page, several times a frame: the shown documents' fields by category, target
+ * and key, built again when what is shown changes (g_version). A name's first member counts, as Find takes it. */
+struct Shown { bool number; double value; };
+typedef std::tuple<std::string, std::string, std::string> FieldKey;
+std::map<FieldKey, Shown, std::less<>> g_shown;
+unsigned g_shownVersion; /* the g_version g_shown was built for; 0: not built */
+
 bool ModCategory(const std::string& category) { return category.rfind("mod:", 0) == 0; }
 Value& DocumentOf(const std::string& category) { return ModCategory(category) ? g_modSaved : g_saved; }
 const Value& ShownOf(const std::string& category)
 {
     if (!g_hostShown) return DocumentOf(category);
     return ModCategory(category) ? g_hostModSaved : g_hostSaved;
+}
+
+/* A shown document's fields into g_shown: the mod content file's "mod:" categories, the stats file's others. */
+void IndexShown(const Value& document, bool mods)
+{
+    for (auto& category : document.members)
+    {
+        if (ModCategory(category.first) != mods) continue;
+        for (auto& target : category.second.members)
+            for (auto& field : target.second.members)
+                g_shown.emplace(FieldKey(category.first, target.first, field.first), Shown{field.second.kind == Value::Number, field.second.AsNumber()});
+    }
 }
 
 /* A document's numbers as entries (category, target, key, value), in its order. */
@@ -310,11 +330,16 @@ void Remove(const std::string& category, const std::string& target, const std::s
 bool Get(const std::string& category, const std::string& target, const std::string& key, double* value)
 {
     std::lock_guard<std::mutex> hold(g_lock);
-    const Value* c = ShownOf(category).Find(category);
-    const Value* t = c ? c->Find(target) : nullptr;
-    const Value* v = t ? t->Find(key) : nullptr;
-    if (v == nullptr || v->kind != Value::Number) return false;
-    *value = v->AsNumber();
+    if (g_shownVersion != g_version)
+    {
+        g_shown.clear();
+        IndexShown(ShownOf(""), false);
+        IndexShown(ShownOf("mod:"), true);
+        g_shownVersion = g_version;
+    }
+    auto found = g_shown.find(std::tie(category, target, key));
+    if (found == g_shown.end() || !found->second.number) return false;
+    *value = found->second.value;
     return true;
 }
 

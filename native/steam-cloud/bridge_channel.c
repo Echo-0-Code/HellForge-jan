@@ -41,16 +41,35 @@ static PSECURITY_DESCRIPTOR PipeSecurity(void)
     return sd;
 }
 
-/* --- Synchronous pipe I/O --- */
+/* --- Pipe I/O with a time limit --- */
 
-uint32_t BridgePipeRecv(HANDLE pipe, void* body, uint32_t bodyCapacity, uint32_t* bodySize)
+/* One read or write, given up after timeoutMs (the last error is then ERROR_TIMEOUT). The OVERLAPPED serves a
+ * synchronous handle as well; `event` is manual-reset and this call's alone. */
+static int PipeIo(HANDLE pipe, HANDLE event, int write, void* buf, DWORD size, DWORD timeoutMs, DWORD* done)
+{
+    OVERLAPPED ov;
+    memset(&ov, 0, sizeof ov);
+    ov.hEvent = event;
+    if (write ? WriteFile(pipe, buf, size, done, &ov) : ReadFile(pipe, buf, size, done, &ov)) return 1;
+    if (GetLastError() != ERROR_IO_PENDING) return 0;
+    if (WaitForSingleObject(event, timeoutMs) != WAIT_OBJECT_0)
+    {
+        CancelIoEx(pipe, &ov);
+        GetOverlappedResult(pipe, &ov, done, TRUE); /* ov is this frame's: the I/O has ended before it goes */
+        SetLastError(ERROR_TIMEOUT);
+        return 0;
+    }
+    return GetOverlappedResult(pipe, &ov, done, FALSE);
+}
+
+static uint32_t RecvWithin(HANDLE pipe, HANDLE event, DWORD timeoutMs, void* body, uint32_t bodyCapacity, uint32_t* bodySize)
 {
     uint8_t buf[BRIDGE_MSG_BUF];
     DWORD read = 0;
-    if (!ReadFile(pipe, buf, sizeof buf, &read, NULL))
+    if (!PipeIo(pipe, event, 0, buf, sizeof buf, timeoutMs, &read))
     {
         /* larger than any message the protocol has: read it to its end, then report it unusable */
-        while (GetLastError() == ERROR_MORE_DATA && !ReadFile(pipe, buf, sizeof buf, &read, NULL)) {}
+        while (GetLastError() == ERROR_MORE_DATA && !PipeIo(pipe, event, 0, buf, sizeof buf, timeoutMs, &read)) {}
         return 0;
     }
     if (read < 4) return 0;
@@ -63,7 +82,7 @@ uint32_t BridgePipeRecv(HANDLE pipe, void* body, uint32_t bodyCapacity, uint32_t
     return type;
 }
 
-int BridgePipeSend(HANDLE pipe, uint32_t type, const void* body, uint32_t bodySize)
+static int SendWithin(HANDLE pipe, HANDLE event, DWORD timeoutMs, uint32_t type, const void* body, uint32_t bodySize)
 {
     uint8_t buf[BRIDGE_MSG_BUF];
     if (bodySize > sizeof buf - 4) return 0;
@@ -71,7 +90,25 @@ int BridgePipeSend(HANDLE pipe, uint32_t type, const void* body, uint32_t bodySi
     memcpy(buf, &type, 4);
     if (bodySize > 0 && body) memcpy(buf + 4, body, bodySize);
     DWORD written = 0;
-    return WriteFile(pipe, buf, total, &written, NULL) && written == total;
+    return PipeIo(pipe, event, 1, buf, total, timeoutMs, &written) && written == total;
+}
+
+uint32_t BridgePipeRecv(HANDLE pipe, void* body, uint32_t bodyCapacity, uint32_t* bodySize)
+{
+    HANDLE event = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (!event) return 0;
+    uint32_t type = RecvWithin(pipe, event, INFINITE, body, bodyCapacity, bodySize);
+    CloseHandle(event);
+    return type;
+}
+
+int BridgePipeSend(HANDLE pipe, uint32_t type, const void* body, uint32_t bodySize)
+{
+    HANDLE event = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (!event) return 0;
+    int ok = SendWithin(pipe, event, INFINITE, type, body, bodySize);
+    CloseHandle(event);
+    return ok;
 }
 
 /* --- Broker (server) --- */
@@ -359,10 +396,10 @@ void BrokerChannelClose(BrokerChannel* ch)
 static int GameHello(GameChannel* ch)
 {
     uint32_t pid = GetCurrentProcessId();
-    if (!BridgePipeSend(ch->pipe, BRIDGE_HELLO, &pid, sizeof pid)) return 0;
+    if (!SendWithin(ch->pipe, ch->event, ch->callTimeoutMs, BRIDGE_HELLO, &pid, sizeof pid)) return 0;
     uint8_t body[16];
     uint32_t bodySize = 0;
-    if (BridgePipeRecv(ch->pipe, body, sizeof body, &bodySize) != BRIDGE_HELLO_OK || bodySize != sizeof(uint64_t)) return 0;
+    if (RecvWithin(ch->pipe, ch->event, ch->callTimeoutMs, body, sizeof body, &bodySize) != BRIDGE_HELLO_OK || bodySize != sizeof(uint64_t)) return 0;
     uint64_t value;
     memcpy(&value, body, sizeof value);
     HANDLE section = (HANDLE)(uintptr_t)value;
@@ -379,7 +416,9 @@ int GameChannelConnect(GameChannel* ch, const wchar_t* suffix, DWORD timeoutMs)
     ch->pipe = INVALID_HANDLE_VALUE;
     InitializeCriticalSection(&ch->lock);
     ch->lockReady = 1;
-    if (!suffix || !suffix[0] || wcslen(suffix) > 64) { ch->dead = 1; return 0; }
+    ch->callTimeoutMs = BRIDGE_CALL_TIMEOUT_MS;
+    ch->event = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (!ch->event || !suffix || !suffix[0] || wcslen(suffix) > 64) { ch->dead = 1; return 0; }
     wchar_t name[128];
     PipeName(name, 128, suffix);
 
@@ -387,7 +426,8 @@ int GameChannelConnect(GameChannel* ch, const wchar_t* suffix, DWORD timeoutMs)
     DWORD start = GetTickCount();
     for (;;)
     {
-        ch->pipe = CreateFileW(name, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+        /* overlapped, so a call can be given up: a broker that hangs with its pipe intact must not hold the game */
+        ch->pipe = CreateFileW(name, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL);
         if (ch->pipe != INVALID_HANDLE_VALUE) break;
         DWORD err = GetLastError(), elapsed = GetTickCount() - start;
         if (elapsed >= timeoutMs) { ch->dead = 1; return 0; }
@@ -414,9 +454,13 @@ static int RoundTrip(GameChannel* ch, uint8_t* buf, uint32_t function, const voi
     memcpy(buf + 4, &function, 4);
     if (argsSize > 0 && args) memcpy(buf + 8, args, argsSize);
     uint32_t replySize = 0, replySeq = 0;
-    if (!BridgePipeSend(ch->pipe, BRIDGE_CALL, buf, 8 + argsSize) ||
-        BridgePipeRecv(ch->pipe, buf, BRIDGE_MSG_BUF, &replySize) != BRIDGE_RESULT || replySize < 8)
+    SetLastError(ERROR_SUCCESS); /* read below: only a wait that ran out leaves ERROR_TIMEOUT */
+    if (!SendWithin(ch->pipe, ch->event, ch->callTimeoutMs, BRIDGE_CALL, buf, 8 + argsSize) ||
+        RecvWithin(ch->pipe, ch->event, ch->callTimeoutMs, buf, BRIDGE_MSG_BUF, &replySize) != BRIDGE_RESULT || replySize < 8)
+    {
+        ch->timedOut = GetLastError() == ERROR_TIMEOUT;
         return 0;
+    }
     memcpy(&replySeq, buf, 4);
     if (replySeq != seq) return 0;
     memcpy(&reply->status, buf + 4, 4);
@@ -491,9 +535,10 @@ int GameChannelReadCallback(GameChannel* ch, uint32_t* callbackId, void* data, u
 void GameChannelClose(GameChannel* ch)
 {
     if (ch->lockReady) EnterCriticalSection(&ch->lock);
-    if (!ch->dead && ch->pipe != INVALID_HANDLE_VALUE && ch->pipe != NULL) BridgePipeSend(ch->pipe, BRIDGE_SHUTDOWN, NULL, 0);
+    if (!ch->dead && ch->pipe != INVALID_HANDLE_VALUE && ch->pipe != NULL) SendWithin(ch->pipe, ch->event, 1000, BRIDGE_SHUTDOWN, NULL, 0);
     if (ch->ring) { UnmapViewOfFile(ch->ring); ch->ring = NULL; }
     if (ch->pipe != INVALID_HANDLE_VALUE && ch->pipe != NULL) { CloseHandle(ch->pipe); ch->pipe = INVALID_HANDLE_VALUE; }
+    if (ch->event) { CloseHandle(ch->event); ch->event = NULL; }
     ch->dead = 1;
     if (ch->lockReady) { LeaveCriticalSection(&ch->lock); DeleteCriticalSection(&ch->lock); ch->lockReady = 0; }
 }

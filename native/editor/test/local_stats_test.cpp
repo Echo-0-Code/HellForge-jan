@@ -104,6 +104,11 @@ int main()
         "the editor's file is read back with Local Stats");
     localstats::Remove("mod:you/mod/sentry", "you/mod/sentry", "turret.yaw_speed");
     localstats::Remove("mod:you/mod/sentry", "you/mod/sentry", "stratagem.cooldown");
+    Check(!localstats::Get("mod:you/mod/sentry", "you/mod/sentry", "turret.yaw_speed", &got) &&
+        !localstats::Get("mod:you/mod/sentry", "you/mod/sentry", "stratagem.cooldown", &got), "a removed entry no longer reads back");
+    localstats::Set("weapons", "AR-23 Liberator", "weapon.fire_rate", 998, false);
+    Check(localstats::Get("weapons", "AR-23 Liberator", "weapon.fire_rate", &got) && got == 998, "a value set again reads back as set");
+    localstats::Set("weapons", "AR-23 Liberator", "weapon.fire_rate", 999, false);
     Check(localstats::Save(mods, &error) && Read(modFile).find("you/mod") == std::string::npos, "mod entries are removed");
 
     /* Joined to a friend's lobby: the host's saved changes are what Get and Entries show; this machine's stay in its file

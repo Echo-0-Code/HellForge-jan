@@ -438,6 +438,7 @@ static void AiSetOrder(AiUnit* u, uint32_t order, uint32_t target, const float p
     AiCtx c;
     float pos[3] = {0, 0, 0};
     int here = AiCtxOf(u->entity, &c) && AiOwnPos(&c, pos);
+    const int moved = !here && MvWhere(u->entity, pos); /* no brain record: a Hold keeps it where its mover has it */
     if (here) AiHalt(u, &c); /* the last order's point is no longer wanted */
     u->order = order;
     u->target = order == HF_ORDER_FOLLOW ? target : 0;
@@ -449,7 +450,8 @@ static void AiSetOrder(AiUnit* u, uint32_t order, uint32_t target, const float p
     u->tries = 0; u->detour = 0; u->issued = 0; u->sinceHeadway = 0; u->sinceLog = AI_LOG_S;
     u->trailCount = 0; u->onTrail = 0;
     static const char* orders[] = {"none", "FOLLOW", "HOLD", "GOTO"};
-    AiLog(u, "order %s from %s (behaviour %u)%s", orders[order & 3], from, here ? AiBehaviour(&c) : 0, here ? "" : ": not simulated here yet");
+    AiLog(u, "order %s from %s (behaviour %u)%s", orders[order & 3], from, here ? AiBehaviour(&c) : 0,
+          here ? "" : moved ? ": its mover walks it" : ": not simulated here yet");
 }
 
 /* ---- orders heard ---- */
@@ -475,6 +477,24 @@ static uint32_t AiOrderOf(uint32_t id)
     return HF_ORDER_NONE;
 }
 
+/* Why a rule's unit does not hear an order given at `from`: NULL when it does, "" for a reason not worth a line.
+ * A unit with no brain record is a mover's (AiSettled took it so): its place is its mover's, and MvWhere answers
+ * only on the machine that moves it. */
+static const char* AiDeaf(const AiUnit* u, const AiRule* r, const float from[3], uint64_t peer)
+{
+    AiCtx c;
+    float pos[3];
+    if (AiCtxOf(u->entity, &c))
+    {
+        if (!AiAuthority(&c)) return "another machine simulates it";
+        if (AiNativeObeys(AiBehaviour(&c))) return "";
+        if (!AiOwnPos(&c, pos)) return "its place can't be read";
+    }
+    else if (!MvWhere(u->entity, pos)) return "";
+    if (AiDist(pos, from) > r->def.range) return "out of the rule's range";
+    return AcObeys(u, peer) ? NULL : "";
+}
+
 /* The game thread: an order from a speaker (a Helldiver), raised once and handed to the units that obey. */
 static void AiHeardOrder(uint32_t order, uint32_t speaker, uint64_t peer, int local, const char* route)
 {
@@ -490,11 +510,9 @@ static void AiHeardOrder(uint32_t order, uint32_t speaker, uint64_t peer, int lo
         AiUnit* u = &g_aiUnits[i];
         if (!u->entity || !u->rule) continue;
         const AiRule* r = &g_aiRules[u->rule - 1];
-        float pos[3];
-        AiCtx c;
-        if (!AiCtxOf(u->entity, &c) || !AiAuthority(&c) || AiNativeObeys(AiBehaviour(&c)) || !AiOwnPos(&c, pos) || AiDist(pos, e.position) > r->def.range ||
-            !AcObeys(u, peer)) continue;
-        AiSetOrder(u, order, speaker, NULL, route);
+        const char* deaf = AiDeaf(u, r, e.position, peer);
+        if (deaf == NULL) AiSetOrder(u, order, speaker, NULL, route);
+        else if (deaf[0]) AiLog(u, "order from %s not taken: %s", route, deaf);
     }
     ReleaseSRWLockExclusive(&g_aiLock);
 }

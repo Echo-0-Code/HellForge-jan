@@ -992,6 +992,52 @@ static int LivePipePath(const wchar_t* logs, wchar_t* path, size_t size)
     return session != NULL && session[1] != 0 && swprintf(path, size, L"\\\\.\\pipe\\hellforge-live-%ls", session + 1) >= 0;
 }
 
+/* A process's user (its SID in `user`, `size` bytes of room) and integrity level (0x1000 low, 0x2000 medium). */
+static int LiveWhoRuns(HANDLE process, void* user, DWORD size, DWORD* integrity)
+{
+    HANDLE token = NULL;
+    uint64_t label[16]; /* aligned for TOKEN_MANDATORY_LABEL */
+    DWORD got = 0;
+    if (process == NULL || !OpenProcessToken(process, TOKEN_QUERY, &token)) return 0;
+    int ok = GetTokenInformation(token, TokenUser, user, size, &got) && GetTokenInformation(token, TokenIntegrityLevel, label, sizeof label, &got);
+    CloseHandle(token);
+    if (!ok) return 0;
+    PSID level = ((TOKEN_MANDATORY_LABEL*)(void*)label)->Label.Sid;
+    *integrity = *GetSidSubAuthority(level, (DWORD)*GetSidSubAuthorityCount(level) - 1);
+    return 1;
+}
+
+/* Whether the pipe's server may give this game orders (modadd loads a DLL). The pipe is found by name, and whoever
+ * makes that name first serves it: only a process of this game's user, at this game's integrity level or above, is
+ * the launcher or the backend. Another user's or a more confined process's lines are never read. */
+static int LiveServerTrusted(HANDLE pipe)
+{
+    ULONG id = 0;
+    uint64_t ours[16], theirs[16]; /* aligned for TOKEN_USER */
+    DWORD ourLevel = 0, theirLevel = 0;
+    if (!GetNamedPipeServerProcessId(pipe, &id)) return 0;
+    HANDLE server = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, id);
+    int ok = LiveWhoRuns(server, theirs, sizeof theirs, &theirLevel) && LiveWhoRuns(GetCurrentProcess(), ours, sizeof ours, &ourLevel) &&
+        EqualSid(((TOKEN_USER*)(void*)ours)->User.Sid, ((TOKEN_USER*)(void*)theirs)->User.Sid) && theirLevel >= ourLevel;
+    if (server != NULL) CloseHandle(server);
+    return ok;
+}
+
+/* The session's pipe, opened so that its server can identify this game but not act as its user. NULL when there is
+ * none, or its server is not trusted (said once: the watch asks again every 2 s). */
+static HANDLE LiveOpen(const wchar_t* path)
+{
+    static LONG said;
+    HANDLE pipe = CreateFileW(path, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
+        FILE_FLAG_OVERLAPPED | SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION, NULL);
+    if (pipe == INVALID_HANDLE_VALUE) return NULL;
+    if (LiveServerTrusted(pipe)) return pipe;
+    CloseHandle(pipe);
+    if (!InterlockedExchange(&said, 1))
+        Note("live editor: the pipe %ls is served by a process that is not this user's, or is more confined than the game: not used", path);
+    return NULL;
+}
+
 static DWORD WINAPI LiveWatch(void* parameter)
 {
     wchar_t path[MAX_PATH];
@@ -1004,8 +1050,8 @@ static DWORD WINAPI LiveWatch(void* parameter)
     for (;;)
     {
         if (!g_fired[HF_EVENT_ENTITIES_READY]) { Sleep(500); continue; }
-        HANDLE pipe = CreateFileW(path, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL);
-        if (pipe == INVALID_HANDLE_VALUE) { Sleep(2000); continue; }
+        HANDLE pipe = LiveOpen(path);
+        if (pipe == NULL) { Sleep(2000); continue; }
         LiveConnected(pipe, &readOp, &writeOp);
     }
 }

@@ -18,6 +18,7 @@
 #define T_FIRE_TRAVERSE 12.0f       /* a new target this close keeps the trigger pulled */
 #define T_REFILL_BELOW 200
 #define T_MINDS 64
+#define T_MIND_STALE 30000000ull /* microseconds without an update after which a slot was another turret's */
 
 typedef char (*BhvValidFn)(void* unused, uint32_t entity, void* info);
 typedef uint8_t* (*BhvFindEntryFn)(uintptr_t perception, uint32_t perceiver, uint32_t entity);
@@ -47,11 +48,16 @@ static const uint64_t kOwnAim[] = {0x9E2E17F2CCCCAFDDull, 0xEF04CB84D097A497ull}
 
 static TurretMind g_minds[T_MINDS];
 
+/* A running turret's slot is used every update. One last used long ago, or after `now` (the clock started again),
+ * was an earlier turret's with the same entity id: its spent reserve, locks and rejected targets are not this one's. */
+static int MindStale(const TurretMind* m, uint64_t now) { return m->used > now || now - m->used > T_MIND_STALE; }
+
 static TurretMind* MindOf(uint32_t turret, uint64_t now)
 {
     TurretMind* oldest = &g_minds[0];
     for (int i = 0; i < T_MINDS; i++)
     {
+        if (g_minds[i].turret == turret && MindStale(&g_minds[i], now)) memset(&g_minds[i], 0, sizeof g_minds[i]);
         if (g_minds[i].turret == turret) { g_minds[i].used = now; return &g_minds[i]; }
         if (g_minds[i].used < oldest->used) oldest = &g_minds[i];
     }

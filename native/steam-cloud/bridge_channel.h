@@ -45,7 +45,7 @@ int BrokerChannelPushCallback(BrokerChannel* ch, uint32_t callbackId, const void
 /* The ring's free slots now: what the pump may take from Steam, since what does not fit a full ring is lost. */
 uint32_t BrokerChannelFree(const BrokerChannel* ch);
 
-/* --- Game (client) side: synchronous, calls serialized by a lock --- */
+/* --- Game (client) side: calls serialized by a lock, each with a time limit --- */
 
 /* What the round trips cost the game's threads (docs/steam-bridge.md, Cost), in QueryPerformanceCounter ticks from the
  * call to its reply, the lock's wait included. The first BRIDGE_COST_FUNCTIONS functions called are counted apart. */
@@ -60,11 +60,18 @@ typedef struct GameChannel {
     BridgeRingHeader* ring;
     uint64_t readSeq;       /* the game's own; ring->readSeq is only its published copy */
     uint32_t nextSeq;
-    int dead;               /* the broker went away: every call fails from then on */
+    int dead;               /* the broker went away or stopped answering: every call fails from then on */
+    int timedOut;           /* dead because a call got no reply within callTimeoutMs (the pipe was intact) */
+    DWORD callTimeoutMs;    /* BRIDGE_CALL_TIMEOUT_MS; a test sets its own */
+    HANDLE event;           /* the pipe is overlapped: the call in flight waits on this, under the lock */
     CRITICAL_SECTION lock;
     int lockReady;
     GameChannelCost cost;   /* under the lock */
 } GameChannel;
+
+/* How long a call waits for the broker. The broker makes every Steam call on one thread, so one that hangs in Steam
+ * with its pipe intact would hold each game thread that calls Steam, for good; no call is known to take this long. */
+#define BRIDGE_CALL_TIMEOUT_MS 30000
 
 /* Opens the pipe, waiting up to timeoutMs for the broker to make it, then says HELLO and maps the ring it is given. */
 int  GameChannelConnect(GameChannel* ch, const wchar_t* suffix, DWORD timeoutMs);
@@ -79,8 +86,8 @@ typedef struct GameChannelReply {
     uint32_t status;
 } GameChannelReply;
 
-/* One call and its reply. Returns 1 with reply->status set when the broker answered; 0 when it did not (the channel is
- * then dead). */
+/* One call and its reply. Returns 1 with reply->status set when the broker answered; 0 when it did not, or not within
+ * callTimeoutMs (the channel is then dead). */
 int GameChannelCall(GameChannel* ch, uint32_t function, const void* args, uint32_t argsSize, GameChannelReply* reply);
 
 /* The round trips' cost since the last take, and a fresh count from now. */
@@ -92,7 +99,7 @@ static inline int GameChannelPending(const GameChannel* ch) { return ch->ring &&
 /* Read the next callback from the ring. Returns 0 when the ring is empty. */
 int GameChannelReadCallback(GameChannel* ch, uint32_t* callbackId, void* data, uint32_t capacity, uint32_t* dataSize);
 
-/* --- Synchronous pipe I/O (the game's side, and tests) --- */
+/* --- Pipe I/O without a time limit, on a synchronous or an overlapped handle (tests) --- */
 
 /* Receive one pipe message. Returns the type (> 0), or 0 on error or a message larger than the buffer. */
 uint32_t BridgePipeRecv(HANDLE pipe, void* body, uint32_t bodyCapacity, uint32_t* bodySize);

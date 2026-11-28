@@ -586,7 +586,7 @@ static void ActPelicansTick(uintptr_t game)
 
 #define ACT_RULES 64
 #define ACT_SOURCES 8
-#define ACT_TRACKED 16
+#define ACT_TRACKED 256 /* one player's homing shots in flight: a fast automatic weapon or a shotgun keeps dozens */
 typedef struct ActRule
 {
     uint32_t id, projectile, homing, flags;
@@ -604,6 +604,7 @@ static SRWLOCK g_actRulesLock = SRWLOCK_INIT;
 typedef struct ActTracked { int slot; uint32_t type, target, rule; uint64_t creditor; float distance; ULONGLONG since, retarget; } ActTracked;
 static ActTracked g_actTracked[ACT_TRACKED];
 static int g_actTrackedCount;
+static LONG g_actTrackedFull; /* said once a session */
 static uint32_t g_actCounter;
 static uintptr_t g_actPool;
 static int g_actPoolHeld;
@@ -852,6 +853,8 @@ static void ActShotRule(const ActShots* s, const ActRule* r, int slot, uint32_t 
     if (!r->homing) ActScaleShot(r, flight, hit);
     else if (g_actTrackedCount < ACT_TRACKED)
         g_actTracked[g_actTrackedCount++] = (ActTracked){slot, type, 0, r->id, creditor, 0, s->now, 0};
+    else if (!InterlockedExchange(&g_actTrackedFull, 1))
+        ApiLog(r->mod, "homing: %d shots are followed already, so this one flies straight; later ones are not logged", ACT_TRACKED);
 }
 /* The n shots fired since the last update, from `from` (the last 64 of them at most). */
 static void ActNewShots(const ActShots* s, uint32_t from, uint32_t n)

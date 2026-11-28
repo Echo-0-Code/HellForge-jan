@@ -10,6 +10,7 @@
 #include "loadout_record_test.c"
 #include "live_sync_test.c"
 #include "channel_test.c"
+#include "handover_test.c" /* after channel_test.c: its synthetic game.dll */
 #include "rpc_test.c"
 #include "director_test.c"
 #include "enemy_limits_test.c"
@@ -2943,6 +2944,20 @@ static void GrowableLimitsFixture(void)
     uint8_t* copyOwn = OwnRecord(paintState, 284, 12, 0xB45F, 0xF000);
     assert(copyOwn != NULL && copyOwn != baseOwn && OwnRecord(paintState, 284, 12, 0xB45F, 0xF000) == copyOwn);
     g_ownedCount = ownedCount;
+    /* a table copied for a record that is then not added (its base has no row): the game reads the copy all the same,
+     * and past its last record, so a record's worth after the vanilla ones is committed with the copy */
+    enum { WIDE = 0x2000 };
+    uint8_t* wideState = calloc(1, REG_LIST + 8);
+    uint8_t* wide = FakeTable(284, 2008 * 16 + WIDE * 2);
+    FakeRow(wide, 2008, 0xB460, 1);
+    SetStatePointer(wideState, REG_TABLES + 8 * 284, wide);
+    assert(OwnRecord(wideState, 284, WIDE, 0xDEAD, 0xB460) == NULL);
+    OwnedTable* wideCopy = OwnedTableOf(284, StatePointer(wideState, REG_TABLES + 8 * 284));
+    assert(wideCopy != NULL && wideCopy->index != wide && wideCopy->next == wideCopy->first && wideCopy->first == 2);
+    MEMORY_BASIC_INFORMATION widePage;
+    const uint8_t* pastVanilla = wideCopy->index + 2008 * 16 + (size_t)wideCopy->first * WIDE;
+    assert(VirtualQuery(pastVanilla + WIDE - 1, &widePage, sizeof widePage) && widePage.State == MEM_COMMIT);
+    g_ownedCount = ownedCount;
     /* an array's entries stay where they are as it grows, and it stops at its ceiling */
     StableArray small = {NULL, 24, 200, 0};
     assert(StableRoom(&small, 1) && small.committed == 64);
@@ -5267,6 +5282,7 @@ int main(int argc, char** argv)
     PaidGuardFixture();
     ChannelGameFixture();
     ChannelFixture();
+    HandoverFixture();
     RpcFixture();
     LiveBrowseFixture();
     LuaBridgeFixture();

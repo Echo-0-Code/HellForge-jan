@@ -418,8 +418,8 @@ booster's fields. Two Advanced categories (Projectiles, Damage Types) reach rows
 ### The live pipe
 
 The live pipe is `native/mod-loader/live.c` on the game's side and `src/HellForge.Core/LiveEdit.cs` on the backend's.
-The local backend serves `\\.\pipe\hellforge-live-<run id>` (current user only) for co-op, and the loader connects once
-the entity data has loaded. Two parts of the backend use it:
+The local backend serves `\\.\pipe\hellforge-live-<run id>` (current user only) for co-op. The loader connects once
+the entity data has loaded, to its own user's server only. Two backend parts use it:
 
 - `StatsShare`, with `src/HellForge.Core/StatsSync.cs`: a joiner of a host who shares its stats plays with them;
 - `AssetShare`: the lobby's packages, `packages` up and `preload` down.

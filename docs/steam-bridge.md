@@ -79,9 +79,9 @@ client's IPC objects are at the player's normal integrity, so a low-integrity pr
   - It watches the game's process, and exits when the game does, even while it waits for the connection.
   - One thread makes every Steam call: it answers calls, and when none comes for 16 ms it runs manual dispatch.
   - It makes allowed calls through Valve's flat C API, so the broker itself needs no C++ ABI.
-- **Calls** go over a duplex pipe, one request then its reply, serialized by a lock in the stand-in; each carries a
-  sequence number its reply must echo. A call too short or too large is answered as malformed; a broken pipe marks
-  the channel dead, and every later call fails at once.
+- **Calls** use a duplex pipe, one request then its reply, under the stand-in's lock; each carries a sequence
+  number its reply echoes. A call too short or too large is answered as malformed. A broken pipe, or 30 s with no
+  reply, marks the channel dead (logged), and later calls fail at once.
   - The pipe's security descriptor grants the player's own SID read and write only, and carries a **low** mandatory
     label (no write up), so the game can open it. It is the first and only instance of its name and refuses remote
     clients, so nothing that made the name first can stand in for the broker.

@@ -299,6 +299,8 @@ SDK 47's `add_damage_zone` puts a sphere on a mover that takes the hits landing 
   does. A high `sink`, such as 30 m/s for a lost rotor, makes it fall. A plane glides down.
 - Zones see a hit before `HF_ON_DAMAGE_PRE` listeners, so listeners get the scaled amount.
 - `zone_state` reads a zone. `repair_zones` makes one, or all, whole again.
+- In co-op a zone's health counts down only on the machine that simulates the mover, where a break acts. The other
+  machines still scale the hits they compute.
 - A mover takes up to 24 zones and 8 fixed guns. All movers together take up to 64 of each.
 
 A zone with `strike_damage` is a spinning disc, such as an open rotor, swept against the scenery every 0.1 s:
@@ -459,7 +461,8 @@ or within 30 m when that is 0. Once the fight is over it goes back to its order.
 `mover_state` answers on any thread. Use `speed` and `turning` to animate legs or wheels.
 
 On the other players' machines, a walker's or driver's `status` is `HF_MOVER_REMOTE`. Its other fields are the host's, so
-the same animation code works there.
+the same animation code works there. When the game hands the unit to another machine, as when the host leaves, that
+machine moves it on from where it shows.
 
 | Field | Meaning |
 |---|---|

@@ -39,18 +39,32 @@ static void ChannelFakeJump(uint8_t* at, void* to)
     at[10] = 0xFF; at[11] = 0xE0; /* mov rax, to; jmp rax */
 }
 
+/* A synthetic game.dll with the entity descriptor and network handle calls at their pinned rvas, as the reviewed
+ * game's: entity 42 exists, and g_channelAuthority + 0x14 is its flags. ChannelFakeGameEnd puts back what was there. */
+typedef struct ChannelFakeGame { uint8_t* game; int state; uintptr_t base; } ChannelFakeGame;
+static ChannelFakeGame ChannelFakeGameStart(void)
+{
+    ChannelFakeGame f = {VirtualAlloc(NULL, 0x3500000, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE), g_channelState, g_channelGame};
+    assert(f.game);
+    g_channelState = 1;
+    g_channelGame = (uintptr_t)f.game;
+    ChannelFakeJump(f.game + kLaunchFunctions[L_HANDLE].rva, (void*)ChannelFakeHandle);
+    ChannelFakeJump(f.game + kBhvFunctions[F_DESCRIPTOR].rva, (void*)ChannelFakeDescriptor);
+    return f;
+}
+
+static void ChannelFakeGameEnd(const ChannelFakeGame* f)
+{
+    g_channelState = f->state;
+    g_channelGame = f->base;
+    VirtualFree(f->game, 0, MEM_RELEASE);
+}
+
 /* is_authority and entity_of_network against a synthetic game.dll at their pinned rvas. */
 static void ChannelGameFixture(void)
 {
-    size_t size = 0x3500000;
-    uint8_t* game = VirtualAlloc(NULL, size, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-    assert(game);
-    int state = g_channelState;
-    uintptr_t base = g_channelGame;
-    g_channelState = 1;
-    g_channelGame = (uintptr_t)game;
-    ChannelFakeJump(game + kLaunchFunctions[L_HANDLE].rva, (void*)ChannelFakeHandle);
-    ChannelFakeJump(game + kBhvFunctions[F_DESCRIPTOR].rva, (void*)ChannelFakeDescriptor);
+    ChannelFakeGame fake = ChannelFakeGameStart();
+    uint8_t* game = fake.game;
     uint32_t yes = 1, no = 0, none = 0xFFFFFFFFu;
     memcpy(game + ABL_NO_ENTITY, &none, 4);
     memcpy(game + ABL_HANDLE_NONE, &none, 4);
@@ -65,9 +79,7 @@ static void ChannelGameFixture(void)
     /* not reviewed yet: no answer */
     g_channelState = 0;
     assert(ApiIsAuthority(NULL, 42) == -1 && ApiEntityOfNetwork(NULL, 0x1234) == 0xFFFFFFFFu);
-    g_channelState = state;
-    g_channelGame = base;
-    VirtualFree(game, 0, MEM_RELEASE);
+    ChannelFakeGameEnd(&fake);
 }
 
 static int g_channelNewVersion;

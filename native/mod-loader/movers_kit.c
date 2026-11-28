@@ -428,7 +428,7 @@ static void KitTick(MvUnit* m, float dt)
     KitInit(m);
     float w[16];
     if (!ApiJointPose(&g_mvMod, m->unit, 0, HF_POSE_WORLD, w) || !isfinite(w[12])) return;
-    if (g_kitZoneCount > 0 && !m->remote) ZnStrikes(m, w, dt);
+    if (g_kitZoneCount > 0 && !m->remote && ApiIsAuthority(&g_mvMod, m->entity) != 0) ZnStrikes(m, w, dt);
     if (g_kitGunCount == 0) return;
     const int joiner = MvRole() == HF_SESSION_JOINER;
     if (m->remote && !joiner) return; /* a host's copy of a joiner's walker: its guns are asked for, never this machine's */
@@ -474,6 +474,21 @@ static const KitZone* ZnAt(const MvUnit* m, const float local[3])
     return NULL;
 }
 
+/* A hit off a zone's health. The game consumes a hit on the machine that computed it, whoever simulates the target,
+ * and a break only acts where the unit is moved: a machine that does not simulate it keeps no count. */
+static void ZnCount(MvUnit* m, const KitZone* z, int32_t amount)
+{
+    if (ApiIsAuthority(&g_mvMod, m->entity) == 0) return;
+    int32_t* hp = &m->znHealth[z->slot];
+    if (*hp > 0 && *hp <= amount)
+    {
+        ZnBreak(m, z);
+        static const char* const kEffect[] = {"", ": it comes down", ": it spins and comes down"};
+        ApiLog(z->mod, "damage zone %u on unit %u broke%s", z->slot + 1, m->entity, kEffect[z->def.effect]);
+    }
+    *hp = *hp > amount ? *hp - amount : 0;
+}
+
 /* Before the mods' damage listeners (ConsumeDamageDetour), on the game thread: hits landing in a zone. */
 static void ZnDamage(uint8_t* event)
 {
@@ -501,14 +516,7 @@ static void ZnDamage(uint8_t* event)
     }
     if (z != NULL)
     {
-        int32_t* hp = &m->znHealth[z->slot];
-        if (*hp > 0 && *hp <= amount)
-        {
-            ZnBreak(m, z);
-            static const char* const kEffect[] = {"", ": it comes down", ": it spins and comes down"};
-            ApiLog(z->mod, "damage zone %u on unit %u broke%s", z->slot + 1, m->entity, kEffect[z->def.effect]);
-        }
-        *hp = *hp > amount ? *hp - amount : 0;
+        ZnCount(m, z, amount);
         const int32_t scaled = z->def.scale < 0 ? 0 : (int32_t)lroundf((float)amount * z->def.scale);
         memcpy(event + 0x2C, &scaled, 4);
     }

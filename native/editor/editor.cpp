@@ -848,31 +848,34 @@ static void STDMETHODCALLTYPE ExecuteDetour(ID3D12CommandQueue* queue, UINT coun
 
 /* ---- set-up ----------------------------------------------------------------------------------------------------- */
 
-/* Where each method was found: its slot in the object's method table (the table every object of that kind shares,
- * where it lies in a module's image), for the fallback below. */
-static void** g_slotPresent;
-static void** g_slotPresent1;
-static void** g_slotResize;
-static void** g_slotExecute;
+static uint8_t* LiveJump(const uint8_t* code);
 
-/* A method hooked where its code is (MinHook, through the loader), else, where the code cannot be hooked (another
- * overlay already sends the call to code of its own, and MinHook finds no room near it), its slot in the shared method
- * table pointed at the detour, the code that was there kept as the original: the editor then runs in front of that
- * overlay, as overlays chain. A table in allocated memory (one object's own) is not patched: the game's objects would
- * not use it. 0 when hooked. */
-static int HookMethod(HfMod* mod, const char* name, void* target, void** slot, void* detour, void** original)
+/* The methods hooked where their code jumped to (HookMethod): their first bytes are another overlay's, not the
+ * editor's hook, so Watch never puts them back. */
+static void* g_behind[4];
+static int g_behindCount;
+
+/* A method hooked where its code is (MinHook, through the loader). Where that fails because another overlay already
+ * sends the code to its own with a jump MinHook finds no room near, the place the jump goes is hooked instead, so the
+ * editor runs in front of that overlay, as InFront does for one that comes later. The shared method table is not an
+ * option (Watched, below). 0 when hooked. */
+static int HookMethod(HfMod* mod, const char* name, void* target, void* detour, void** original)
 {
     if (!g_api->hook(mod, (uintptr_t)target, detour, original)) return 0;
-    std::string code = ModuleOf(target), table = slot != NULL ? ModuleOf(slot) : "";
-    g_api->log(mod, "editor: %s at %p (%s) could not be hooked in place; its method table at %p (%s)", name, target,
-        code.empty() ? "allocated memory: another overlay's code?" : code.c_str(), (void*)slot, table.empty() ? "allocated memory" : table.c_str());
-    DWORD protect;
-    if (slot == NULL || table.empty() || *slot != target || !VirtualProtect(slot, sizeof *slot, PAGE_READWRITE, &protect)) return 1;
-    *original = target;
-    InterlockedExchangePointer(slot, detour);
-    VirtualProtect(slot, sizeof *slot, protect, &protect);
-    g_api->log(mod, "editor: %s: the method table now calls the editor first (then %p)", name, target);
-    return 0;
+    uint8_t* to = Readable(target, 12) ? LiveJump((const uint8_t*)target) : NULL;
+    std::string code = ModuleOf(target), who = to != NULL ? ModuleOf(to) : "";
+    if (to == NULL)
+    {
+        g_api->log(mod, "editor: %s at %p (%s) could not be hooked in place, and its code is no jump the editor can follow", name, target,
+            code.empty() ? "allocated memory: another overlay's code?" : code.c_str());
+        return 1;
+    }
+    int failed = g_api->hook(mod, (uintptr_t)to, detour, original);
+    g_api->log(mod, failed ? "editor: %s at %p could not be hooked in place; its code jumps to %p (%s), and hooking there failed too" :
+        "editor: %s at %p could not be hooked in place; its code jumps to %p (%s), where the editor is hooked and runs first", name, target,
+        (void*)to, who.empty() ? "allocated memory: an overlay's code?" : who.c_str());
+    if (!failed && g_behindCount < 4) g_behind[g_behindCount++] = target;
+    return failed;
 }
 
 /* Where a jump at `code` goes: jmp rel32 / rel8, jmp [rip+disp32], mov rax, imm64; jmp rax (how overlays send a
@@ -1044,7 +1047,10 @@ static void Watch(int i, const char* name, void* code, void* const* detours, voi
     w.detours = detours;
     w.originals = originals;
     if (Readable(code, 8)) { memcpy(w.mine, code, 8); w.first = JumpTarget((uint8_t*)code); }
-    if (!Pristine(code, w.before))
+    bool behind = false;
+    for (int k = 0; k < g_behindCount; k++) behind |= g_behind[k] == code;
+    if (behind) memcpy(w.before, w.mine, 8); /* another overlay's jump, not the editor's hook: PutBack never matches */
+    else if (!Pristine(code, w.before))
     {
         memcpy(w.before, w.mine, 8); /* PutBack never matches */
         g_api->log(g_mod, "editor: %s: its code as its module's file has it was not read; the editor's hook is not put back if an overlay puts the code back", name);
@@ -1094,7 +1100,6 @@ static bool FindMethods(void** present, void** present1, void** resize, void** e
         *resize = chain[13];    /* IDXGISwapChain::ResizeBuffers */
         *present1 = chain[22];  /* IDXGISwapChain1::Present1 */
         *execute = commands[10]; /* ID3D12CommandQueue::ExecuteCommandLists */
-        g_slotPresent = &chain[8]; g_slotResize = &chain[13]; g_slotPresent1 = &chain[22]; g_slotExecute = &commands[10];
         g_queueTable = commands;
         FindQueueOffset(swapChain, queue);
         found = true;
@@ -1176,10 +1181,10 @@ static void Start(HfMod* mod, HfEvent event, void* user)
     LogOverlays();
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
     bool hooked =
-        !HookMethod(mod, "ExecuteCommandLists", execute, g_slotExecute, (void*)ExecuteDetour, (void**)&g_execute) &&
-        !HookMethod(mod, "ResizeBuffers", resize, g_slotResize, (void*)ResizeBuffersDetour, (void**)&g_resize) &&
-        !HookMethod(mod, "Present", present, g_slotPresent, (void*)PresentDetour, (void**)&g_present) &&
-        !HookMethod(mod, "Present1", present1, g_slotPresent1, (void*)Present1Detour, (void**)&g_present1);
+        !HookMethod(mod, "ExecuteCommandLists", execute, (void*)ExecuteDetour, (void**)&g_execute) &&
+        !HookMethod(mod, "ResizeBuffers", resize, (void*)ResizeBuffersDetour, (void**)&g_resize) &&
+        !HookMethod(mod, "Present", present, (void*)PresentDetour, (void**)&g_present) &&
+        !HookMethod(mod, "Present1", present1, (void*)Present1Detour, (void**)&g_present1);
     if (hooked) WatchHooks(present, present1, resize);
     if (hooked) HookD3D11(mod, present, present1, resize);
     if (hooked && user32 != NULL)
