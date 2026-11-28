@@ -326,7 +326,9 @@ struct LogView
     int source = 0, filter = 0, index = 0;
     bool follow = true;
     std::wstring path;
-    uint64_t size = 0;
+    uint64_t size = 0; /* the file's, as last read */
+    uint64_t from = 0, parsed = 0; /* where in the file the lines held begin, and where the next ones do */
+    bool partial = false; /* the last line had no end yet */
     ULONGLONG checked = 0;
     std::vector<std::string> lines;
     std::vector<int> kinds; /* 0 info, 1 warning, 2 error */
