@@ -36,6 +36,21 @@ On `dev`, since 0.5.0-beta.
   attack. In Custom planets you can give Super Earth any enemy, with that enemy's subfactions and surges, like any
   other planet. The HellForge war and the live war stay as their servers send them.
 
+### Changed
+
+- **The bundled Vanilla Plus is now CowboyBingus's Vanilla Plus Megapack.** It is 25 small mods in one, each switched
+  on or off on the MODS tab of the escape menu, and it comes on. Vanilla Plus's three fixes are three of them. An update
+  moves the old Vanilla Plus, and any Megapack copy you added yourself, to `mods-retired`. Your Megapack settings stay.
+  Its mods:
+  - Fixes: Better Stratagem Bounce, Hellpod Steering Unlocked, Reinforcement Beacons Fixed, Consistent Vaulting,
+    Shallow Water Diving, Flame Damage Fixed, Enemy Collision Synchronized.
+  - Weapons and gear: Arc Thrower Revamped, Sentry Aim Retention, Laser Sentry Cooldown, Sticky Grenade Handles,
+    Foliage Pass-Through, Controllable Hover Pack, Holster Your Shield, Hellpod Drop Hold.
+  - The ship and menus: Ship Station Hotkeys, Mod Options Menu, Mod Bindings Menu, Clickable Scrollbars, Armory
+    Preview Cache, Match Your Colors, Better Lobby Management, Stratagem Hero Expanded, Sound Systems Rebalanced.
+  - Know Your Constellation, whose forecasts are logged; its panel on the war table needs Bingus Shared Loader and is
+    not in the bundled copy.
+
 ### Fixed
 
 - **Several mods can add camouflage shapes.** Every mod's layers on a game array texture now stack in load order,
@@ -47,6 +62,13 @@ On `dev`, since 0.5.0-beta.
   stats and a status multiplier change when you apply them. A weapon takes them when it is next built. Their pages
   still said NEXT BOOT, while the CHANGES list said EDITED. A stratagem's unlimited mission uses now read "next
   mission", not "next launch".
+- **The Vanilla Plus Megapack on HellForge 0.5.** Since 0.5 makes room for 4,096 entities, the pack no longer found
+  your Helldiver. Vaulting, diving, the hover pack, shield holstering, Match Your Colors, reinforcement beacons and
+  the ship hotkeys waited for it in vain. Armory Preview Cache no longer found the item catalogue 0.5 moved. Both are
+  read where the game has them now.
+- **The Megapack's Hellpod shortcut is F9.** It was F8, which also opens the in-game editor. A key you bound yourself
+  stays.
+
 - **No crash entering the ship with Difficulty 11 and mods' attachments.** The game's entity delta table has rows
   after its last named delta that are not deltas. The level 11 countdown's copy kept them, and the attachments followed
   their values past the end of the copy (`c0000005` at `hellforge_modloader.dll+0x88b94`). Both now follow only named
