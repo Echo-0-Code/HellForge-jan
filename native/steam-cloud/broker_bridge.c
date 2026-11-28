@@ -553,7 +553,6 @@ static void PublishSnapshot(BridgeSnapshot* s, const BridgeSnapshot* next)
     __atomic_store_n(&s->version, version | 1, __ATOMIC_RELEASE);
     __atomic_thread_fence(__ATOMIC_SEQ_CST);
     memcpy((uint8_t*)s + sizeof s->version, (const uint8_t*)next + sizeof next->version, sizeof *next - sizeof next->version);
-    s->ready = 1;
     __atomic_store_n(&s->version, (version | 1) + 1, __ATOMIC_RELEASE);
 }
 
@@ -562,6 +561,7 @@ void BrokerBridgeSnapshot(BrokerBridge* b, BrokerChannel* ch)
     BridgeSnapshot* s = BridgeSnapshotOf(ch->ring);
     BridgeSnapshot next;
     memset(&next, 0, sizeof next);
+    next.ready = 1; /* copied in with the rest: the game reads it outside the seqlock, so it must never go back to 0 */
     void* user = Self(&b->api, "SteamAPI_SteamUser_v021");
     void* friends = Self(&b->api, "SteamAPI_SteamFriends_v017");
     void* utils = Self(&b->api, "SteamAPI_SteamUtils_v010");
