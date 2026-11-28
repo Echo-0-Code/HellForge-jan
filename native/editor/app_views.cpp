@@ -46,7 +46,7 @@ void DrawSearch(float y0, float h)
 void DrawChanges(float y0, float h)
 {
     float W = PANEL_W;
-    auto list = Changes();
+    const auto& list = Changes();
     g_change = std::clamp(g_change, 0, std::max(0, (int)list.size() - 1));
     g_cv.Rect(0, y0, W, h, PANEL, 1);
     g_cv.Text("CHANGES", 20, y0 + 24, T(20, TEXT, ui::TITLE));

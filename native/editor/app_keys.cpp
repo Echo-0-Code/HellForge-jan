@@ -184,7 +184,7 @@ static void SearchKeys(const std::vector<std::string>& chars)
 
 static void ChangesKeys()
 {
-    auto list = Changes();
+    const auto& list = Changes();
     int n = std::max(1, (int)list.size());
     if (Pressed(ImGuiKey_UpArrow)) g_change = std::max(0, g_change - 1);
     if (Pressed(ImGuiKey_DownArrow)) g_change = std::min(n - 1, g_change + 1);
@@ -299,7 +299,7 @@ static void RowKeys(const Row* row, const std::vector<std::string>& chars, bool 
 static void FieldKeys(const std::vector<std::string>& chars, bool ctrl, bool shift)
 {
     Object* object = Current();
-    auto items = Items(object);
+    const auto& items = Items(object);
     if (items.empty()) { if (Pressed(ImGuiKey_LeftArrow)) g_focus = OBJECTS; return; }
     g_field = std::clamp(g_field, 0, (int)items.size() - 1);
     if (ctrl && Pressed(ImGuiKey_UpArrow)) { SetPageOpen(object, false); return; }
