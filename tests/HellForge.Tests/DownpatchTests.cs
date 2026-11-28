@@ -164,7 +164,8 @@ static class DownpatchTests
         {
             var f = new Fixture(root, "downpatch-roundtrip");
             var made = f.Make();
-            check(made is { Same: 2, Patched: 3, New: 3 }, $"Operations: {made.Same} same, {made.Patched} patched, {made.New} new.");
+            // the swapped upscaler is Steam's own copy as it is: "same", not a patch to the player's version
+            check(made is { Same: 3, Patched: 2, New: 3 }, $"Operations: {made.Same} same, {made.Patched} patched, {made.New} new.");
             var manifest = Downpatch.ReadManifest(f.Pack);
             check(manifest.Source.BuildId == "200" && manifest.Target.BuildId == "100" && manifest.Files.Count == f.Build.Files.Count, "The manifest is wrong.");
             check(manifest.Files.Single(e => e.Path == "data/moved.bin") is { Op: "same", From: "data/renamed.bin" }, "A moved file was not found by its hash.");

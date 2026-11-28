@@ -385,6 +385,7 @@ static int LuaCodeRestore(int slot)
     c->type = 0;
     c->row = 0;
     c->mod = NULL;
+    while (g_luaCodeCount > 0 && g_luaCodes[g_luaCodeCount - 1].type == 0) g_luaCodeCount--; /* free at the end: none left to move */
     return HF_APPLIES_NOW;
 }
 

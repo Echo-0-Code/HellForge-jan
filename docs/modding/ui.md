@@ -19,7 +19,7 @@ For a screen drawn with HellForge's own drawing calls (a map, a graph), see [Scr
 - [Texts for the game's own widgets](#texts-for-the-games-own-widgets)
 - [Game texts and loading screen tips](#game-texts-and-loading-screen-tips)
 - [Tabs on the game's tab bars](#tabs-on-the-games-tab-bars)
-- [A category in Vehicle Customization](#a-category-in-vehicle-customization)
+- [A category in Vehicle Customization](#a-category-in-vehicle-customization-retired)
 - [Boxes on the WEAPONRY overview](#boxes-on-the-weaponry-overview)
 - [Settings in the MODS menu](#settings-in-the-mods-menu)
 - [Limits](#limits)
