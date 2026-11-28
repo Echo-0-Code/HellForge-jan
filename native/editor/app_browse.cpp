@@ -628,6 +628,7 @@ static const char* FooterHint()
 {
     auto items = g_view == BROWSE ? Items(Current()) : std::vector<Item>{};
     bool header = g_focus == FIELDS && g_field < (int)items.size() && items[g_field].header;
+    if (g_edit.on && g_edit.row->code) return "Type U D L R or the arrows   Backspace erase   Tab / Enter confirm   Del cancel";
     if (g_edit.on) return "Type a number   Backspace erase   Tab / \xE2\x86\x91\xE2\x86\x93 confirm   Del cancel";
     if (g_search.active) return "Type to filter   Backspace erase   Tab done   Del clear";
     if (g_view == SEARCH) return "Type to search   \xE2\x86\x91\xE2\x86\x93 select   Enter open   Backspace erase   Del clear";
