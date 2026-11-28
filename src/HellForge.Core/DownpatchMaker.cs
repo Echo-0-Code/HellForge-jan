@@ -50,8 +50,8 @@ public static class DownpatchMaker
             entries.Count(e => e.Draft.Op == "new"), 0, build.TotalBytes, new FileInfo(outFile).Length, clock.Elapsed.TotalSeconds);
     }
 
-    // The installation's file for each of the build's, with its content (a swapped upscaler keeps its own); refused
-    // unless every other file is exactly the build's.
+    // The installation's file for each of the build's, with its content; refused unless every file but a swapped
+    // upscaler is exactly the build's (Decide takes Steam's own copy of a swapped one).
     sealed record Target(SupportedFile File, string Path, long Size, string Sha1);
 
     static List<Target> CheckInstallation(string game, SupportedBuild build, Action<DownpatchProgress>? progress, CancellationToken cancellation)
@@ -100,6 +100,13 @@ public static class DownpatchMaker
             var target = targets[i];
             void Read(int count) => progress?.Invoke(new("Reading Steam's game files", done += count, total, target.File.Path));
             var path = target.File.Path;
+            // A swapped upscaler is not carried: Downpatch.Plan takes another version only as Steam's own file.
+            if (target.Size != target.File.Size || target.Sha1 != target.File.Sha1.ToUpperInvariant())
+            {
+                if (!source.Sizes.TryGetValue(path, out var size))
+                    throw new InvalidDataException($"HellForge's game copy has a swapped {path} and Steam's game has none: put the original back first.");
+                target = target with { Size = size, Sha1 = source.Sha1(path, Read, cancellation) };
+            }
             var draft = new DownpatchEntry(path, "new", target.Size, target.Sha1, Entry: $"files/{i:D3}.hfd");
             string? from = null;
             if (path != "data/settings.ini" && SameIn(source, target, Read, cancellation) is { } same)

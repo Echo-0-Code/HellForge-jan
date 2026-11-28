@@ -90,8 +90,8 @@ public static partial class Downpatch
         return manifest;
     }
 
-    // The manifest's files against the build: each of the build's files once, with the build's size and hash (any
-    // version of a replaceable one), each operation complete, and every path a plain relative one.
+    // The manifest's files against the build: each of the build's files once, with the build's size and hash (or
+    // Steam's own version of a replaceable one), each operation complete, and every path a plain relative one.
     public static IReadOnlyList<(DownpatchEntry Entry, SupportedFile File)> Plan(DownpatchManifest manifest, SupportedBuild build)
     {
         if (manifest.Target.BuildId != build.BuildId)
@@ -103,7 +103,10 @@ public static partial class Downpatch
         {
             if (!listed.TryGetValue(entry.Path, out var file) || !seen.Add(entry.Path))
                 throw new InvalidDataException($"The downpatch file names a file that is not one of build {build.BuildId}'s, or names it twice: {entry.Path}.");
-            if (!SupportedBuild.IsReplaceable(file.Path) && (entry.Size != file.Size || !entry.Sha1.Equals(file.Sha1, StringComparison.OrdinalIgnoreCase)))
+            // Another version of a replaceable file may only be Steam's own file ("same"): bytes the pack carries are
+            // written only when they are the build's, so a pack cannot bring a library of its own into the game folder.
+            var builds = entry.Size == file.Size && entry.Sha1.Equals(file.Sha1, StringComparison.OrdinalIgnoreCase);
+            if (!builds && !(SupportedBuild.IsReplaceable(file.Path) && entry.Op == "same"))
                 throw new InvalidDataException($"The downpatch file's {entry.Path} is not build {build.BuildId}'s.");
             if (!Complete(entry)) throw new InvalidDataException($"The downpatch file's entry for {entry.Path} is not one this HellForge can use.");
             plan.Add((entry, file));

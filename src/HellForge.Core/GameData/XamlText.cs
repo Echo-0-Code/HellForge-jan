@@ -34,6 +34,21 @@ public static class XamlText
         return output;
     }
 
+    // The size of the resource's header: 16 when it starts with its text's length, else 0 (bare text).
+    public static int HeaderOf(byte[] resource) =>
+        resource.Length >= Header && BinaryPrimitives.ReadUInt32LittleEndian(resource) == resource.Length - Header ? Header : 0;
+
+    // The resource with its text replaced; a header of `head` bytes is kept and its length set.
+    public static byte[] WithText(byte[] resource, int head, string text)
+    {
+        var body = Encoding.UTF8.GetBytes(text);
+        var output = new byte[head + body.Length];
+        resource.AsSpan(0, head).CopyTo(output);
+        if (head == Header) BinaryPrimitives.WriteUInt32LittleEndian(output, (uint)body.Length);
+        body.CopyTo(output, head);
+        return output;
+    }
+
     static string Lines(string text, string newline) => text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\n", newline, StringComparison.Ordinal);
 
     static string Short(string text) => text.Length <= 60 ? text : text[..60] + "...";

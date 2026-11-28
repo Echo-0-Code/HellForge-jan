@@ -131,11 +131,13 @@ public static class ForgeCredits
             {
                 // A page with several colours takes each on top of the ones before.
                 var (parts, text) = texts.TryGetValue((at.Archive, key), out var done) ? done : (game.Read(at), "");
-                if (text.Length == 0) text = Encoding.UTF8.GetString(parts.Main);
+                // The view's binary header stays bytes: decoded as text, a length byte of 0x80 or more would be lost.
+                var head = XamlText.HeaderOf(parts.Main);
+                if (text.Length == 0) text = Encoding.UTF8.GetString(parts.Main, head, parts.Main.Length - head);
                 if (!text.Contains(from, StringComparison.Ordinal)) continue;
                 text = text.Replace(from, to, StringComparison.Ordinal);
                 texts[(at.Archive, key)] = (parts, text);
-                Put(at.Archive, key, parts with { Main = Encoding.UTF8.GetBytes(text) });
+                Put(at.Archive, key, parts with { Main = XamlText.WithText(parts.Main, head, text) });
                 changed++;
             }
             if (changed == 0) skipped.Add($"a colour of XAML page {resource:X16}");
