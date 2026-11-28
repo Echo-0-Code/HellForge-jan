@@ -226,8 +226,23 @@ public sealed partial class RegisteredItems(string path)
         return vanilla = new Vanilla(catalogue, source("/Progression/ProgressionPackages"));
     }
 
+    // The file's size and write time at the last read. A file unchanged by both, and not written in the last two
+    // seconds (write times can be coarse), is not read again: one request asks for the session hundreds of times.
+    (long Length, DateTime Written) fileSeen = (-1, default);
+
     Session Current()
     {
+        try
+        {
+            var info = new FileInfo(path);
+            var now = info.Exists ? (info.Length, info.LastWriteTimeUtc) : (0L, default(DateTime));
+            lock (gate)
+            {
+                if (session != null && now == fileSeen && DateTime.UtcNow - now.Item2 > TimeSpan.FromSeconds(2)) return session;
+                fileSeen = now;
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
         var bytes = ReadFile();
         lock (gate)
         {

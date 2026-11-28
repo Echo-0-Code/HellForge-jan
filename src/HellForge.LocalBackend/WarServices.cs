@@ -211,7 +211,14 @@ public sealed class WarServices(string? scriptPath, WarClock clock, ProfileStore
         if (profile == null || !body.TryGetProperty("id32", out var id) || !id.TryGetUInt32(out var id32)) return new JsonObject();
         var order = List(current, "personalOrders").FirstOrDefault(o => o.TryGetProperty("id", out var i) && i.TryGetUInt32(out var n) && n == id32);
         if (order.ValueKind != JsonValueKind.Object) return new JsonObject();
-        var granted = Grant($"order/{id32}", Items(order, "rewards").ToList());
+        List<(uint MixId, long Amount)> rewards;
+        try { rewards = Items(order, "rewards").ToList(); }
+        catch (Exception error) when (error is InvalidOperationException or KeyNotFoundException or FormatException)
+        {
+            log($"War script: the rewards of personal order {id32} were not read ({error.Message}).");
+            return new JsonObject();
+        }
+        var granted = Grant($"order/{id32}", rewards);
         if (granted == null) return new JsonObject();
         var reward = new JsonObject { ["id32"] = id32, ["completionReward"] = new JsonObject { ["items"] = granted } };
         if (localAccount() is var account and not 0) reward["platformAccountId"] = account.ToString(CultureInfo.InvariantCulture);
@@ -223,14 +230,22 @@ public sealed class WarServices(string? scriptPath, WarClock clock, ProfileStore
     JsonArray News(JsonElement? current, IQueryCollection query)
     {
         var from = From(query);
+        // Each dispatch is converted on its own: one malformed entry is left out and logged, the feed still answers.
+        var read = new List<(uint Id, long Published, string Message)>();
+        foreach (var dispatch in List(current, "dispatches"))
+        {
+            if (dispatch.ValueKind != JsonValueKind.Object || !dispatch.TryGetProperty("id", out var id) || !dispatch.TryGetProperty("published", out var p)) continue;
+            try { read.Add((id.GetUInt32(), p.GetInt64(), dispatch.TryGetProperty("message", out var m) ? m.GetString() ?? "" : "")); }
+            catch (Exception error) when (error is InvalidOperationException or FormatException)
+            {
+                log($"War script: an entry of dispatches was left out ({error.Message}).");
+            }
+        }
         var news = new JsonArray();
-        foreach (var dispatch in List(current, "dispatches")
-                     .Where(d => d.TryGetProperty("id", out _) && d.TryGetProperty("published", out var p) && p.GetInt64() > from && p.GetInt64() <= clock.Seconds)
-                     .OrderByDescending(d => d.GetProperty("published").GetInt64()).Take(MaxEntries))
+        foreach (var dispatch in read.Where(d => d.Published > from && d.Published <= clock.Seconds).OrderByDescending(d => d.Published).Take(MaxEntries))
             news.Add((JsonNode)new JsonObject
             {
-                ["id"] = dispatch.GetProperty("id").GetUInt32(), ["published"] = dispatch.GetProperty("published").GetInt64(), ["type"] = 0,
-                ["tagIds"] = new JsonArray(), ["message"] = dispatch.TryGetProperty("message", out var m) ? m.GetString() ?? "" : ""
+                ["id"] = dispatch.Id, ["published"] = dispatch.Published, ["type"] = 0, ["tagIds"] = new JsonArray(), ["message"] = dispatch.Message
             });
         return news;
     }
@@ -276,12 +291,23 @@ public sealed class WarServices(string? scriptPath, WarClock clock, ProfileStore
     List<Letter> Mail(JsonElement? current)
     {
         var mail = new List<Letter>();
+        var seen = new HashSet<uint>();
         foreach (var m in List(current, "mail"))
         {
-            if (!m.TryGetProperty("id", out var id) || !id.TryGetUInt32(out var mailId)) continue;
+            if (m.ValueKind != JsonValueKind.Object || !m.TryGetProperty("id", out var id) || !id.TryGetUInt32(out var mailId)) continue;
             var sent = m.TryGetProperty("sentAt", out var s) && s.TryGetInt64(out var at) ? at : 0;
             if (sent > clock.Seconds) continue;
-            mail.Add(new Letter(mailId, sent, m.TryGetProperty("message", out var text) ? text.GetString() ?? "" : "", Items(m, "items").ToList()));
+            // A letter that does not convert, or repeats an id, is left out and logged: the inbox still answers.
+            try
+            {
+                var letter = new Letter(mailId, sent, m.TryGetProperty("message", out var text) ? text.GetString() ?? "" : "", Items(m, "items").ToList());
+                if (seen.Add(mailId)) mail.Add(letter);
+                else log($"War script: mail {mailId} is there twice; the first one counts.");
+            }
+            catch (Exception error) when (error is InvalidOperationException or KeyNotFoundException or FormatException)
+            {
+                log($"War script: mail {mailId} was left out ({error.Message}).");
+            }
         }
         return mail;
     }

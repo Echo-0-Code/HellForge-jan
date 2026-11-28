@@ -98,6 +98,8 @@ public sealed class LobbyService
     // and HellForge's own on a key's and a value's length, far above the game's (keys "0".."26", "descriptor", values up
     // to 123 characters in the stand-in logs). Frames from other machines are held to them; the local DLL is not.
     public const int MaxProperties = 30, MaxKeyLength = 64, MaxValueLength = 1024;
+    // A relayed field's bytes: twice the longest value as UTF-8.
+    const int MaxRelayedField = 8 * MaxValueLength;
     // Invitations a lobby remembers, and those this machine passes on to its game from one friend in a minute.
     const int MaxInvited = 64, InvitesPerMinute = 10;
     // A machine refused only for its gameplay mods is expected back for ExpectedBack (a download of up to ModSync.GrantTime,
@@ -556,6 +558,12 @@ public sealed class LobbyService
     // An event from a friend's backend reaches this machine's DLL only if that friend owns the lobby it is about.
     void RelayEvent(ulong peer, Frame frame)
     {
+        // Another machine's frame: no field longer than any lobby value can be, before the game's stand-in reads it.
+        if (frame.Fields.Any(field => field.Length > MaxRelayedField))
+        {
+            log($"A {frame.Type} frame from {EntityId(peer)} has an oversized field; it was dropped.");
+            return;
+        }
         var relayed = frame.Type == "lobby.result" ? ForwardedResult(peer, frame) : OwnersEvent(peer, frame);
         if (relayed) toLocal(frame);
     }

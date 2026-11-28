@@ -34,10 +34,25 @@ public sealed class PipeHost : IAsyncDisposable
     {
         while (!stop.IsCancellationRequested)
         {
-            var pipe = HellForge.Core.PipeServer.Create(name, NamedPipeServerStream.MaxAllowedServerInstances);
-            try { await pipe.WaitForConnectionAsync(stop.Token); }
-            catch (OperationCanceledException) { await pipe.DisposeAsync(); return; }
-            lock (connections) connections.Add(Task.Run(() => Serve(pipe)));
+            // A client that connects and closes at once, or a failed create, must not end the loop: a restarted
+            // game's stand-ins could then never connect for the rest of the session.
+            NamedPipeServerStream? pipe = null;
+            try
+            {
+                pipe = HellForge.Core.PipeServer.Create(name, NamedPipeServerStream.MaxAllowedServerInstances);
+                await pipe.WaitForConnectionAsync(stop.Token);
+            }
+            catch (OperationCanceledException) { if (pipe != null) await pipe.DisposeAsync(); return; }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                log($"Pipe {name}: a connection was not accepted ({error.Message}).");
+                if (pipe != null) await pipe.DisposeAsync();
+                try { await Task.Delay(200, stop.Token); }
+                catch (OperationCanceledException) { return; }
+                continue;
+            }
+            var connected = pipe;
+            lock (connections) connections.Add(Task.Run(() => Serve(connected)));
         }
     }
 
