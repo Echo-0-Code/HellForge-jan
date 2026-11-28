@@ -13,8 +13,9 @@ public static class ModDataBuilder
     // Part of the cache key and the modlist digest: raise it whenever the same spec would build different bytes.
     // 2: a unit copy takes its base's physics under its own name; 3: and the physics names that unit inside it too;
     // 4: material colours land where the values are (no 16-byte rounding), and resources can come from Steam's install
-    // (a spec without a past build's resources builds the same bytes as with 4, so the version stays)
-    public const int Version = 4;
+    // (a spec without a past build's resources builds the same bytes as with 4, so the version stays);
+    // 5: four-joint skin weights, the BC7 start axis, and edits read from the patch archive's copy
+    public const int Version = 5;
 
     // Where a physics resource names its unit (after the type hash at +0): the havok layer files physics by the name at
     // +0x08, not the archive's, and a unit finds its bodies by its own name there (exe 0x7EDE60, 0x788E90); +0x38 and
@@ -559,7 +560,7 @@ public static class ModDataCache
                     problems.AddRange(data.Notes.Select(n => $"{mod.Archive ?? Path.GetFileName(mod.Folder)}: {n}"));
                     ready.Add(mod with { GeneratedData = data.Folder });
                 }
-                catch (Exception error) when (error is InvalidDataException or IOException or UnauthorizedAccessException)
+                catch (Exception error) when (error is InvalidDataException or IOException or UnauthorizedAccessException or ArgumentException)
                 {
                     problems.Add($"{mod.Archive ?? Path.GetFileName(mod.Folder)}: its data could not be built: {error.Message}");
                 }
@@ -594,8 +595,12 @@ public static class ModDataCache
         var target = Path.Combine(cache, key);
         if (File.Exists(Path.Combine(target, Record)))
         {
-            var record = JsonSerializer.Deserialize<BuildRecord>(File.ReadAllText(Path.Combine(target, Record)), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            return (target, record?.Files ?? [], false, record?.Notes ?? []);
+            // A record cut short (power loss) is no record: the folder is built again instead of failing every start.
+            BuildRecord? record = null;
+            try { record = JsonSerializer.Deserialize<BuildRecord>(File.ReadAllText(Path.Combine(target, Record)), new JsonSerializerOptions { PropertyNameCaseInsensitive = true }); }
+            catch (JsonException) { }
+            if (record?.Files != null) return (target, record.Files, false, record.Notes ?? []);
+            Directory.Delete(target, recursive: true);
         }
         log?.Invoke($"Building the data of {mod.Id} from the game data...");
         var staging = target + ".partial-" + Guid.NewGuid().ToString("N")[..8];

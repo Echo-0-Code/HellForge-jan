@@ -101,7 +101,10 @@ public static class AnimationSet
     static List<AnimationClip.Pose> ReadRest(JsonElement spec, IReadOnlyList<string> names, Dictionary<string, int> index, IReadOnlyList<Joint>? joints)
     {
         if (spec.ValueKind is not (JsonValueKind.Object or JsonValueKind.Undefined)) throw new InvalidDataException("rest gives bones' rest transforms by name.");
-        var given = spec.ValueKind == JsonValueKind.Object ? spec.EnumerateObject().ToDictionary(p => p.Name, p => p.Value) : [];
+        var given = new Dictionary<string, JsonElement>();
+        if (spec.ValueKind == JsonValueKind.Object)
+            foreach (var p in spec.EnumerateObject())
+                if (!given.TryAdd(p.Name, p.Value)) throw new InvalidDataException($"rest names {p.Name} twice.");
         foreach (var name in given.Keys)
             if (!index.ContainsKey(name)) throw new InvalidDataException($"rest names {name}, which is not in bones.");
         return names.Select(name => RestPose(name, index[name] < 2, given.TryGetValue(name, out var r) ? r : default, joints)).ToList();

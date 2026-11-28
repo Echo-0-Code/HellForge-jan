@@ -42,7 +42,9 @@ public static partial class ModelUnit
     public static void CheckAnimations(UnitWriter.Model model, byte[] baseUnit, byte[] bones)
     {
         var moving = BoneHashes(bones).Skip(2).ToList();
-        var own = model.Joints.ToDictionary(j => EngineHash.Id32(j.Name));
+        var own = new Dictionary<uint, UnitWriter.Joint>();
+        foreach (var joint in model.Joints)
+            if (!own.TryAdd(EngineHash.Id32(joint.Name), joint)) throw new InvalidDataException($"the model has two joints named {joint.Name} (or two names with one hash).");
         var rest = BaseJoints(baseUnit);
         foreach (var hash in moving)
         {

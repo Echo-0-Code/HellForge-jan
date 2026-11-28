@@ -181,7 +181,7 @@ public sealed class SourceIndex
         }
         if (Builds.Contains(game.Build)) throw new InvalidOperationException($"Build {game.Build} is already in the index.");
         Unseal();
-        var build = Builds.Count;
+        var build = NewBuild();
         Builds.Add(game.Build);
         long resources = 0, bytes = 0;
         string? current = null;
@@ -269,13 +269,16 @@ public sealed class SourceIndex
 
     readonly Dictionary<string, HashSet<string>> partialArchives = new(StringComparer.Ordinal);
 
+    // The next build's number: the saved index holds a place's build in one byte.
+    int NewBuild() => Builds.Count < 256 ? Builds.Count : throw new InvalidOperationException("The index holds 256 builds already: it cannot take another.");
+
     void AddPartial(IGameResources game, IReadOnlySet<string>? archives, IReadOnlySet<ResourceKey>? keys, Action<long, long>? progress)
     {
         Unseal();
         var build = Builds.IndexOf(game.Build);
         if (build < 0)
         {
-            build = Builds.Count;
+            build = NewBuild();
             Builds.Add(game.Build);
             PartialBuilds.Add(game.Build);
         }

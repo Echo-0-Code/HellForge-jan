@@ -39,7 +39,14 @@ public static class UnitJoints
         var g = new Graph(n, local, world, parents, names, parent);
         foreach (var (name, to) in hang ?? new Dictionary<string, string>()) Reparent(m, g, name, to);
         var moved = new HashSet<int>();
-        foreach (var (name, to) in moves) MoveOne(m, g, name, to, moved);
+        // Ancestors first: a move shifts every joint below it, so a child placed before its ancestor would shift again.
+        int Depth(int j)
+        {
+            var depth = 0;
+            for (var i = j; g.Parent[i] != i && depth < n; i = g.Parent[i]) depth++;
+            return depth;
+        }
+        foreach (var (name, to) in moves.OrderBy(move => Depth(Find(m, g, move.Key)))) MoveOne(m, g, name, to, moved);
         return moved.Count;
     }
 

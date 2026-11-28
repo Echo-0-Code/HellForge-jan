@@ -278,6 +278,8 @@ public static class BundledMods
         var x = new FileInfo(a);
         var y = new FileInfo(b);
         if (x.Length != y.Length) return false;
+        // File.Copy keeps the write time, so an untouched copy is told without reading it at every start.
+        if (x.LastWriteTimeUtc == y.LastWriteTimeUtc) return true;
         using var first = x.OpenRead();
         using var second = y.OpenRead();
         return System.Security.Cryptography.SHA256.HashData(first).AsSpan().SequenceEqual(System.Security.Cryptography.SHA256.HashData(second));

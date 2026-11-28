@@ -29,8 +29,14 @@ public static class Gltf
         var (json, _) = Split(file);
         using var doc = JsonDocument.Parse(json);
         if (!doc.RootElement.TryGetProperty("buffers", out var buffers) || buffers.ValueKind != JsonValueKind.Array) return [];
-        return buffers.EnumerateArray().Where(b => b.TryGetProperty("uri", out var u) && !u.GetString()!.StartsWith("data:", StringComparison.Ordinal))
-            .Select(b => Uri.UnescapeDataString(b.GetProperty("uri").GetString()!)).ToList();
+        var files = new List<string>();
+        foreach (var buffer in buffers.EnumerateArray())
+        {
+            if (buffer.ValueKind != JsonValueKind.Object || !buffer.TryGetProperty("uri", out var uri)) continue;
+            if (uri.ValueKind != JsonValueKind.String) throw new InvalidDataException("the glTF file has a buffer whose uri is not text.");
+            if (!uri.GetString()!.StartsWith("data:", StringComparison.Ordinal)) files.Add(Uri.UnescapeDataString(uri.GetString()!));
+        }
+        return files;
     }
 
     static (byte[] Json, byte[]? Bin) Split(byte[] file)
