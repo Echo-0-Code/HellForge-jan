@@ -16,10 +16,10 @@ jobs:
       - name: Download the artifact and publish it
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: "46136636885"
-          TAG: "test-62bcb7f"
-          TARGET: "62bcb7f4a703fe0393f188dd52d7ed74637ae15d"
-          TITLE: "Test build 62bcb7f, Combined: live reload keeps paints and placements + preview fit + SDK 56 (run 46136636885)"
+          RUN_ID: "46162139694"
+          TAG: "test-f251b86"
+          TARGET: "f251b86383ad4bedbed608eab68cf1dd00bc6a88"
+          TITLE: "Test build f251b86, Review fixes test: combined 90203ca + 96 code review fixes (run 46162139694)"
         run: |
           gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n test-package -D pkg
           find pkg -type f -exec ls -la {} \;
