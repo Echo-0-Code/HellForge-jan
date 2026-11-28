@@ -108,7 +108,10 @@ brakes, and slopes pull on it.
 
 In any mode, a `drive` function replaces HellForge's push from the inputs. HellForge calls it on the host's game thread
 every update, before it moves the unit. Fill `HfMoverPush` with `forward` and `side` in m/s² and `turn` in radians a second. HellForge keeps the ground, steps,
-water and top speeds. Don't call `mover_*` from it.
+water and top speeds.
+
+Don't call these from it; HellForge refuses them there: `mover_*`, `add_fixed_gun`, `add_damage_zone`,
+`fixed_gun_state`, `fixed_gun_refill`, `zone_state`, `repair_zones` and `add_rail`.
 
 ```c
 static void MyDrive(HfMod* mod, uint32_t entity, const HfMoverState* s, float dt, HfMoverPush* push, void* user)

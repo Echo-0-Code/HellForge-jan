@@ -91,6 +91,14 @@ static MvPosFn g_mvPos, g_mvRot;
 static MvLevelFn g_mvLevel, g_mvFromHandle;
 static MvWaterFn g_mvWater;
 static DWORD g_mvPushThread; /* the game thread while a mod's drive function runs: mover_* refuse rather than deadlock */
+/* 1 inside a drive function, where the movers' lock is held and not reentrant: the call is refused, logged once a name. */
+static int MvInDrive(HfMod* mod, const char* call)
+{
+    if (g_mvPushThread != GetCurrentThreadId()) return 0;
+    static const char* said;
+    if (said != call) { said = call; ApiLog(mod, "%s: refused inside a drive function", call); }
+    return 1;
+}
 
 static float MvWrap(float a) { while (a > 3.14159265f) a -= 6.2831853f; while (a < -3.14159265f) a += 6.2831853f; return a; }
 static float MvClamp(float v, float lo, float hi) { return v < lo ? lo : v > hi ? hi : v; }
@@ -1056,6 +1064,25 @@ static int ApiAiDrive(HfMod* mod, uint64_t entity, const HfAiDrive* in)
 
 #include "movers_kit.c" /* SDK 47: fixed guns and damage zones (MvUnitOf, g_hvImpulse, ActLocalAvatar) */
 #include "movers_view.c" /* SDK 48: mouse_steer (TcamView, KitLocalRoot) */
+
+/* A mod taken out live, on the game thread: its guns and zones stay (its movers keep them) until the mod set up again
+ * takes their slots, and its rails go, with the units on them looking for another. */
+static void MvForget(const HfMod* mod)
+{
+    AcquireSRWLockExclusive(&g_mvLock);
+    for (LONG i = 0; i < g_kitGunCount; i++) if (g_kitGuns[i].mod == mod) g_kitGuns[i].orphan = 1;
+    for (LONG i = 0; i < g_kitZoneCount; i++) if (g_kitZones[i].mod == mod) g_kitZones[i].orphan = 1;
+    for (LONG i = 0; i < g_mvRailCount; i++)
+    {
+        MvRail* r = &g_mvRails[i];
+        if (r->mod != mod || r->count == 0) continue;
+        for (int u = 0; u < MV_UNITS; u++) if (g_mvUnits[u].rail == (uint32_t)i + 1) g_mvUnits[u].rail = 0;
+        free(r->p);
+        free(r->s);
+        *r = (MvRail){0};
+    }
+    ReleaseSRWLockExclusive(&g_mvLock);
+}
 
 /* The table's entries from SDK 35 on (ApiInit). */
 #define MV_API ApiAddMover, ApiMoverInput, ApiMoverState, ApiAiDrive

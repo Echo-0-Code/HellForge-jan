@@ -281,6 +281,7 @@ static void VisForget(const HfMod* mod); /* visibility.c */
 static void LfForget(const HfMod* mod);  /* list_filter.c */
 static void AtForget(const HfMod* mod);  /* menu_tabs.c */
 static void UiForget(const HfMod* mod);  /* ui.c */
+static void MvForget(const HfMod* mod);  /* movers.c */
 
 /* On the game thread: its game-thread callbacks, listeners, queued actions and shot rules, its visibility scales, and
  * its list rules, filters and bands. */
@@ -293,6 +294,7 @@ static void ForgetOnGameThread(void* arg)
     TipsForget(mod);
     BrowseForget(mod);
     UiForget(mod);
+    MvForget(mod);
     /* in place: TickDetour, which reads the table without the lock, runs on this thread and not now */
     AcquireSRWLockExclusive(&g_lock);
     TickTable* ticks = g_ticks;

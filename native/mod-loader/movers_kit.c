@@ -16,8 +16,9 @@
 #define ZN_DISC_HALF 0.2f    /* metres: a rotor disc's half thickness for hits (blades and their flex) */
 #define ZN_RIDER_R 4.0f      /* metres from the unit's root within which another Helldiver counts as riding it */
 
-typedef struct KitGun { HfMod* mod; HfFixedGunDef def; uint32_t slot; } KitGun;   /* slot: its index on its mover */
-typedef struct KitZone { HfMod* mod; HfDamageZoneDef def; uint32_t slot; } KitZone;
+/* slot: its index on its mover. orphan: its mod was taken out live, so the next add for that mover takes its slot. */
+typedef struct KitGun { HfMod* mod; HfFixedGunDef def; uint32_t slot; int orphan; } KitGun;
+typedef struct KitZone { HfMod* mod; HfDamageZoneDef def; uint32_t slot; int orphan; } KitZone;
 
 static KitGun g_kitGuns[KIT_GUNS];
 static volatile LONG g_kitGunCount;
@@ -516,12 +517,22 @@ static void ZnDamage(uint8_t* event)
 
 static int ZnWantsDamage(void) { return g_kitZoneCount > 0; }
 
-/* Its slot on its mover (one past the last), or its cap (MV_KIT_SLOTS, MV_ZONE_SLOTS) when that mover is full. */
+/* The first gun or zone on that mover whose mod was taken out, or -1: a mod set up again takes its slots back in order. */
+static LONG KitOrphan(uint64_t entity, int zones)
+{
+    const LONG count = zones ? g_kitZoneCount : g_kitGunCount;
+    for (LONG i = 0; i < count; i++)
+        if (zones ? g_kitZones[i].orphan && g_kitZones[i].def.entity == entity : g_kitGuns[i].orphan && g_kitGuns[i].def.entity == entity) return i;
+    return -1;
+}
+
+/* Its slot on its mover (an orphan's, else one past the last), or its cap (MV_KIT_SLOTS, MV_ZONE_SLOTS) when that mover is full. */
 static uint32_t KitSlot(uint64_t entity, int zones)
 {
     uint32_t slot = 0;
-    const LONG count = zones ? g_kitZoneCount : g_kitGunCount;
+    const LONG count = zones ? g_kitZoneCount : g_kitGunCount, orphan = KitOrphan(entity, zones);
     const uint32_t cap = zones ? MV_ZONE_SLOTS : MV_KIT_SLOTS;
+    if (orphan >= 0) return zones ? g_kitZones[orphan].slot : g_kitGuns[orphan].slot;
     for (LONG i = 0; i < count; i++) if ((zones ? g_kitZones[i].def.entity : g_kitGuns[i].def.entity) == entity) slot++;
     return slot < cap ? slot : cap;
 }
@@ -575,11 +586,18 @@ static uint32_t ApiAddFixedGun(HfMod* mod, const HfFixedGunDef* in)
     HfFixedGunDef d;
     const char* why = KitGunRefusal(in, &d);
     if (why) { ApiLog(mod, "add_fixed_gun: refused: %s", why); return 0; }
+    if (MvInDrive(mod, "add_fixed_gun")) return 0;
     AcquireSRWLockExclusive(&g_kitAddLock);
     const uint32_t slot = KitSlot(d.entity, 0);
-    const LONG at = g_kitGunCount;
-    const int full = at >= KIT_GUNS, taken = slot >= (0 ? MV_ZONE_SLOTS : MV_KIT_SLOTS);
-    if (!full && !taken)
+    const LONG at = g_kitGunCount, orphan = KitOrphan(d.entity, 0);
+    const int full = orphan < 0 && at >= KIT_GUNS, taken = slot >= (0 ? MV_ZONE_SLOTS : MV_KIT_SLOTS);
+    if (orphan >= 0)
+    {
+        AcquireSRWLockExclusive(&g_mvLock); /* in its slot: the update reads the entry under this lock */
+        g_kitGuns[orphan] = (KitGun){mod, d, slot, 0};
+        ReleaseSRWLockExclusive(&g_mvLock);
+    }
+    else if (!full && !taken)
     {
         g_kitGuns[at] = (KitGun){mod, d, slot};
         MemoryBarrier();
@@ -602,10 +620,10 @@ static uint32_t ApiAddFixedGun(HfMod* mod, const HfFixedGunDef* in)
 
 static uint32_t ApiFixedGunState(HfMod* mod, uint32_t entity, uint32_t gun, HfFixedGunState* out)
 {
-    (void)mod;
     if (out == NULL || out->size < offsetof(HfFixedGunState, seat) || gun == 0 || gun > MV_KIT_SLOTS) return 0; /* SDK 47's has no seat, SDK 53's no spin or aim */
     const uint32_t size = out->size < sizeof *out ? out->size : (uint32_t)sizeof *out;
     uint32_t found = 0;
+    if (MvInDrive(mod, "fixed_gun_state")) return 0;
     AcquireSRWLockShared(&g_mvLock);
     const MvUnit* m = MvUnitOf(entity);
     if (m != NULL)
@@ -625,6 +643,7 @@ static uint32_t ApiFixedGunState(HfMod* mod, uint32_t entity, uint32_t gun, HfFi
 static int ApiFixedGunRefill(HfMod* mod, uint32_t entity, uint32_t gun, uint32_t rounds)
 {
     int done = 1;
+    if (MvInDrive(mod, "fixed_gun_refill")) return 1;
     AcquireSRWLockExclusive(&g_mvLock);
     MvUnit* m = MvUnitOf(entity);
     if (m != NULL)
@@ -666,11 +685,18 @@ static uint32_t ApiAddDamageZone(HfMod* mod, const HfDamageZoneDef* in)
     HfDamageZoneDef d;
     const char* why = ZnRefusal(in, &d);
     if (why) { ApiLog(mod, "add_damage_zone: refused: %s", why); return 0; }
+    if (MvInDrive(mod, "add_damage_zone")) return 0;
     AcquireSRWLockExclusive(&g_kitAddLock);
     const uint32_t slot = KitSlot(d.entity, 1);
-    const LONG at = g_kitZoneCount;
-    const int full = at >= KIT_ZONES, taken = slot >= (1 ? MV_ZONE_SLOTS : MV_KIT_SLOTS);
-    if (!full && !taken)
+    const LONG at = g_kitZoneCount, orphan = KitOrphan(d.entity, 1);
+    const int full = orphan < 0 && at >= KIT_ZONES, taken = slot >= (1 ? MV_ZONE_SLOTS : MV_KIT_SLOTS);
+    if (orphan >= 0)
+    {
+        AcquireSRWLockExclusive(&g_mvLock);
+        g_kitZones[orphan] = (KitZone){mod, d, slot, 0};
+        ReleaseSRWLockExclusive(&g_mvLock);
+    }
+    else if (!full && !taken)
     {
         g_kitZones[at] = (KitZone){mod, d, slot};
         MemoryBarrier();
@@ -687,9 +713,9 @@ static uint32_t ApiAddDamageZone(HfMod* mod, const HfDamageZoneDef* in)
 
 static uint32_t ApiZoneState(HfMod* mod, uint32_t entity, uint32_t zone, HfZoneState* out)
 {
-    (void)mod;
     if (out == NULL || out->size < sizeof *out || zone == 0 || zone > MV_ZONE_SLOTS) return 0;
     uint32_t found = 0;
+    if (MvInDrive(mod, "zone_state")) return 0;
     AcquireSRWLockShared(&g_mvLock);
     const MvUnit* m = MvUnitOf(entity);
     if (m != NULL)
@@ -720,6 +746,7 @@ static int ZnRepair(MvUnit* m, uint32_t zone)
 
 static int ApiRepairZones(HfMod* mod, uint32_t entity, uint32_t zone)
 {
+    if (MvInDrive(mod, "repair_zones")) return 1;
     AcquireSRWLockExclusive(&g_mvLock);
     MvUnit* m = MvUnitOf(entity);
     const int found = m != NULL && ZnRepair(m, zone);

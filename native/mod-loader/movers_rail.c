@@ -47,7 +47,7 @@ static int MvRailSnap(MvUnit* m, const MvDef* def)
     float best = MV_RAIL_SNAP, at = 0;
     for (LONG i = 0; i < g_mvRailCount; i++)
     {
-        if (def->def.rail && def->def.rail != (uint32_t)i + 1) continue;
+        if (g_mvRails[i].count == 0 || (def->def.rail && def->def.rail != (uint32_t)i + 1)) continue; /* 0 points: its mod was taken out */
         float s;
         const float d = MvRailNearest(&g_mvRails[i], m->pos, &s);
         if (d <= best) { best = d; at = s; m->rail = (uint32_t)i + 1; }
@@ -100,8 +100,11 @@ static uint32_t ApiAddRail(HfMod* mod, const HfRailDef* in)
         if (!isfinite(len) || len < 0.05f) { free(p); free(s); ApiLog(mod, "add_rail: refused: point %u is under 5 cm from the one before, or not a number", i + 1); return 0; }
         s[i + 1] = s[i] + len;
     }
+    if (MvInDrive(mod, "add_rail")) { free(p); free(s); return 0; }
     AcquireSRWLockExclusive(&g_mvLock);
-    const LONG at = g_mvRailCount < MV_RAILS ? g_mvRailCount++ : -1;
+    LONG at = -1;
+    for (LONG i = 0; i < g_mvRailCount && at < 0; i++) if (g_mvRails[i].count == 0) at = i; /* a rail a mod taken out left */
+    if (at < 0 && g_mvRailCount < MV_RAILS) at = g_mvRailCount++;
     if (at >= 0) g_mvRails[at] = (MvRail){mod, n, in->loop ? 1u : 0u, p, s, s[segs]};
     ReleaseSRWLockExclusive(&g_mvLock);
     if (at < 0) { free(p); free(s); ApiLog(mod, "add_rail: refused: %d rails already", MV_RAILS); return 0; }
