@@ -83,6 +83,32 @@ static void MvRailDrive(MvUnit* m, const MvDef* def, float dt)
     m->roll = 0;
 }
 
+/* The distance along the line at each point, into s. 0, or the point (1 and up) too near the one before it. */
+static uint32_t MvRailLengths(const float* p, float* s, uint32_t n, uint32_t segs)
+{
+    s[0] = 0;
+    for (uint32_t i = 0; i < segs; i++)
+    {
+        const float* a = p + 3 * i, * b = p + 3 * ((i + 1) % n);
+        const float len = sqrtf((b[0] - a[0]) * (b[0] - a[0]) + (b[1] - a[1]) * (b[1] - a[1]) + (b[2] - a[2]) * (b[2] - a[2]));
+        if (!isfinite(len) || len < 0.05f) return i + 1;
+        s[i + 1] = s[i] + len;
+    }
+    return 0;
+}
+
+/* The rail in a slot a mod taken out left, else the next one: its index, or -1 with all MV_RAILS in use. */
+static LONG MvRailPut(MvRail rail)
+{
+    AcquireSRWLockExclusive(&g_mvLock);
+    LONG at = -1;
+    for (LONG i = 0; i < g_mvRailCount && at < 0; i++) if (g_mvRails[i].count == 0) at = i;
+    if (at < 0 && g_mvRailCount < MV_RAILS) at = g_mvRailCount++;
+    if (at >= 0) g_mvRails[at] = rail;
+    ReleaseSRWLockExclusive(&g_mvLock);
+    return at;
+}
+
 /* SDK 43, add_rail: a line rail movers ride. Any time. Its id, or 0 refused. */
 static uint32_t ApiAddRail(HfMod* mod, const HfRailDef* in)
 {
@@ -92,21 +118,10 @@ static uint32_t ApiAddRail(HfMod* mod, const HfRailDef* in)
     float* p = (float*)malloc(sizeof(float) * 3 * n), * s = (float*)malloc(sizeof(float) * (n + 1));
     if (p == NULL || s == NULL) { free(p); free(s); ApiLog(mod, "add_rail: refused: no memory"); return 0; }
     memcpy(p, in->points, sizeof(float) * 3 * n);
-    s[0] = 0;
-    for (uint32_t i = 0; i < segs; i++)
-    {
-        const float* a = p + 3 * i, * b = p + 3 * ((i + 1) % n);
-        const float len = sqrtf((b[0] - a[0]) * (b[0] - a[0]) + (b[1] - a[1]) * (b[1] - a[1]) + (b[2] - a[2]) * (b[2] - a[2]));
-        if (!isfinite(len) || len < 0.05f) { free(p); free(s); ApiLog(mod, "add_rail: refused: point %u is under 5 cm from the one before, or not a number", i + 1); return 0; }
-        s[i + 1] = s[i] + len;
-    }
+    const uint32_t bad = MvRailLengths(p, s, n, segs);
+    if (bad) { free(p); free(s); ApiLog(mod, "add_rail: refused: point %u is under 5 cm from the one before, or not a number", bad); return 0; }
     if (MvInDrive(mod, "add_rail")) { free(p); free(s); return 0; }
-    AcquireSRWLockExclusive(&g_mvLock);
-    LONG at = -1;
-    for (LONG i = 0; i < g_mvRailCount && at < 0; i++) if (g_mvRails[i].count == 0) at = i; /* a rail a mod taken out left */
-    if (at < 0 && g_mvRailCount < MV_RAILS) at = g_mvRailCount++;
-    if (at >= 0) g_mvRails[at] = (MvRail){mod, n, in->loop ? 1u : 0u, p, s, s[segs]};
-    ReleaseSRWLockExclusive(&g_mvLock);
+    const LONG at = MvRailPut((MvRail){mod, n, in->loop ? 1u : 0u, p, s, s[segs]});
     if (at < 0) { free(p); free(s); ApiLog(mod, "add_rail: refused: %d rails already", MV_RAILS); return 0; }
     ApiLog(mod, "add_rail: rail %ld, %u points, %.0f m%s", (long)at + 1, n, (double)s[segs], in->loop ? ", a loop" : "");
     return (uint32_t)at + 1;

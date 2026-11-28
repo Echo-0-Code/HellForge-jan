@@ -102,6 +102,14 @@ static uintptr_t DirectorComposition(uintptr_t game, uint32_t roster, uint32_t r
     return (uintptr_t)base + (uintptr_t)index * DIR_COMPOSITION_ROW;
 }
 
+/* Not loaded (0): still to come. Another build or image (1): no such row, said once instead of waiting for ever. */
+static int DirectorUnmapped(uintptr_t game)
+{
+    static LONG said;
+    if (game != 0 && InterlockedIncrement(&said) == 1) Note("director: the tables are not mapped for this build; roster, composition, limits and summon edits are refused");
+    return game != 0;
+}
+
 /* The row (the weights, for a roster's kinds) an id names, or 0: *ready 0 while game.dll's data or level 11's move is
  * still to come, else 1 (0 then: no such row, or not as reviewed). */
 static uintptr_t DirectorRow(const char* kind, uint64_t id, int* ready)
@@ -109,14 +117,7 @@ static uintptr_t DirectorRow(const char* kind, uint64_t id, int* ready)
     *ready = 1;
     size_t size = 0;
     uintptr_t game = g_directorImage(&size);
-    if (game == 0 || size != DIR_IMAGE || strcmp(g_build, "25480438"))
-    {
-        /* not loaded: still to come; another build or image: no such row, said once instead of waiting for ever */
-        *ready = game != 0;
-        static LONG said;
-        if (game != 0 && InterlockedIncrement(&said) == 1) Note("director: the tables are not mapped for this build; roster, composition, limits and summon edits are refused");
-        return 0;
-    }
+    if (game == 0 || size != DIR_IMAGE || strcmp(g_build, "25480438")) { *ready = DirectorUnmapped(game); return 0; }
     if (!strcmp(kind, "DemolitionTemplate")) return DirectorDemolitionRow(game, id, ready);
     if (!strcmp(kind, "EnemySummon")) return SummonRowOf(game, id, ready);
     if (!strcmp(kind, "EnemyDeathExplosion")) return DeathRowOf(id, ready);

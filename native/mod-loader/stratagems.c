@@ -603,6 +603,14 @@ static void StratagemTimes(Stratagem* s)
     if (s->cooldown > 0.0f) memcpy(s->row + 0x68, &s->cooldown, 4);
 }
 
+static void StratagemRowIcon(Stratagem* s, const uint8_t* table)
+{
+    if (s->icon == 0) return;
+    if (StratagemIconUnknown(table, s->icon))
+        ApiLog(s->mod, "stratagem %s: no icon named %s is built or in the game; it shows its base's", s->name, s->iconName);
+    else memcpy(s->row + 0xB0, &s->icon, 8);
+}
+
 static const char* StratagemRow(Stratagem* s, Stratagem* home, const uint8_t* table)
 {
     uint64_t base;
@@ -620,9 +628,7 @@ static const char* StratagemRow(Stratagem* s, Stratagem* home, const uint8_t* ta
         memcpy(s->row + 0x48, &s->codeLength, 4);
     }
     StratagemTimes(s);
-    if (s->icon != 0 && StratagemIconUnknown(table, s->icon))
-        ApiLog(s->mod, "stratagem %s: no icon named %s is built or in the game; it shows its base's", s->name, s->iconName);
-    else if (s->icon != 0) memcpy(s->row + 0xB0, &s->icon, 8);
+    StratagemRowIcon(s, table);
     if (s->payloadCount != 0)
     {
         uint64_t* payload = home->payload; /* lives as long as the loader */
@@ -707,6 +713,8 @@ static void StratagemsInstalled(uint8_t* table, uintptr_t game, uint32_t count, 
         ApiLog(g_stratagems[i].mod, "stratagem %s is type %u (stable id %08x, icon %016llx)", g_stratagems[i].name, g_stratagems[i].type,
             g_stratagems[i].stable, (unsigned long long)(g_stratagems[i].icon ? g_stratagems[i].icon : *(uint64_t*)(g_stratagems[i].row + 0xB0)));
 }
+
+static void LiveEntomb(int kind, uint32_t index); /* live_content.c */
 
 /* A stratagem whose base cannot be copied is left out alone, so the other mods' stratagems still go in: its type keeps
  * a whole row (a pickable game row's copy, so nothing reads a half-built one) and it is a tombstone, in no catalogue.

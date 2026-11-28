@@ -580,6 +580,31 @@ static const char* KitGunRefusal(const HfFixedGunDef* in, HfFixedGunDef* d)
     return KitSlot(d->entity, 0) >= MV_KIT_SLOTS ? "8 guns on that mover already" : NULL;
 }
 
+/* The gun in its mover's next slot, or in the slot a mod taken out left. Readers walk the guns up to the count with no
+ * lock, so a new entry is whole before the count covers it; one replaced is written under the movers' lock. */
+static uint32_t KitGunPut(HfMod* mod, const HfFixedGunDef* d, int* full, int* taken)
+{
+    AcquireSRWLockExclusive(&g_kitAddLock);
+    const uint32_t slot = KitSlot(d->entity, 0);
+    const LONG at = g_kitGunCount, orphan = KitOrphan(d->entity, 0);
+    *full = orphan < 0 && at >= KIT_GUNS;
+    *taken = slot >= MV_KIT_SLOTS;
+    if (orphan >= 0)
+    {
+        AcquireSRWLockExclusive(&g_mvLock);
+        g_kitGuns[orphan] = (KitGun){mod, *d, slot, 0};
+        ReleaseSRWLockExclusive(&g_mvLock);
+    }
+    else if (!*full && !*taken)
+    {
+        g_kitGuns[at] = (KitGun){mod, *d, slot};
+        MemoryBarrier();
+        InterlockedExchange(&g_kitGunCount, at + 1);
+    }
+    ReleaseSRWLockExclusive(&g_kitAddLock);
+    return slot;
+}
+
 /* SDK 47, add_fixed_gun: the gun's id (1 and up), or 0 refused (the log says why). */
 static uint32_t ApiAddFixedGun(HfMod* mod, const HfFixedGunDef* in)
 {
@@ -587,23 +612,8 @@ static uint32_t ApiAddFixedGun(HfMod* mod, const HfFixedGunDef* in)
     const char* why = KitGunRefusal(in, &d);
     if (why) { ApiLog(mod, "add_fixed_gun: refused: %s", why); return 0; }
     if (MvInDrive(mod, "add_fixed_gun")) return 0;
-    AcquireSRWLockExclusive(&g_kitAddLock);
-    const uint32_t slot = KitSlot(d.entity, 0);
-    const LONG at = g_kitGunCount, orphan = KitOrphan(d.entity, 0);
-    const int full = orphan < 0 && at >= KIT_GUNS, taken = slot >= (0 ? MV_ZONE_SLOTS : MV_KIT_SLOTS);
-    if (orphan >= 0)
-    {
-        AcquireSRWLockExclusive(&g_mvLock); /* in its slot: the update reads the entry under this lock */
-        g_kitGuns[orphan] = (KitGun){mod, d, slot, 0};
-        ReleaseSRWLockExclusive(&g_mvLock);
-    }
-    else if (!full && !taken)
-    {
-        g_kitGuns[at] = (KitGun){mod, d, slot};
-        MemoryBarrier();
-        InterlockedExchange(&g_kitGunCount, at + 1);
-    }
-    ReleaseSRWLockExclusive(&g_kitAddLock);
+    int full, taken;
+    const uint32_t slot = KitGunPut(mod, &d, &full, &taken);
     if (full) { ApiLog(mod, "add_fixed_gun: refused: %d guns already", KIT_GUNS); return 0; }
     if (taken) { ApiLog(mod, "add_fixed_gun: refused: that mover has all its guns already"); return 0; }
     ApiLog(mod, "add_fixed_gun(%016llx): gun %u, projectile %u, %.0f rpm, %u rounds, %s, at %.2f %.2f %.2f", (unsigned long long)d.entity, slot + 1,

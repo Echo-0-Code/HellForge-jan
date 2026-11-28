@@ -993,42 +993,46 @@ static int ActDo(const ActCall* c, uint32_t* entity)
     return HF_ACT_QUEUED;
 }
 
+/* A queued action whose packages are still loading goes back in the queue: its caller only saw "queued" and cannot
+ * call again. Given up (logged) after ACT_WAIT_MS, or with the queue full. */
+static void ActQueueAgain(ActCall* call, ULONGLONG now)
+{
+    if (call->since == 0) call->since = now;
+    int again = 0;
+    if (now - call->since < ACT_WAIT_MS)
+    {
+        AcquireSRWLockExclusive(&g_actQueueLock);
+        again = g_actQueued < ACT_QUEUE;
+        if (again) g_actQueue[g_actQueued++] = *call;
+        ReleaseSRWLockExclusive(&g_actQueueLock);
+    }
+    if (!again) ApiLog(call->mod, "action %d (queued): given up, its packages did not load", call->kind);
+}
+
+static void ActQueueRun(ULONGLONG now)
+{
+    ActCall pending[ACT_QUEUE];
+    AcquireSRWLockExclusive(&g_actQueueLock);
+    int n = g_actQueued;
+    memcpy(pending, g_actQueue, sizeof pending[0] * n);
+    g_actQueued = 0;
+    ReleaseSRWLockExclusive(&g_actQueueLock);
+    for (int i = 0; i < n; i++)
+    {
+        int result = ActRun(&pending[i], NULL);
+        if (result == HF_ACT_WAITING) { ActQueueAgain(&pending[i], now); continue; }
+        ApiLog(pending[i].mod, "action %d (queued): %s", pending[i].kind,
+            result == HF_ACT_DONE ? "done" : result == HF_ACT_REQUESTED ? "requested" : result ? "taken" : "refused");
+    }
+}
+
 /* The game thread's update (EventsTick): queued actions, then the shot rules and Pelicans. */
 static void ActionsTick(void)
 {
     ULONGLONG now = GetTickCount64();
     float dt = g_actLastTick ? (float)(now - g_actLastTick) / 1000.0f : 0;
     g_actLastTick = now;
-    if (g_actQueued)
-    {
-        ActCall pending[ACT_QUEUE];
-        AcquireSRWLockExclusive(&g_actQueueLock);
-        int n = g_actQueued;
-        memcpy(pending, g_actQueue, sizeof pending[0] * n);
-        g_actQueued = 0;
-        ReleaseSRWLockExclusive(&g_actQueueLock);
-        for (int i = 0; i < n; i++)
-        {
-            int result = ActRun(&pending[i], NULL);
-            /* its packages are loading: the caller only saw "queued" and cannot call again, so the queue does */
-            if (result == HF_ACT_WAITING)
-            {
-                if (pending[i].since == 0) pending[i].since = now;
-                int again = 0;
-                if (now - pending[i].since < ACT_WAIT_MS)
-                {
-                    AcquireSRWLockExclusive(&g_actQueueLock);
-                    again = g_actQueued < ACT_QUEUE;
-                    if (again) g_actQueue[g_actQueued++] = pending[i];
-                    ReleaseSRWLockExclusive(&g_actQueueLock);
-                }
-                if (!again) ApiLog(pending[i].mod, "action %d (queued): given up, its packages did not load", pending[i].kind);
-                continue;
-            }
-            ApiLog(pending[i].mod, "action %d (queued): %s", pending[i].kind,
-                result == HF_ACT_DONE ? "done" : result == HF_ACT_REQUESTED ? "requested" : result ? "taken" : "refused");
-        }
-    }
+    if (g_actQueued) ActQueueRun(now);
     uintptr_t game = ApiModuleBase("game.dll", NULL);
     if (!game || strcmp(g_build, "25480438")) return;
     ActShotsTick(game, dt);

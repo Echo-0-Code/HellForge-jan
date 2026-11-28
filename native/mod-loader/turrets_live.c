@@ -113,6 +113,17 @@ static void TrTick(HfMod* mod, float dt, void* user)
     ReleaseSRWLockExclusive(&g_trLock);
 }
 
+/* A slot for a spawned unit of definition d; with all in use it keeps the game's facing, logged. */
+static void TrTrack(LONG d, uint32_t entity)
+{
+    int at = -1;
+    AcquireSRWLockExclusive(&g_trLock);
+    for (int i = 0; i < TR_UNITS && at < 0; i++) if (!g_trUnits[i].entity) at = i;
+    if (at >= 0) { memset(&g_trUnits[at], 0, sizeof g_trUnits[at]); g_trUnits[at].entity = entity; g_trUnits[at].def = (uint32_t)d + 1; }
+    ReleaseSRWLockExclusive(&g_trLock);
+    if (at < 0) ApiLog(g_trDefs[d].mod, "add_turret: unit %u keeps the game's facing: %d turrets are turning already", entity, TR_UNITS);
+}
+
 static void TrSpawned(HfMod* mod, const HfSpawnEvent* e, void* user)
 {
     (void)mod; (void)user;
@@ -122,13 +133,7 @@ static void TrSpawned(HfMod* mod, const HfSpawnEvent* e, void* user)
         static const char* faces[] = {"keeps the game's facing", "will face away from its caller"};
         ApiLog(g_trDefs[d].mod, "add_turret: unit %u of %016llx spawned%s; it %s", e->entity, (unsigned long long)e->resource,
             e->authority ? "" : " (another machine simulates it)", faces[g_trDefs[d].def.face]);
-        if (!e->authority || g_trDefs[d].def.face != HF_FACE_AWAY) return; /* only a unit to turn needs a slot */
-        int at = -1;
-        AcquireSRWLockExclusive(&g_trLock);
-        for (int i = 0; i < TR_UNITS && at < 0; i++) if (!g_trUnits[i].entity) at = i;
-        if (at >= 0) { memset(&g_trUnits[at], 0, sizeof g_trUnits[at]); g_trUnits[at].entity = e->entity; g_trUnits[at].def = (uint32_t)d + 1; }
-        ReleaseSRWLockExclusive(&g_trLock);
-        if (at < 0) ApiLog(g_trDefs[d].mod, "add_turret: unit %u keeps the game's facing: %d turrets are turning already", e->entity, TR_UNITS);
+        if (e->authority && g_trDefs[d].def.face == HF_FACE_AWAY) TrTrack(d, e->entity); /* only a unit to turn needs a slot */
         return;
     }
 }

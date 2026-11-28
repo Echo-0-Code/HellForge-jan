@@ -334,16 +334,21 @@ static void CallbacksForget(const HfMod* mod)
 
 /* Its live attachment values and status multipliers (live.c set_stat): its layer goes, the address takes the top left
  * (another rank's, else what it held before). */
+static int ExtraLayersDrop(LiveExtra* x, const HfMod* mod)
+{
+    int touched = 0;
+    for (int r = RANK_CODE; r <= RANK_EDITOR; r++)
+        if (x->layer[r].held && x->layer[r].mod == mod) { x->layer[r].held = 0; x->layer[r].mod = NULL; touched = 1; }
+    return touched;
+}
+
 static void ExtrasForget(const HfMod* mod)
 {
     AcquireSRWLockExclusive(&g_statsLock);
     for (int i = 0; i < g_liveExtraCount; i++)
     {
         LiveExtra* x = &g_liveExtra[i];
-        int touched = 0;
-        for (int r = RANK_CODE; r <= RANK_EDITOR; r++)
-            if (x->layer[r].held && x->layer[r].mod == mod) { x->layer[r].held = 0; x->layer[r].mod = NULL; touched = 1; }
-        if (!touched) continue;
+        if (!ExtraLayersDrop(x, mod)) continue;
         uint32_t want = x->before;
         for (int r = RANK_CODE; r <= RANK_EDITOR; r++) if (x->layer[r].held) want = x->layer[r].bits;
         ApiWrite(x->address, &want, x->bytes == 1 ? 1 : 4); /* a one-byte stat's neighbours are other fields */
