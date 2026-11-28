@@ -60,6 +60,21 @@ static int OwnLobby(const BrokerApi* api, uint64_t lobby)
     return 0;
 }
 
+/* A lobby the game made or entered, for the ownLobby checks. Nothing tells the broker a lobby is over, so a full table
+ * gives up its oldest: the game is in one lobby at a time, and refusing the new one would end co-op for the session. */
+static void RememberLobby(BrokerBridge* b, uint64_t lobby, int32_t asked)
+{
+    if (b->lobbyCount == BROKER_MAX_LOBBIES)
+    {
+        fprintf(stderr, "broker: %d lobbies remembered; the oldest, %llu, is forgotten\n", BROKER_MAX_LOBBIES, (unsigned long long)b->lobbies[0]);
+        memmove(b->lobbies, b->lobbies + 1, sizeof b->lobbies[0] * (BROKER_MAX_LOBBIES - 1));
+        memmove(b->lobbyAsked, b->lobbyAsked + 1, sizeof b->lobbyAsked[0] * (BROKER_MAX_LOBBIES - 1));
+        b->lobbyCount--;
+    }
+    b->lobbyAsked[b->lobbyCount] = asked;
+    b->lobbies[b->lobbyCount++] = lobby;
+}
+
 static uint32_t Refuse(const BrokerApi* api, const char* why)
 {
     Of(api)->refusals++;
@@ -249,9 +264,8 @@ static void RememberEntered(BrokerBridge* b, const uint8_t* data, uint32_t size)
     uint32_t response;
     memcpy(&lobby, data, 8);
     memcpy(&response, data + LOBBY_ENTER_RESPONSE, 4);
-    if (response != ENTER_SUCCESS || !lobby || OwnLobby(&b->api, lobby) || b->lobbyCount >= BROKER_MAX_LOBBIES) return;
-    b->lobbyAsked[b->lobbyCount] = -1;
-    b->lobbies[b->lobbyCount++] = lobby;
+    if (response != ENTER_SUCCESS || !lobby || OwnLobby(&b->api, lobby)) return;
+    RememberLobby(b, lobby, -1);
     fprintf(stderr, "broker: the game entered lobby %llu\n", (unsigned long long)lobby);
 }
 
@@ -423,11 +437,7 @@ static void PassCallResult(BrokerBridge* b, BrokerChannel* ch, uint64_t call, in
             memcpy(&eResult, slot + BRIDGE_CALL_RESULT_HEADER, 4);
             memcpy(&lobby, slot + BRIDGE_CALL_RESULT_HEADER + 8, 8);
         }
-        if (eResult == RESULT_OK && lobby && b->lobbyCount < BROKER_MAX_LOBBIES)
-        {
-            b->lobbyAsked[b->lobbyCount] = asked;
-            b->lobbies[b->lobbyCount++] = lobby;
-        }
+        if (eResult == RESULT_OK && lobby) RememberLobby(b, lobby, asked);
     }
     else if (id == LOBBY_ENTER && !failed) RememberEntered(b, slot + BRIDGE_CALL_RESULT_HEADER, resultSize);
     BrokerChannelPushCallback(ch, (uint32_t)id | BRIDGE_CALL_RESULT_FLAG, slot, BRIDGE_CALL_RESULT_HEADER + resultSize);
