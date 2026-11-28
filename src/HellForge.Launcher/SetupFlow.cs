@@ -925,13 +925,16 @@ public partial class MainWindow
         if (bundledSyncing || runner.IsRunning) return;
         bundledSyncing = true;
         UpdateButton();
+        var notes = new List<string>();
         var problems = await Task.Run(() =>
         {
-            try { return BundledMods.Sync(install); }
+            try { return BundledMods.Sync(install, notes.Add); }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException) { return [error.Message]; }
         });
         bundledSyncing = false;
         UpdateButton();
+        // Shown and kept on disk: a copy of a mod moved out of mods must never be a silent change.
+        foreach (var note in notes) { Append(note, Grey); KeptVersions.Log(install, note); }
         foreach (var problem in problems) Append(problem, Orange);
         if (ModsPage.IsVisible) RefreshMods();
     }

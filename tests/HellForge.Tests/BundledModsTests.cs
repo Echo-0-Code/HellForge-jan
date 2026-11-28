@@ -102,7 +102,8 @@ static class BundledModsTests
             File.WriteAllText(Path.Combine(working, "hellforge-mod.json"), Manifest("skyeshade.vanilla-plus", "0.2.0"));
             lines.Clear();
             BundledMods.Sync(update, lines.Add);
-            check(Directory.Exists(working) && !Directory.Exists(installedPlus) && lines.Any(l => l.Contains("my-plus") && l.Contains("sources of its own")),
+            check(Directory.Exists(working) && !Directory.Exists(installedPlus) && lines.Any(l => l.Contains("my-plus") && l.Contains("your own copy")) &&
+                File.Exists(Path.Combine(retired, "vanilla-plus-0.2.0", "vanilla_plus.dll")) && lines.Any(l => l.Contains("is used instead of HellForge's built one")),
                 "A modder's copy of the same version stays, and the bundled one is not added beside it: " + string.Join(" | ", lines));
 
             // Friends compare a bundled gameplay mod by what HellForge ships, not what each player saved beside it.
@@ -147,7 +148,7 @@ static class BundledModsTests
             check(BundledMods.Sync(empty).Count == 0 && !Directory.Exists(Path.Combine(empty.Mods, BundledMods.EditorFolder)), "An app without bundled mods adds none.");
         });
 
-        test("Vanilla Plus is no longer bundled: its bundled copy is retired, the Megapack replaces the player's own copies", () =>
+        test("Vanilla Plus is no longer bundled: its bundled copy is retired, and the Megapack is installed unless the player has their own", () =>
         {
             static string Manifest(string id, string version) =>
                 $"{{\"format\": 1, \"id\": \"{id}\", \"name\": \"M\", \"version\": \"{version}\", \"description\": \"d\", \"gameplay\": true}}";
@@ -163,23 +164,61 @@ static class BundledModsTests
             var plus = Directory.CreateDirectory(Path.Combine(install.Mods, "vanilla-plus")).FullName;
             File.WriteAllText(Path.Combine(plus, "hellforge-mod.json"), Manifest("skyeshade.vanilla-plus", "0.2.0"));
             File.WriteAllText(Path.Combine(plus, ".hellforge-bundled.txt"), "hellforge-mod.json\n");
-            // the player's own Megapack, downloaded before it was bundled (a newer prebuilt), and a zip of it
+            // the player's own Megapack, downloaded before it was bundled (a newer prebuilt)
             var downloaded = Directory.CreateDirectory(Path.Combine(install.Mods, "Vanilla-Plus-Megapack-0.2.1")).FullName;
             File.WriteAllText(Path.Combine(downloaded, "hellforge-mod.json"), Manifest("cowboybingus.vanilla-plus-megapack", "0.2.1"));
-            using (var zip = System.IO.Compression.ZipFile.Open(Path.Combine(install.Mods, "megapack.zip"), System.IO.Compression.ZipArchiveMode.Create))
-            using (var writer = new StreamWriter(zip.CreateEntry("hellforge-mod.json").Open()))
-                writer.Write(Manifest("cowboybingus.vanilla-plus-megapack", "0.1.0"));
+            File.WriteAllText(Path.Combine(downloaded, "vanilla_plus_megapack.dll"), "mine");
             var lines = new List<string>();
             check(BundledMods.Sync(install, lines.Add).Count == 0, "No problems: " + string.Join(" | ", lines));
             var retired = Path.Combine(install.Root, BundledMods.RetiredFolder);
             check(!Directory.Exists(plus) && File.Exists(Path.Combine(retired, "vanilla-plus-0.2.0", "hellforge-mod.json")) &&
                 lines.Any(l => l.Contains("no longer bundled")), "The bundled Vanilla Plus is retired: " + string.Join(" | ", lines));
-            check(File.ReadAllText(Path.Combine(install.Mods, "vanilla-plus-megapack", "vanilla_plus_megapack.dll")) == "bundled" &&
-                !Directory.Exists(downloaded) && !File.Exists(Path.Combine(install.Mods, "megapack.zip")) &&
-                Directory.Exists(Path.Combine(retired, "Vanilla-Plus-Megapack-0.2.1-0.2.1")), "The Megapack is installed, the player's copies retired.");
+            var installed = Path.Combine(install.Mods, "vanilla-plus-megapack");
+            check(File.ReadAllText(Path.Combine(downloaded, "vanilla_plus_megapack.dll")) == "mine" && !Directory.Exists(installed) &&
+                Directory.GetFileSystemEntries(retired).Length == 1 && lines.Any(l => l.Contains("Vanilla-Plus-Megapack-0.2.1") && l.Contains("your own copy")),
+                "The player's newer Megapack stays where it is and the bundled one is not installed: " + string.Join(" | ", lines));
             var (mods, problems) = ModCatalog.Load(install.Mods);
-            check(problems.Count == 0 && mods.Count == 1 && mods[0].Id == "cowboybingus.vanilla-plus-megapack" && mods[0].Enabled,
-                "The Megapack is the one mod, on by default: " + string.Join(" | ", problems));
+            check(problems.Count == 0 && mods.Count == 1 && mods[0].Version == "0.2.1" && mods[0].Enabled && ModBatch.Removable(mods[0]),
+                "The player's Megapack is the one mod, on, and theirs to remove: " + string.Join(" | ", problems));
+
+            // without it the bundled one is installed; put back beside HellForge's built copy, theirs wins again
+            var away = Path.Combine(install.Root, "away");
+            Directory.Move(downloaded, away);
+            BundledMods.Sync(install);
+            check(File.ReadAllText(Path.Combine(installed, "vanilla_plus_megapack.dll")) == "bundled" && BundledMods.ShippedFiles(installed) != null,
+                "With no copy of the player's, the bundled Megapack is installed.");
+            Directory.Move(away, downloaded);
+            lines.Clear();
+            BundledMods.Sync(install, lines.Add);
+            check(Directory.Exists(downloaded) && !Directory.Exists(installed) && File.Exists(Path.Combine(retired, "vanilla-plus-megapack-0.1.1", "vanilla_plus_megapack.dll")) &&
+                lines.Any(l => l.Contains("is used instead of HellForge's built one")), "HellForge's built copy makes way for the player's: " + string.Join(" | ", lines));
+            Directory.Delete(downloaded, recursive: true);
+
+            // the player's own copy in the folder the bundled one ships to: the same version is theirs, untouched
+            Directory.CreateDirectory(installed);
+            File.WriteAllText(Path.Combine(installed, "hellforge-mod.json"), Manifest("cowboybingus.vanilla-plus-megapack", "0.1.1"));
+            File.WriteAllText(Path.Combine(installed, "vanilla_plus_megapack.dll"), "mine");
+            BundledMods.Sync(install);
+            check(File.ReadAllText(Path.Combine(installed, "vanilla_plus_megapack.dll")) == "mine" && !File.Exists(Path.Combine(installed, ".hellforge-bundled.txt")) &&
+                BundledMods.ShippedFiles(installed) == null, "The player's copy of the same version in the bundled folder is not overwritten, and is not HellForge's.");
+            // older copies (that folder, another folder, a zip) are moved whole, with the reason, and the bundled one installed
+            File.WriteAllText(Path.Combine(installed, "hellforge-mod.json"), Manifest("cowboybingus.vanilla-plus-megapack", "0.1.0"));
+            var older = Directory.CreateDirectory(Path.Combine(install.Mods, "Megapack old")).FullName;
+            File.WriteAllText(Path.Combine(older, "hellforge-mod.json"), Manifest("cowboybingus.vanilla-plus-megapack", "0.0.9"));
+            using (var zip = System.IO.Compression.ZipFile.Open(Path.Combine(install.Mods, "megapack.zip"), System.IO.Compression.ZipArchiveMode.Create))
+            using (var writer = new StreamWriter(zip.CreateEntry("hellforge-mod.json").Open()))
+                writer.Write(Manifest("cowboybingus.vanilla-plus-megapack", "0.1.0"));
+            lines.Clear();
+            check(BundledMods.Sync(install, lines.Add).Count == 0, "Older copies: no problems: " + string.Join(" | ", lines));
+            check(File.ReadAllText(Path.Combine(installed, "vanilla_plus_megapack.dll")) == "bundled" &&
+                File.ReadAllText(Path.Combine(retired, "vanilla-plus-megapack-0.1.0", "vanilla_plus_megapack.dll")) == "mine" &&
+                Directory.Exists(Path.Combine(retired, "Megapack old-0.0.9")) && !Directory.Exists(older) &&
+                File.Exists(Path.Combine(retired, "megapack-0.1.0.zip")) && !File.Exists(Path.Combine(install.Mods, "megapack.zip")) &&
+                lines.Count(l => l.Contains("it is older than the bundled version 0.1.1")) == 3,
+                "Older copies are kept whole in mods-retired, each with its reason: " + string.Join(" | ", lines));
+            (mods, problems) = ModCatalog.Load(install.Mods);
+            check(problems.Count == 0 && mods.Count == 1 && mods[0].Version == "0.1.1" && !ModBatch.Removable(mods[0]),
+                "The bundled Megapack is the one mod: " + string.Join(" | ", problems));
             // a Vanilla Plus the player put there (the SDK example, sources and all; or one without the list) stays
             var example = Directory.CreateDirectory(Path.Combine(install.Mods, "vanilla-plus", "src")).Parent!.FullName;
             File.WriteAllText(Path.Combine(example, "hellforge-mod.json"), Manifest("skyeshade.vanilla-plus", "0.2.0"));

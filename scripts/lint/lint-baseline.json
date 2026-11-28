@@ -3,7 +3,7 @@
   "note": "Known structure violations per (unit, file, rule, function) with the measured values. `py -3 scripts/lint/lint.py check` reports what is new or worse (scripts/lint/README.md); `update` rewrites this file.",
   "entries": [
     {"unit": "HellForge.CaptureProxy", "file": "Program.cs", "rule": "R16", "function": "", "value": 28},
-    {"unit": "HellForge.Core", "file": "BundledMods.cs", "rule": "R16", "function": "", "value": 12},
+    {"unit": "HellForge.Core", "file": "BundledMods.cs", "rule": "R16", "function": "", "value": 11},
     {"unit": "HellForge.Core", "file": "CrashReport.cs", "rule": "R16", "function": "", "value": 11},
     {"unit": "HellForge.Core", "file": "EditorCatalog.cs", "rule": "R16", "function": "", "value": 15},
     {"unit": "HellForge.Core", "file": "EnginePackageInstaller.cs", "rule": "R10", "function": "EnginePackageInstaller.Install", "value": 42},

@@ -57,6 +57,9 @@ On `dev`, since 0.5.0-beta.
 
 ### Fixed
 
+- **Your own copy of the bundled Megapack stays.** A copy you installed yourself, of the same or a newer version than
+  the bundled one, is no longer moved away or overwritten: the bundled copy steps aside. An older copy still goes to
+  `mods-retired`, whole, and the launcher log and `versions.log` now say why.
 - **Faults the game's own code confirmed.** 18 more faults from the review, checked against the game's code, are
   fixed. Walkers and drivers keep moving when the host leaves and another machine takes them over. A mover's unit with
   no behaviour of its own hears comms wheel orders. Zone health is counted only where a craft is simulated. The editor
