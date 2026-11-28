@@ -166,7 +166,10 @@ static class BundledModsTests
             File.WriteAllText(Path.Combine(plus, ".hellforge-bundled.txt"), "hellforge-mod.json\n");
             // the player's own Megapack, downloaded before it was bundled (a newer prebuilt)
             var downloaded = Directory.CreateDirectory(Path.Combine(install.Mods, "Vanilla-Plus-Megapack-0.2.1")).FullName;
-            File.WriteAllText(Path.Combine(downloaded, "hellforge-mod.json"), Manifest("cowboybingus.vanilla-plus-megapack", "0.2.1"));
+            File.WriteAllText(Path.Combine(downloaded, "hellforge-mod.json"), """
+                {"format": 1, "id": "cowboybingus.vanilla-plus-megapack", "name": "Vanilla Plus Megapack", "version": "0.2.1",
+                 "description": "d", "gameplay": true, "coopLevel": 1, "code": {"dll": "vanilla_plus_megapack.dll", "sdk": 15}}
+                """);
             File.WriteAllText(Path.Combine(downloaded, "vanilla_plus_megapack.dll"), "mine");
             var lines = new List<string>();
             check(BundledMods.Sync(install, lines.Add).Count == 0, "No problems: " + string.Join(" | ", lines));
