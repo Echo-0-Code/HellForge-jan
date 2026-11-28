@@ -79,6 +79,7 @@ static int LiveTomb(int kind, uint32_t index)
     if (kind == LC_WEAPON) return index < (uint32_t)g_weaponCount && g_weapons[index].tomb;
     return kind >= 0 && kind < LC_KINDS && index < LC_MAX && g_lcTomb[kind][index];
 }
+static void LiveEntomb(int kind, uint32_t index) { if (kind < LC_KINDS && index < LC_MAX) g_lcTomb[kind][index] = 1; }
 static int LiveGone(int kind, uint32_t index) { return LiveTomb(kind, index) || (g_lcOpen && LiveLeaves(LiveModAt(kind, index))); }
 
 /* The mod whose entry this is after the change: a stand-in's, else the entry's when its mod stays; NULL when it leaves. */

@@ -26,7 +26,7 @@
 #define ROUND_HIT 0xC8u
 #define ROUND_SLOTS 0x7FFu
 #define ROUND_ENTRIES 512
-#define ROUND_ROWS 32             /* distinct rows of each table the lobby's edits touch */
+#define ROUND_ROWS ROUND_ENTRIES /* distinct rows of each table the lobby's edits touch: every entry its own row at most */
 #define ROUND_SHADOWS 96
 #define ROUND_VIEWS 96
 #define ROUND_BASE_BYTES 22096u  /* the largest record RoundBase takes: Health (deploys.c) */

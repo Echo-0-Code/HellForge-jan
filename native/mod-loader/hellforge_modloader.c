@@ -138,6 +138,7 @@ static int ModGone(const HfMod* mod) { return mod != NULL && mod->removing; }
 enum { LC_STRATAGEM, LC_PROJECTILE, LC_DAMAGE, LC_BEHAVIOUR, LC_ABILITY, LC_KINDS, LC_WEAPON = LC_KINDS }; /* weapons: tombs only */
 static void* LiveEntry(int kind, HfMod* mod, const char* name, uint32_t* index);
 static int LiveTomb(int kind, uint32_t index);
+static void LiveEntomb(int kind, uint32_t index); /* an entry refused at install: a tombstone from the start */
 static int LiveGone(int kind, uint32_t index);
 static void LiveRefuse(HfMod* mod, const char* kind, const char* name, const char* why);
 /* Where content installs write game memory: ApiWrite at boot, a live change's batch (live_content.c LivePut). */

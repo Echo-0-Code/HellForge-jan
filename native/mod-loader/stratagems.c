@@ -706,6 +706,26 @@ static void StratagemsInstalled(uint8_t* table, uintptr_t game, uint32_t count, 
             g_stratagems[i].stable, (unsigned long long)(g_stratagems[i].icon ? g_stratagems[i].icon : *(uint64_t*)(g_stratagems[i].row + 0xB0)));
 }
 
+/* A stratagem whose base cannot be copied is left out alone, so the other mods' stratagems still go in: its type keeps
+ * a whole row (a pickable game row's copy, so nothing reads a half-built one) and it is a tombstone, in no catalogue.
+ * 0 when the game has no row to stand in. */
+static int StratagemLeftOut(Stratagem* s, uint32_t index, const uint8_t* table, const char* why)
+{
+    for (uint32_t type = 1; type < STR_VANILLA; type++)
+    {
+        uint64_t row;
+        memcpy(&row, table + type * 8, 8);
+        if (row == 0 || SafeRead(row, s->row, STR_ROW) || *(uint32_t*)s->row != type || !(s->row[0x80] & 2) || !(s->row[0xC0] & 1)) continue;
+        memcpy(s->row, &s->type, 4);
+        memcpy(s->row + 4, &s->stable, 4);
+        LiveEntomb(LC_STRATAGEM, index);
+        ApiLog(s->mod, "stratagem %s (type %u) not added: %s", s->name, s->type, why);
+        Note("stratagems: %s of %s left out: %s", s->name, s->mod->id, why);
+        return 1;
+    }
+    return 0;
+}
+
 /* Builds every new stratagem's row and names its type in the moved names list; NULL, or why a row was refused. */
 static const char* StratagemFillRows(uint8_t* table)
 {
@@ -716,7 +736,7 @@ static const char* StratagemFillRows(uint8_t* table)
         Stratagem* s = &g_stratagems[i];
         s->row = StratagemNewRow(i);
         const char* why = StratagemRow(s, s, table);
-        if (why != NULL) return why;
+        if (why != NULL && !StratagemLeftOut(s, i, table, why)) return why;
         const char* name = s->name;
         memcpy(names + s->type * 8, &name, 8);
     }

@@ -473,7 +473,14 @@ static void StatsTableReady(int phase, uintptr_t game)
     if (g_statsTablesDone[phase]) return;
     int state = phase == 0 ? g_projectileState : phase == 1 ? g_damageState : g_stratagemState;
     const char* kind = StatsTableName(phase);
-    if (state < 0)
+    if (state < 0 && phase == 2)
+    {
+        /* The mods' stratagems were refused, the game's own list is whole: edits to its rows, input codes and rearm
+         * times still go in there, and one for a mod's row is refused by name. */
+        uintptr_t first = 0;
+        if (!SafeRead(StatsTableOf(phase, game) + 8, &first, 8) && first) StatsApplyTable(phase, game);
+    }
+    else if (state < 0)
     {
         for (int i = 0; i < g_statCount; i++) if (!strcmp(g_stats[i].kind, kind)) StatsRefuse(&g_stats[i], "table installation was refused");
         g_statsTablesDone[phase] = 1;
