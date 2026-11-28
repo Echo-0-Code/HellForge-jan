@@ -114,7 +114,8 @@ public partial class MainWindow
     // Each second while there is a run folder (RefreshRun): the page drawn again when a mod's status changed.
     void FollowModStatuses()
     {
-        if (runDirectory == null || !ModsPage.IsVisible || modDrag != null || ModStatus.WrittenUtc(runDirectory) == modStatusesWritten) return;
+        // Not while a load runs: asking again discards that load, and a load longer than a second would never be drawn.
+        if (runDirectory == null || !ModsPage.IsVisible || modDrag != null || modsLoading || ModStatus.WrittenUtc(runDirectory) == modStatusesWritten) return;
         RefreshMods();
     }
 

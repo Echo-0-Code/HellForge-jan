@@ -69,7 +69,8 @@ public partial class MainWindow
     void IndexGame(InstallLayout install, List<LocalBuild> builds)
     {
         if (syncIndexing != null || modsLocked) return;
-        void Status(string line) => Dispatcher.UIThread.Post(() => { syncIndexStatus = line; RefreshMods(); });
+        // A status line only draws; the mods folder is read again once, when the indexing ends.
+        void Status(string line) => Dispatcher.UIThread.Post(() => { syncIndexStatus = line; DrawMods(); });
         Status("Starting...");
         syncIndexing = Task.Run(() =>
         {

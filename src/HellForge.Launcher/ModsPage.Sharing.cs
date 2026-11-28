@@ -104,7 +104,10 @@ public partial class MainWindow
     // What the zip holds of the game, and the ways on: the zip, the report, and the older builds on Steam.
     void AddShareResult(StackPanel list, Sharing share, AssetSharing.Packaged done)
     {
-        list.Children.Add(Muted($"Packed {Path.GetFileName(done.Zip)} ({MegaBytes(new FileInfo(done.Zip).Length)}). Share that file; players drop it into their mods folder."));
+        // The zip is made to be moved away: its size is read only while it is still there.
+        var zip = new FileInfo(done.Zip);
+        var size = zip.Exists ? $" ({MegaBytes(zip.Length)})" : "";
+        list.Children.Add(Muted($"Packed {Path.GetFileName(done.Zip)}{size}. Share that file; players drop it into their mods folder."));
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         var show = new Button { Content = "Show the zip" };
         show.Click += (_, _) => ShowFile(done.Zip);

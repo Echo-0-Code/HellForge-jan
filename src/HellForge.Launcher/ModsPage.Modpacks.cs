@@ -78,6 +78,8 @@ public partial class MainWindow
     }
 
     // The Play page's chooser, read from the mods folder itself: the Mods page may not have loaded yet.
+    string? playModpacksDrawn;
+
     void DrawPlayModpacks()
     {
         if (paths.ModsFolder is not { } folder)
@@ -92,10 +94,16 @@ public partial class MainWindow
         active ??= ModSettings.DefaultModpack;
         List<string> names = [ModSettings.DefaultModpack, .. packs];
         if (!names.Contains(active)) names.Add(active);
-        modpacksFilling = true;
-        PlayModpackChooser.ItemsSource = names;
-        PlayModpackChooser.SelectedItem = active;
-        modpacksFilling = false;
+        // Filled again only when the packs changed: new items each second would close an open dropdown.
+        var drawn = string.Join("\n", names) + "\n\n" + active;
+        if (drawn != playModpacksDrawn)
+        {
+            playModpacksDrawn = drawn;
+            modpacksFilling = true;
+            PlayModpackChooser.ItemsSource = names;
+            PlayModpackChooser.SelectedItem = active;
+            modpacksFilling = false;
+        }
         PlayModpackChooser.IsEnabled = !runner.IsRunning;
     }
 

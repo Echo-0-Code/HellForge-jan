@@ -240,10 +240,12 @@ public partial class MainWindow
             try
             {
                 ShowDepotProgress(await Task.Run(() => SteamDepotDownload.Status(root, SupportedBuild.Current), stop), "SteamCMD");
-                await Task.Delay(TimeSpan.FromSeconds(2), stop);
             }
             catch (OperationCanceledException) { break; }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException) { CopyText.Text = "Could not check the download: " + Privacy.Scrub(error.Message); }
+            // After a failed check too, or a lasting error would spin without pause.
+            try { await Task.Delay(TimeSpan.FromSeconds(2), stop); }
+            catch (OperationCanceledException) { break; }
         }
     }
 

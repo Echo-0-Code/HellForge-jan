@@ -279,6 +279,7 @@ public partial class MainWindow : Window
     {
         if (runner.IsRunning) RequestStop();
         else if (SyncBusy) SetStatus("Inventory sync is running. Play once it finishes.", Phase.Idle);
+        else if (setupRunning) SetStatus("Setup is running. Play once it finishes.", Phase.Idle);
         else if (!installingRuntimes && VisualCppRuntimes.Needed().Count > 0) _ = InstallRuntimesThenStart();
         else if (!installingRuntimes) Start();
     }
@@ -913,10 +914,11 @@ public partial class MainWindow : Window
         if (running && NewProfileForm.IsVisible) ShowNewProfileForm(false);
         if (!running) SetLiveBackend(null);
         SetModsLocked(running);
-        DrawPlayModpacks();
+        // Each second: only the page that shows is read from disk again (ShowPage draws each when it opens).
+        if (PlayPage.IsVisible) DrawPlayModpacks();
         SetWeaponLevelsLocked(running);
         UpdateSettingsImport();
-        UpdateLanguages();
+        if (SettingsPage.IsVisible) UpdateLanguages();
     }
 
     void BuildSteps()
