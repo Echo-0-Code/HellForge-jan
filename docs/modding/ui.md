@@ -211,6 +211,8 @@ if (tab == 0) tab = hf->add_armory_tab(mod, HF_ARMORY_TABS_WEAPONS, "SUPPORT", O
 - The page is the weapons page underneath: its grid and tab records are PRIMARY, SECONDARY and THROWABLE's, as the
   game built them. The picked tab's callback rebuilds the grid or covers it.
 - A select the callback makes (the game's 0x14570B0 with a weapons index) reaches the game.
+- A rebuild of the Armory list (`rebuild_list`, or a filter that changed; [Item lists](lists.md)) calls the picked
+  tab's callback again with `selected` 1. Build the grid again from it, and ask for no rebuild inside it.
 - Each time the game sets the weapons labels again (its input after the grid, the way back from CUSTOMIZE), the SKINS
   labels go back, with the tab picked last. Back or Esc closes the page to the overview with WEAPONRY picked.
 

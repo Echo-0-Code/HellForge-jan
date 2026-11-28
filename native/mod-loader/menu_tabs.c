@@ -249,6 +249,23 @@ static void AtSkinsPicked(HfMod* mod, uint32_t tab, int selected, void* user)
     else if (!selected && g_atSkins == 1) g_atSkins = 0;
 }
 
+/* The SKINS page's grid is its picked tab's mod's work, which no select of the game builds again: a list rebuild asks
+ * that tab's callback once more, as a tab change onto it does. 1 when it was called. */
+static int AtSkinsRepick(void)
+{
+    AtTab now = {0};
+    if (g_atSkins != 2 || g_atActive == 0) return 0;
+    AcquireSRWLockShared(&g_atLock);
+    for (uint32_t i = 0; i < g_atCount; i++)
+        if (g_atTabs[i].handle == g_atActive && g_atTabs[i].kind == HF_MENU_TABS_ARMORY_SKINS) now = g_atTabs[i];
+    ReleaseSRWLockShared(&g_atLock);
+    if (now.callback == NULL || ModGone(now.mod)) return 0;
+    InterlockedIncrement(&g_atCalls);
+    now.callback(now.mod, now.handle, 1, now.user);
+    InterlockedDecrement(&g_atCalls);
+    return 1;
+}
+
 /* A click or Q/E onto a mod's label: the Armory's select would read a tab record past its own, so it is not called. */
 static void AtSelectDetour(uintptr_t screen, uint32_t index)
 {

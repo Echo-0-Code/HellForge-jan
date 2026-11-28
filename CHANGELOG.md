@@ -57,6 +57,10 @@ On `dev`, since 0.5.0-beta.
 
 ### Fixed
 
+- **Search on the Armory's mod pages, and stratagems by designation.** A list filter now also works on the pages mods
+  add under SKINS, and stratagem rows are named as the game labels them, so `MG-43` finds the Machine Gun. A preview's
+  fit survives a click on a paint in CUSTOMIZE. A helicopter's rotors no longer strike the craft that drops it, and a
+  status a mod applies itself feeds no status effect meter.
 - **Your own copy of the bundled Megapack stays.** A copy you installed yourself, of the same or a newer version than
   the bundled one, is no longer moved away or overwritten: the bundled copy steps aside. An older copy still goes to
   `mods-retired`, whole, and the launcher log and `versions.log` now say why.

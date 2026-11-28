@@ -50,6 +50,8 @@
 #include "perf_steer_lod_test.c"
 #include "entity_table_test.c"
 #include "customize_list_test.c"
+#include "list_search_test.c"
+#include "preview_fit_test.c"
 #include "perf_heap_trim_test.c"
 #include "perf_scatter_cameras_test.c"
 #include "perf_knn_grid_test.c"
@@ -5583,6 +5585,8 @@ int main(int argc, char** argv)
     EntityTableFixture();
     EntityTableStateMovesFixture();
     CustomizeListFixture();
+    ListSearchFixture();
+    PreviewFitFixture();
     HeapTrimFixture();
     PerfScatterCamerasFixture();
     KnnGridFixture();

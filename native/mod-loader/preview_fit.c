@@ -8,6 +8,7 @@
  * shrinks it, as a box only grows while its parts stream in. The first view of an item in a session can still jump. */
 #define PREVIEW_FIT_UPDATE 0x18EA830u
 #define PREVIEW_FIT_ITEM 0x7E4u
+#define PREVIEW_FIT_KIND 0x7DCu /* the view kind asked for: the update fits anew, to the box of (slot, kind), when it changes */
 #define PREVIEW_FIT_UNIT 0x7F8u /* the item's row: +8 its unit resource */
 #define PREVIEW_FIT_DELAY 0x89Cu
 #define PREVIEW_FIT_PREV_CENTRE 0x83Cu
@@ -27,11 +28,13 @@ static SRWLOCK g_previewFitLock = SRWLOCK_INIT;
 static PreviewFitUpdateFn g_previewFitOriginal;
 static int g_previewFitState; /* 0 not yet, 1 hooked, -1 off */
 static uint8_t* g_previewFitObject;
-static uint32_t g_previewFitItem;
+static uint32_t g_previewFitItem, g_previewFitKind;
 static int g_previewFitRefits;
 static int g_previewFitLogs;
-typedef struct PreviewFitSeen { uint32_t item; float size, centre[3]; } PreviewFitSeen;
-static PreviewFitSeen g_previewFitSeen[PREVIEW_FIT_MAX]; /* the game thread's: each fitted item's last box */
+/* A box is the game's for an item's view kind (a paint picked in CUSTOMIZE asks for another kind), so each kind keeps
+ * its own: one kind's box held over another's would never let the smaller one show. */
+typedef struct PreviewFitSeen { uint32_t item, kind; float size, centre[3]; } PreviewFitSeen;
+static PreviewFitSeen g_previewFitSeen[PREVIEW_FIT_MAX]; /* the game thread's: each fitted item's last box, per kind */
 static uint32_t g_previewFitSeenCount;
 typedef void (*PreviewFitThumbFn)(uintptr_t manager, int32_t* request, uint64_t target, uint32_t layer);
 static PreviewFitThumbFn g_previewFitThumbOriginal;
@@ -95,11 +98,12 @@ static void PreviewFitScale(uint8_t* preview, uint32_t item)
     memcpy(preview + PREVIEW_FIT_PREV_CENTRE, centre, 3 * sizeof(float));
 }
 
-static PreviewFitSeen* PreviewFitSeenOf(uint32_t item, int create)
+static PreviewFitSeen* PreviewFitSeenOf(uint32_t item, uint32_t kind, int create)
 {
-    for (uint32_t i = 0; i < g_previewFitSeenCount; i++) if (g_previewFitSeen[i].item == item) return &g_previewFitSeen[i];
+    for (uint32_t i = 0; i < g_previewFitSeenCount; i++)
+        if (g_previewFitSeen[i].item == item && g_previewFitSeen[i].kind == kind) return &g_previewFitSeen[i];
     if (!create || g_previewFitSeenCount == PREVIEW_FIT_MAX) return NULL;
-    g_previewFitSeen[g_previewFitSeenCount] = (PreviewFitSeen){item, 0, {0, 0, 0}};
+    g_previewFitSeen[g_previewFitSeenCount] = (PreviewFitSeen){item, kind, 0, {0, 0, 0}};
     return &g_previewFitSeen[g_previewFitSeenCount++];
 }
 
@@ -118,7 +122,7 @@ static void PreviewFitHold(uint8_t* preview, uint32_t item, int fitted)
 {
     PreviewFitRow fit;
     if (!item || !PreviewFitFind(item, &fit)) return;
-    PreviewFitSeen* seen = PreviewFitSeenOf(item, fitted && g_previewFitRefits == 0);
+    PreviewFitSeen* seen = PreviewFitSeenOf(item, *(uint32_t*)(preview + PREVIEW_FIT_KIND), fitted && g_previewFitRefits == 0);
     float* size = (float*)(preview + PREVIEW_FIT_SIZE);
     if (seen != NULL && seen->size > 0 && (!fitted || *size < seen->size))
         PreviewFitShow(preview, seen->size, fitted ? (const float*)(preview + PREVIEW_FIT_CENTRE) : seen->centre);
@@ -129,13 +133,28 @@ static void PreviewFitHold(uint8_t* preview, uint32_t item, int fitted)
     }
 }
 
+/* The refits start over when the game is about to fit anew to its own box: another preview, another item, or another
+ * view kind for the same item, which would otherwise leave the item without its scale and offset until the next pick. */
+static void PreviewFitStart(uint8_t* preview, uint32_t item)
+{
+    const uint32_t kind = *(uint32_t*)(preview + PREVIEW_FIT_KIND);
+    const int same = preview == g_previewFitObject && item == g_previewFitItem;
+    if (same && kind != g_previewFitKind && g_previewFitLogs < PREVIEW_FIT_LOGS)
+    {
+        g_previewFitLogs++;
+        Note("preview fit: item %08x view kind %u -> %u: its fit is given again", item, g_previewFitKind, kind);
+    }
+    if (!same || kind != g_previewFitKind) g_previewFitRefits = PREVIEW_FIT_REFITS;
+    g_previewFitObject = preview;
+    g_previewFitItem = item;
+    g_previewFitKind = kind;
+}
+
 static void PreviewFitDetour(uint8_t* preview, uint32_t unit, float dt)
 {
     if (!preview) { g_previewFitOriginal(preview, unit, dt); return; }
     const uint32_t item = *(uint32_t*)(preview + PREVIEW_FIT_ITEM);
-    if (preview != g_previewFitObject || item != g_previewFitItem) g_previewFitRefits = PREVIEW_FIT_REFITS;
-    g_previewFitObject = preview;
-    g_previewFitItem = item;
+    PreviewFitStart(preview, item);
     float* size = (float*)(preview + PREVIEW_FIT_SIZE);
     const float kept = *size;
     const int refit = g_previewFitRefits > 0 && item && *(float*)(preview + PREVIEW_FIT_DELAY) <= 0;
@@ -254,8 +273,8 @@ static int ApiSetPreviewFit(HfMod* mod, uint32_t weapon, const HfPreviewFit* fit
     AcquireSRWLockExclusive(&g_previewFitLock);
     int full = PreviewFitStore(weapon, fit && fit->scale > 0 ? fit : NULL);
     ReleaseSRWLockExclusive(&g_previewFitLock);
-    PreviewFitSeen* seen = PreviewFitSeenOf(weapon, 0);
-    if (seen != NULL) seen->size = 0; /* its last box had the old fit */
+    for (uint32_t i = 0; i < g_previewFitSeenCount; i++)
+        if (g_previewFitSeen[i].item == weapon) g_previewFitSeen[i].size = 0; /* its last boxes had the old fit */
     g_previewFitRefits = PREVIEW_FIT_REFITS; /* the shown item takes it now */
     if (full) ApiLog(mod, "set_preview_fit: refused: %u fits already", PREVIEW_FIT_MAX);
     return full;

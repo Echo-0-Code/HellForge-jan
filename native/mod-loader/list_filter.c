@@ -14,6 +14,9 @@
 #define LF_GRID_TYPE 0x1F83ACu    /* the screen's grid type, as last built */
 #define LF_RECORD 0x4F8A50u       /* EncyclopediaRecord(entity): +0 name, +0x08 upper-case name, +0x24 designation */
 #define LF_TEXT 0x17802E0u        /* (id): a text id's text */
+#define LF_STAND_IN 0x4FFFF0u     /* (entity): its record when it stands for another entity (+0 that one, +0x22C set) */
+#define LF_PAYLOADS 16u           /* a stratagem row's payload entities looked at for its designation */
+#define LF_TAB_SKINS 4            /* LfArmoryTab on the SKINS page (menu_tabs.c), whose grid a mod's tab builds */
 #define LF_PICKER 0x18D8710u      /* BuildStratagemPicker(rcx, rdx, r8); rcx is its screen + 0xD2850 */
 #define LF_PICKER_HELD 0x18D8AB5u /* call StratagemAvailable(account, type) in the walk */
 #define LF_PICKER_BOUND 0x18D8AAAu /* the walk's bound: imm32 of mov edi, n (HellForge's stratagems grow it) */
@@ -50,6 +53,7 @@ static const uint8_t kLfWalkArgs[] = {0x8B, 0xD3, 0x49, 0x8B, 0xCE}; /* mov edx,
 static const uint8_t kLfPosPin[] = {0x48, 0x89, 0x5C, 0x24, 0x18, 0x48, 0x89, 0x6C, 0x24, 0x20, 0x48, 0x89, 0x54, 0x24, 0x10, 0x56, 0x57, 0x41, 0x57, 0x48, 0x83, 0xEC, 0x20, 0xF3, 0x0F, 0x10, 0x41, 0x04};
 static const uint8_t kLfSizePin[] = {0x48, 0x89, 0x5C, 0x24, 0x18, 0x48, 0x89, 0x6C, 0x24, 0x20, 0x48, 0x89, 0x54, 0x24, 0x10, 0x56, 0x57, 0x41, 0x57, 0x48, 0x83, 0xEC, 0x20, 0xF3, 0x0F, 0x10, 0x41, 0x0C};
 static const uint8_t kLfRecordPin[] = {0x48, 0x85, 0xC9, 0x74, 0x71, 0x48, 0x8B, 0x05};
+static const uint8_t kLfStandInPin[] = {0x48, 0x85, 0xC9, 0x74, 0x71, 0x48, 0x8B, 0x05, 0x9C, 0xBF, 0xF6, 0x02};
 static const uint8_t kLfTextPin[] = {0x40, 0x53, 0x48, 0x83, 0xEC, 0x20, 0x48, 0x8B, 0x05};
 static const uint8_t kLfClearPin[] = {0x48, 0x89, 0x5C, 0x24, 0x10, 0x48, 0x89, 0x6C, 0x24, 0x18, 0x48, 0x89, 0x74, 0x24, 0x20, 0x57, 0x48, 0x83, 0xEC, 0x70, 0x48, 0x8B, 0xF9};
 /* The column's reads of its visible height: its fit (scroll bar and range), its rows' layout, its scroll into view and
@@ -94,6 +98,7 @@ static HfListState g_lfState[LF_LISTS] = {{sizeof(HfListState)}, {sizeof(HfListS
 static volatile LONG g_lfRebuild[LF_LISTS], g_lfTicking;
 static int g_lfArmory, g_lfPicker; /* 0 not yet, 1 on, -1 off (modloader.log says why) */
 static int g_lfKinds, g_lfGroups;  /* the section reads match: rows get their category */
+static LfRecordFn g_lfRecordOf, g_lfStandInOf; /* the picker's lookups when they match: rows get their designation */
 static ULONGLONG g_lfWaitSince;
 static uintptr_t g_lfGame;
 static HfMod g_lfMod;
@@ -128,6 +133,36 @@ static void LfWeaponName(uint64_t entity, char* out, size_t size)
     snprintf(out, size, "%s%s%s", designation ? designation : "", designation && name ? " " : "", name ? name : "");
 }
 
+/* An entity's encyclopedia record as the game's stratagem label (0x179D8B0) finds it: its own, else that of the entity
+ * it stands for. */
+static const uint8_t* LfLabelRecord(uint64_t entity)
+{
+    const uint8_t* record = entity ? g_lfRecordOf(entity) : NULL;
+    const uint8_t* other = record == NULL && entity && g_lfStandInOf ? g_lfStandInOf(entity) : NULL;
+    uint64_t named = 0;
+    uint32_t set = 0;
+    if (other == NULL || SafeRead((uintptr_t)other + 0x22C, &set, 4) || !set || SafeRead((uintptr_t)other, &named, 8) || !named) return record;
+    return g_lfRecordOf(named);
+}
+
+/* A stratagem row has no designation: the label shows that of its first payload entity (+0x98, count +0xA0) with an
+ * encyclopedia record. 0 when there is none or a read fails; the row is then named by its title alone. */
+static uint32_t LfStratagemDesignation(uintptr_t row)
+{
+    uintptr_t payload = 0;
+    uint32_t count = 0, id = 0;
+    if (g_lfRecordOf == NULL || SafeRead(row + 0x98, &payload, 8) || !payload || SafeRead(row + 0xA0, &count, 4)) return 0;
+    for (uint32_t i = 0; i < count && i < LF_PAYLOADS; i++)
+    {
+        uint64_t entity = 0;
+        if (SafeRead(payload + i * 8u, &entity, 8)) return 0;
+        const uint8_t* record = LfLabelRecord(entity);
+        if (record != NULL) return SafeRead((uintptr_t)record + 0x24, &id, 4) ? 0 : id;
+    }
+    return 0;
+}
+
+/* "<designation> <title>" as the picker's label shows it, so a search for "MG-43" finds the row. */
 static void LfStratagemName(uint32_t type, char* out, size_t size)
 {
     uintptr_t table = g_stratagemTable ? (uintptr_t)g_stratagemTable : g_lfGame + STR_TABLE, row = 0;
@@ -136,7 +171,10 @@ static void LfStratagemName(uint32_t type, char* out, size_t size)
     if (SafeRead(table + (uintptr_t)type * 8u, &row, 8) || !row || SafeRead(row + 0x2C, &ids[0], 4) || SafeRead(row + 0x28, &ids[1], 4)) return;
     const char* name = LfText(ids[0]);
     if (name == NULL) name = LfText(ids[1]);
-    if (name != NULL) snprintf(out, size, "%s", name);
+    if (name == NULL) return;
+    const char* designation = LfText(LfStratagemDesignation(row));
+    const int has = designation != NULL && designation[0];
+    snprintf(out, size, "%s%s%s", has ? designation : "", has ? " " : "", name);
 }
 
 /* The heading a row is listed under, as the list's own heading shows it: the Armory's by the weapon's kind, the
@@ -290,7 +328,8 @@ static uintptr_t LfArmoryScreen(void)
     return SafeRead(object + 0x60, &screen, 8) == 0 ? screen : 0;
 }
 
-/* The weapon page's tab whose type the grid was last built as; -1 when its list is not up. */
+/* The weapon page's tab whose type the grid was last built as; -1 when its list is not up. The SKINS page is that
+ * page with a grid of its picked tab's mod, built as a type none of the page's tabs has: LF_TAB_SKINS. */
 static int LfArmoryTab(uintptr_t screen)
 {
     uint32_t mode = 1, built = 0, type = 0;
@@ -299,7 +338,7 @@ static int LfArmoryTab(uintptr_t screen)
         SafeRead(screen + LF_GRID_TYPE, &built, 4)) return -1;
     for (int i = 0; i < 4; i++)
         if (!SafeRead(screen + LF_TAB_TYPES + (uintptr_t)i * 0x3010u, &type, 4) && type == built) return i;
-    return -1;
+    return g_atSkins == 2 ? LF_TAB_SKINS : -1;
 }
 
 /* ---- the band at the top of a list ---- */
@@ -505,6 +544,8 @@ static const char* LfPickerInstall(uintptr_t game)
     if (!PinMatches(game + LF_PICKER, kLfPickerPin, sizeof kLfPickerPin) || !PinMatches(game + LF_PICKER_BOUND - 1, kLfWalkPin, sizeof kLfWalkPin) ||
         !PinMatches(game + LF_PICKER_HELD - sizeof kLfWalkArgs, kLfWalkArgs, sizeof kLfWalkArgs) || !ItCallsTo(game + LF_PICKER_HELD, game + LF_HELD))
         return "the picker's walk is not the reviewed one";
+    if (PinMatches(game + LF_RECORD, kLfRecordPin, sizeof kLfRecordPin)) g_lfRecordOf = (LfRecordFn)(game + LF_RECORD);
+    if (PinMatches(game + LF_STAND_IN, kLfStandInPin, sizeof kLfStandInPin)) g_lfStandInOf = (LfRecordFn)(game + LF_STAND_IN);
     g_lfGroups = PinMatches(game + LF_GROUP_READ, kLfGroupReadPin, sizeof kLfGroupReadPin) && PinMatches(game + LF_GROUP_TEXTS, kLfGroupTextsPin, sizeof kLfGroupTextsPin);
     uint8_t* stub = AllocateNearGame(game, 64);
     if (stub == NULL) return "no memory within 2 GB of game.dll";
@@ -525,7 +566,8 @@ static void LfRebuildNow(void)
     {
         const uintptr_t screen = LfArmoryScreen();
         const int tab = LfArmoryTab(screen);
-        if (tab >= 0) ((LfTabFn)(g_lfGame + LF_TAB_SELECT))(screen, (uint32_t)tab);
+        /* the SKINS page's grid is built by its tab's callback; the game's select would put a weapons grid there */
+        if (tab >= 0 && !AtSkinsRepick() && tab != LF_TAB_SKINS) ((LfTabFn)(g_lfGame + LF_TAB_SELECT))(screen, (uint32_t)tab);
     }
     if (InterlockedExchange(&g_lfRebuild[1], 0) && g_lfPicker == 1 && LfPickerOpen())
         LfPickerBuild(g_lfPickerArgs[0], g_lfPickerRdx, g_lfPickerArgs[1]);

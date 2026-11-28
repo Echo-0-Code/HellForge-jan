@@ -43,14 +43,16 @@ hf->add_list_rule(mod, HF_LIST_ARMORY_WEAPONS, MeleeOnly, NULL);
 
 | `HfListRow` field | Armory | Stratagem picker |
 |---|---|---|
-| `type` | the grid type: 1 primary, 3 secondary, 4 throwable | the StratagemType |
+| `type` | the grid type: 1 primary, 3 secondary, 4 throwable; on the SKINS page, the type its tab built | the StratagemType |
 | `item` | the row's item id | 0 |
 | `entity` | the row's entity | 0 |
-| `name` | "AR-23 Liberator" | "Orbital Precision Strike" |
+| `name` | "AR-23 Liberator" | "MG-43 Machine Gun" |
 | `category` (SDK 44) | the section heading, such as "SHOTGUN" | the group heading, such as "Eagles" |
 | `traits` (SDK 50) | the card's trait lines, such as "Cryo, Light Armor Penetrating" | the card's trait lines |
 
-Names are UTF-8 in the player's language, as the list shows them, and include mod texts.
+Names are UTF-8 in the player's language, as the list shows them, and include mod texts. A stratagem's name starts
+with its payload's designation when its label shows one, so `"mg-43"` finds it. Others have the title alone, such as
+"Orbital Precision Strike".
 
 ## Filter by name
 
@@ -113,6 +115,9 @@ if (hf->list_state(mod, HF_LIST_ARMORY_WEAPONS, &state) && state.open && state.b
 
 - **Armory.** The builder skips a row whose item is 0. HellForge writes 0 into the hidden rows while it runs and puts
   the items back as it returns. A rebuild goes through the page's own tab select, as a tab change does.
+- **Armory, SKINS page.** The grid there is the picked tab's mod's, and counts as the Armory list: `open` is 1 and the
+  rules and filters apply to its rows. A rebuild calls that tab's callback again with `selected` 1; see
+  [The SKINS page](ui.md#the-skins-page-sdk-45).
 - **Stratagem picker.** Before the walk over the types, HellForge decides which held types to hide. The walk's "held?"
   call points at HellForge, which answers no for those. Empty headings hide themselves. A rebuild calls the picker's
   builder again with the arguments of its last build, while the picker is up.
