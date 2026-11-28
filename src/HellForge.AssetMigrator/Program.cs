@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
+using HellForge.Core;
 using HellForge.Core.AssetMigration;
 using HellForge.Core.GameData;
 
@@ -119,6 +120,18 @@ List<string> All(string flag)
     var found = new List<string>();
     for (var i = 1; i + 1 < args_.Count; i++) if (args_[i] == flag) found.Add(args_[i + 1]);
     return found;
+}
+
+// Empties --out for a new run: refused when it is the mod, holds it or lies in it, or holds files that are not an
+// earlier run's (told by the file such a run leaves).
+void ClearOut(string outFolder, string modFolder, string madeHere)
+{
+    if (LocalInstall.Within(outFolder, modFolder) || LocalInstall.Within(modFolder, outFolder))
+        throw new ArgumentException("--out must be outside the --mod folder (and not hold it).");
+    if (!Directory.Exists(outFolder)) return;
+    if (Directory.EnumerateFileSystemEntries(outFolder).Any() && !File.Exists(Path.Combine(outFolder, madeHere)))
+        throw new ArgumentException($"--out {outFolder} holds other files: name an empty or new folder.");
+    Directory.Delete(outFolder, true);
 }
 
 string One(string flag) => All(flag).SingleOrDefault() ?? throw new ArgumentException($"{flag} is required.");
@@ -656,8 +669,9 @@ int Migrate()
     var modFolder = Path.GetFullPath(One("--mod"));
     var outFolder = Path.GetFullPath(One("--out"));
     var shipped = Path.Combine(outFolder, "mod");
-    if (Directory.Exists(outFolder)) Directory.Delete(outFolder, true);
+    ClearOut(outFolder, modFolder, "migration-report.md");
     Directory.CreateDirectory(shipped);
+    File.WriteAllText(Path.Combine(outFolder, "migration-report.md"), "");   // marks the folder as a run's, should this one stop early
 
     // The mod is read one file at a time, and the literal bytes go straight to a file: a mod of any size fits.
     var mod = ModFiles.InFolder(modFolder);
@@ -734,7 +748,7 @@ int Rebuild()
 {
     var mod = Path.GetFullPath(One("--mod"));
     var outFolder = Path.GetFullPath(One("--out"));
-    if (Directory.Exists(outFolder)) Directory.Delete(outFolder, true);
+    ClearOut(outFolder, mod, ModCatalog.ManifestName);
     Directory.CreateDirectory(outFolder);
     foreach (var file in Directory.EnumerateFiles(mod, "*", SearchOption.AllDirectories))
     {

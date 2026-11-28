@@ -133,6 +133,10 @@ public static class AssetKit
         outFolder = Path.GetFullPath(outFolder);
         if (LocalInstall.Within(outFolder, modFolder) || LocalInstall.Within(modFolder, outFolder))
             throw new InvalidDataException("The output folder must be outside the mod's folder (and not hold it).");
+        // WriteShareable replaces the folder: only an earlier output (a mod's files) may be replaced.
+        if (Directory.Exists(outFolder) && Directory.EnumerateFileSystemEntries(outFolder).Any() &&
+            !File.Exists(Path.Combine(outFolder, ModCatalog.ManifestName)) && !File.Exists(Path.Combine(outFolder, Recipe.FileName)))
+            throw new InvalidDataException($"The output folder {outFolder} holds other files: name an empty or new folder.");
         return (modFolder, outFolder);
     }
 

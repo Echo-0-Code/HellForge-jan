@@ -46,7 +46,27 @@ public sealed class Recipe
         try { recipe = JsonSerializer.Deserialize(File.ReadAllText(Path.Combine(folder, FileName)), AssetJson.Default.Recipe) ?? throw new InvalidDataException("The recipe is empty."); }
         catch (JsonException error) { throw new InvalidDataException($"{FileName} is not a recipe HellForge reads ({error.Message})."); }
         if (recipe.Format != 1) throw new InvalidDataException($"Recipe format {recipe.Format} is not one this HellForge reads.");
+        Check(recipe);
         return recipe;
+    }
+
+    // A recipe comes with a downloaded mod: every later read of it may assume lists, hex keys and part names, so a
+    // bad one fails here as bad data and leaves out only its own mod.
+    static void Check(Recipe recipe)
+    {
+        static bool Hex(string? text) => text is { Length: > 0 and <= 16 } && text.All(char.IsAsciiHexDigit);
+        if (recipe.Sources == null || recipe.Files == null) throw new InvalidDataException($"{FileName} lacks its sources or files.");
+        foreach (var source in recipe.Sources)
+        {
+            if (source?.Sha256 == null || source.Size < 0 || source.Places == null) throw new InvalidDataException($"{FileName} has a malformed source.");
+            foreach (var place in source.Places)
+                if (place?.Build == null || !Hex(place.Type) || !Hex(place.Name) || !Enum.TryParse<PartKind>(place.Part, ignoreCase: true, out var kind) ||
+                    !Enum.IsDefined(kind))
+                    throw new InvalidDataException($"{FileName} has a source place HellForge cannot read.");
+        }
+        foreach (var file in recipe.Files)
+            if (file?.Path == null || file.Sha256 == null || file.Size < 0 || file.Ops == null || file.Ops.Any(op => op == null || op.Length == 0))
+                throw new InvalidDataException($"{FileName} has a malformed file entry.");
     }
 
     public static Stream OpenLiterals(string folder) =>
@@ -247,13 +267,13 @@ public static class RecipeRebuilder
                 At += length;
                 return;
             }
-            if (op[2] < 0 || op[2] + length > src.Length) throw Bad("a copy runs past its source.");
+            if (op[2] < 0 || length < 0 || op[2] > src.Length - length) throw Bad("a copy runs past its source.");
             Put(src.AsSpan((int)op[2], (int)length));
         }
 
         void Literal(long[] op, long length, Stream literals)
         {
-            if (op.Length != 3 || op[1] < 0 || op[1] + length > literals.Length) throw Bad("a literal runs past the literals file.");
+            if (op.Length != 3 || op[1] < 0 || length < 0 || op[1] > literals.Length - length) throw Bad("a literal runs past the literals file.");
             literals.Position = op[1];
             for (var left = length; left > 0;)
             {
