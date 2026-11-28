@@ -70,21 +70,35 @@ public sealed class StatsSync
         foreach (var (key, value) in fields)
         {
             if (key == "own") continue;
-            var names = key switch
-            {
-                "spread" => new[] { "weapon.horizontal_spread", "weapon.vertical_spread" },
-                "armorPenetration" when category == "damage" => ["ap_direct", "ap_slight", "ap_large", "ap_extreme"],
-                _ => new[] { target.Aliases.GetValueOrDefault(key, key) }
-            };
-            for (var i = 0; i < names.Length; i++)
-            {
-                var one = key == "armorPenetration" && names.Length == 4 ? (value as JsonArray is { Count: 4 } four ? four[i] : null) : value;
-                if (one == null || !target.Fields.TryGetValue(names[i], out var field)) { bootOnly++; continue; }
-                if (LiveApplies.Of(field) == null && !PipeOnly(field)) { bootOnly++; continue; }
-                if (StatsCatalog.TryParse(field, one.ToJsonString(), out _, out var bits, out _)) values[field.AddressKey] = (field, bits);
-                else bootOnly++;
-            }
+            bootOnly += ReadKey(key, value, NamesOf(key, category, target), target, values);
         }
+    }
+
+    // One key's fields into values; how many of them cannot go live.
+    static int ReadKey(string key, JsonNode? value, string[] names, StatsTarget target, Dictionary<string, (StatsField Field, uint Bits)> values)
+    {
+        var four = key == "armorPenetration" && names.Length == 4;
+        var left = 0;
+        for (var i = 0; i < names.Length; i++)
+            if (!ReadValue(four ? (value as JsonArray is { Count: 4 } each ? each[i] : null) : value, names[i], target, values)) left++;
+        return left;
+    }
+
+    static string[] NamesOf(string key, string category, StatsTarget target) => key switch
+    {
+        "spread" => ["weapon.horizontal_spread", "weapon.vertical_spread"],
+        "armorPenetration" when category == "damage" => ["ap_direct", "ap_slight", "ap_large", "ap_extreme"],
+        _ => [target.Aliases.GetValueOrDefault(key, key)]
+    };
+
+    // One field's value into values; false when it cannot go live (no such field, not live, not a number of its kind).
+    static bool ReadValue(JsonNode? one, string name, StatsTarget target, Dictionary<string, (StatsField Field, uint Bits)> values)
+    {
+        if (one == null || !target.Fields.TryGetValue(name, out var field)) return false;
+        if (LiveApplies.Of(field) == null && !PipeOnly(field)) return false;
+        if (!StatsCatalog.TryParse(field, one.ToJsonString(), out _, out var bits, out _)) return false;
+        values[field.AddressKey] = (field, bits);
+        return true;
     }
 
     // The requests that take the game from what it holds now to the host's values (host not null: joined; "" the host has

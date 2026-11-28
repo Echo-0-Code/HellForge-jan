@@ -100,13 +100,7 @@ public static class DownpatchMaker
             var target = targets[i];
             void Read(int count) => progress?.Invoke(new("Reading Steam's game files", done += count, total, target.File.Path));
             var path = target.File.Path;
-            // A swapped upscaler is not carried: Downpatch.Plan takes another version only as Steam's own file.
-            if (target.Size != target.File.Size || target.Sha1 != target.File.Sha1.ToUpperInvariant())
-            {
-                if (!source.Sizes.TryGetValue(path, out var size))
-                    throw new InvalidDataException($"HellForge's game copy has a swapped {path} and Steam's game has none: put the original back first.");
-                target = target with { Size = size, Sha1 = source.Sha1(path, Read, cancellation) };
-            }
+            target = Unswapped(target, source, Read, cancellation);
             var draft = new DownpatchEntry(path, "new", target.Size, target.Sha1, Entry: $"files/{i:D3}.hfd");
             string? from = null;
             if (path != "data/settings.ini" && SameIn(source, target, Read, cancellation) is { } same)
@@ -123,6 +117,16 @@ public static class DownpatchMaker
             entries.Add(new(i, draft, target.Path, from == null ? null : Path.Combine(source.Root, from)));
         }
         return entries;
+    }
+
+    // A swapped upscaler is not carried: Downpatch.Plan takes another version only as Steam's own file.
+    static Target Unswapped(Target target, SourceFiles source, Action<int> read, CancellationToken cancellation)
+    {
+        var path = target.File.Path;
+        if (target.Size == target.File.Size && target.Sha1 == target.File.Sha1.ToUpperInvariant()) return target;
+        if (!source.Sizes.TryGetValue(path, out var size))
+            throw new InvalidDataException($"HellForge's game copy has a swapped {path} and Steam's game has none: put the original back first.");
+        return target with { Size = size, Sha1 = source.Sha1(path, read, cancellation) };
     }
 
     // Steam's file with this content: at the same path first, then any of the same size.

@@ -593,15 +593,7 @@ public static class ModDataCache
         var key = Key(spec, mod.Folder, Path.Combine(install.Game, "data"), steamData, sources, LayerStack.Uses(spec) ? layers.Stamp() : null);
         var cache = Path.Combine(Folder(install), mod.Id);
         var target = Path.Combine(cache, key);
-        if (File.Exists(Path.Combine(target, Record)))
-        {
-            // A record cut short (power loss) is no record: the folder is built again instead of failing every start.
-            BuildRecord? record = null;
-            try { record = JsonSerializer.Deserialize<BuildRecord>(File.ReadAllText(Path.Combine(target, Record)), new JsonSerializerOptions { PropertyNameCaseInsensitive = true }); }
-            catch (JsonException) { }
-            if (record?.Files != null) return (target, record.Files, false, record.Notes ?? []);
-            Directory.Delete(target, recursive: true);
-        }
+        if (Recorded(target) is { Files: not null } record) return (target, record.Files, false, record.Notes ?? []);
         log?.Invoke($"Building the data of {mod.Id} from the game data...");
         var staging = target + ".partial-" + Guid.NewGuid().ToString("N")[..8];
         try
@@ -624,6 +616,18 @@ public static class ModDataCache
             try { if (Directory.Exists(staging)) Directory.Delete(staging, recursive: true); } catch (IOException) { }
             throw;
         }
+    }
+
+    // The record of a built folder, or null with none. A record cut short (power loss) is no record: its folder is
+    // deleted, so it is built again instead of failing every start.
+    static BuildRecord? Recorded(string target)
+    {
+        if (!File.Exists(Path.Combine(target, Record))) return null;
+        BuildRecord? record = null;
+        try { record = JsonSerializer.Deserialize<BuildRecord>(File.ReadAllText(Path.Combine(target, Record)), new JsonSerializerOptions { PropertyNameCaseInsensitive = true }); }
+        catch (JsonException) { }
+        if (record?.Files == null) Directory.Delete(target, recursive: true);
+        return record;
     }
 
     // Another build's staging folder is in use unless it is old: one that died is cleared on a later build.

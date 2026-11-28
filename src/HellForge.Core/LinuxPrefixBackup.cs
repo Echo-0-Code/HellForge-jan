@@ -214,28 +214,37 @@ public static class LinuxPrefixBackup
         }
         foreach (var entry in list)
             if (entry.Kind == 'l' && CheckLink(entry, top!) is { } linkProblem) return Refuse(linkProblem);
-        // Each name is normalised once and its parent paths looked up among the links: a prefix holds over a
-        // thousand links, so comparing every entry with every link took millions of string joins.
+        if (UnderLink(list) is { } under) return Refuse("an entry is under a link in the same archive: " + under);
+        return new(true, "", top!, bytes);
+    }
+
+    // The first entry below a link of the same archive, or null. Each name is normalised once and its parent paths
+    // looked up among the links: a prefix holds over a thousand links, so comparing every entry with every link took
+    // millions of string joins.
+    static string? UnderLink(List<LinuxArchiveEntry> list)
+    {
         var links = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var link in list.Where(entry => entry.Kind == 'l'))
         {
             var name = string.Join('/', NormalizedParts(link.Name));
             links[name] = links.GetValueOrDefault(name) + 1;
         }
-        foreach (var entry in list)
+        return list.FirstOrDefault(entry => UnderLink(entry, links))?.Name;
+    }
+
+    static bool UnderLink(LinuxArchiveEntry entry, Dictionary<string, int> links)
+    {
+        var parts = NormalizedParts(entry.Name);
+        var path = new StringBuilder();
+        for (var i = 0; i < parts.Count; i++)
         {
-            var parts = NormalizedParts(entry.Name);
-            var path = new StringBuilder();
-            for (var i = 0; i < parts.Count; i++)
-            {
-                if (i > 0) path.Append('/');
-                path.Append(parts[i]);
-                if (!links.TryGetValue(path.ToString(), out var named)) continue;
-                var itself = i == parts.Count - 1 && entry.Kind == 'l' && named == 1;
-                if (!itself) return Refuse("an entry is under a link in the same archive: " + entry.Name);
-            }
+            if (i > 0) path.Append('/');
+            path.Append(parts[i]);
+            if (!links.TryGetValue(path.ToString(), out var named)) continue;
+            var itself = i == parts.Count - 1 && entry.Kind == 'l' && named == 1;
+            if (!itself) return true;
         }
-        return new(true, "", top!, bytes);
+        return false;
     }
 
     static string? CheckEntry(LinuxArchiveEntry entry, ref string? top, ref long bytes)

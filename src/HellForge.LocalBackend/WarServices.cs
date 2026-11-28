@@ -297,19 +297,25 @@ public sealed class WarServices(string? scriptPath, WarClock clock, ProfileStore
             if (m.ValueKind != JsonValueKind.Object || !m.TryGetProperty("id", out var id) || !id.TryGetUInt32(out var mailId)) continue;
             var sent = m.TryGetProperty("sentAt", out var s) && s.TryGetInt64(out var at) ? at : 0;
             if (sent > clock.Seconds) continue;
-            // A letter that does not convert, or repeats an id, is left out and logged: the inbox still answers.
-            try
-            {
-                var letter = new Letter(mailId, sent, m.TryGetProperty("message", out var text) ? text.GetString() ?? "" : "", Items(m, "items").ToList());
-                if (seen.Add(mailId)) mail.Add(letter);
-                else log($"War script: mail {mailId} is there twice; the first one counts.");
-            }
-            catch (Exception error) when (error is InvalidOperationException or KeyNotFoundException or FormatException)
-            {
-                log($"War script: mail {mailId} was left out ({error.Message}).");
-            }
+            if (LetterOf(m, mailId, sent) is not { } letter) continue;
+            if (seen.Add(mailId)) mail.Add(letter);
+            else log($"War script: mail {mailId} is there twice; the first one counts.");
         }
         return mail;
+    }
+
+    // A letter that does not convert is left out and logged: the inbox still answers.
+    Letter? LetterOf(JsonElement m, uint mailId, long sent)
+    {
+        try
+        {
+            return new Letter(mailId, sent, m.TryGetProperty("message", out var text) ? text.GetString() ?? "" : "", Items(m, "items").ToList());
+        }
+        catch (Exception error) when (error is InvalidOperationException or KeyNotFoundException or FormatException)
+        {
+            log($"War script: mail {mailId} was left out ({error.Message}).");
+            return null;
+        }
     }
 
     // POST /Mail/claim/mail {mailIds: [...]} or /Mail/claim/mail/<id> {}: each unclaimed mail's items saved, then echoed

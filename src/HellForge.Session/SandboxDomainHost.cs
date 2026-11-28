@@ -86,7 +86,7 @@ static class SandboxDomainHost
             ApplyRouting(spec, job);
             clean = clean with { State = "running" };
             SandboxDomainStatus.Write(statusPath, clean);
-            ObserveGame(spec, job, endSignal, statusPath, stopPath, playFab, applier, ref clean);
+            ObserveGame(spec, job, endSignal, (statusPath, stopPath), playFab, applier, ref clean);
             return 0;
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException or InvalidOperationException or
@@ -124,9 +124,10 @@ static class SandboxDomainHost
         }
     }
 
-    static void ObserveGame(SandboxLaunchSpec spec, HostBoundedProcess job, SessionEndSignal? endSignal, string statusPath, string stopPath,
+    static void ObserveGame(SandboxLaunchSpec spec, HostBoundedProcess job, SessionEndSignal? endSignal, (string Status, string Stop) paths,
         HellForgeLocalRoutingPatch.PlayFabRedirect? playFab, Thread? applier, ref SandboxDomainStatus clean)
     {
+        var (statusPath, stopPath) = paths;
         var clock = Stopwatch.StartNew();
         var windows = new List<SandboxWindowSample>();
         long nextWindows = 0;

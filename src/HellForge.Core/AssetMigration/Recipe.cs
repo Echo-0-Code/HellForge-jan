@@ -54,19 +54,21 @@ public sealed class Recipe
     // bad one fails here as bad data and leaves out only its own mod.
     static void Check(Recipe recipe)
     {
-        static bool Hex(string? text) => text is { Length: > 0 and <= 16 } && text.All(char.IsAsciiHexDigit);
         if (recipe.Sources == null || recipe.Files == null) throw new InvalidDataException($"{FileName} lacks its sources or files.");
         foreach (var source in recipe.Sources)
         {
             if (source?.Sha256 == null || source.Size < 0 || source.Places == null) throw new InvalidDataException($"{FileName} has a malformed source.");
-            foreach (var place in source.Places)
-                if (place?.Build == null || !Hex(place.Type) || !Hex(place.Name) || !Enum.TryParse<PartKind>(place.Part, ignoreCase: true, out var kind) ||
-                    !Enum.IsDefined(kind))
-                    throw new InvalidDataException($"{FileName} has a source place HellForge cannot read.");
+            if (!source.Places.All(Readable)) throw new InvalidDataException($"{FileName} has a source place HellForge cannot read.");
         }
-        foreach (var file in recipe.Files)
-            if (file?.Path == null || file.Sha256 == null || file.Size < 0 || file.Ops == null || file.Ops.Any(op => op == null || op.Length == 0))
-                throw new InvalidDataException($"{FileName} has a malformed file entry.");
+        if (recipe.Files.Any(file => file?.Path == null || file.Sha256 == null || file.Size < 0 || file.Ops == null || file.Ops.Any(op => op == null || op.Length == 0)))
+            throw new InvalidDataException($"{FileName} has a malformed file entry.");
+    }
+
+    static bool Readable(RecipePlace? place)
+    {
+        static bool Hex(string? text) => text is { Length: > 0 and <= 16 } && text.All(char.IsAsciiHexDigit);
+        return place?.Build != null && Hex(place.Type) && Hex(place.Name) && Enum.TryParse<PartKind>(place.Part, ignoreCase: true, out var kind) &&
+            Enum.IsDefined(kind);
     }
 
     public static Stream OpenLiterals(string folder) =>

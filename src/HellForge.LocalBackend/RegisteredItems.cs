@@ -230,7 +230,8 @@ public sealed partial class RegisteredItems(string path)
     // seconds (write times can be coarse), is not read again: one request asks for the session hundreds of times.
     (long Length, DateTime Written) fileSeen = (-1, default);
 
-    Session Current()
+    // The session read last, when the file is as it was then; null to read it again.
+    Session? Unchanged()
     {
         try
         {
@@ -243,6 +244,12 @@ public sealed partial class RegisteredItems(string path)
             }
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+        return null;
+    }
+
+    Session Current()
+    {
+        if (Unchanged() is { } same) return same;
         var bytes = ReadFile();
         lock (gate)
         {

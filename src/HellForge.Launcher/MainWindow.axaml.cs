@@ -278,8 +278,7 @@ public partial class MainWindow : Window
     void PlayClicked()
     {
         if (runner.IsRunning) RequestStop();
-        else if (SyncBusy) SetStatus("Inventory sync is running. Play once it finishes.", Phase.Idle);
-        else if (setupRunning) SetStatus("Setup is running. Play once it finishes.", Phase.Idle);
+        else if (SyncBusy || setupRunning) SetStatus(SyncBusy ? "Inventory sync is running. Play once it finishes." : "Setup is running. Play once it finishes.", Phase.Idle);
         else if (!installingRuntimes && VisualCppRuntimes.Needed().Count > 0) _ = InstallRuntimesThenStart();
         else if (!installingRuntimes) Start();
     }
