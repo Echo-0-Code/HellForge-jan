@@ -61,7 +61,8 @@ public sealed class SandboxStartPlan
 public static class SandboxProtocol
 {
     public const int SchemaVersion = 1;
-    public const int MaxReadOnlyBinds = 64;
+    // hf-sandbox's HF_MAX_EXTRA_BINDS: a folder and a built DLL for each of the loader's 192 mods, then the fixed binds.
+    public const int MaxReadOnlyBinds = 400;
     public const int MaxGameArguments = 128;
     public const int MaxEnvironmentEntries = 32;
     public const int MaxText = 4096;
@@ -202,8 +203,10 @@ public static class SandboxProtocol
 
     static List<string> ValidateBinds(InstallLayout install, string prefix, List<string>? values)
     {
-        if (values == null || values.Count is 0 or > MaxReadOnlyBinds)
-            throw new InvalidDataException("The sandbox request has no bounded read-only bind list.");
+        if (values == null || values.Count == 0)
+            throw new InvalidDataException("The sandbox request has no read-only bind list.");
+        if (values.Count > MaxReadOnlyBinds)
+            throw new InvalidDataException($"The sandbox request has {values.Count} read-only binds; the sandbox takes at most {MaxReadOnlyBinds}. Turn some mods off.");
         var binds = new List<string>();
         foreach (var value in values)
         {

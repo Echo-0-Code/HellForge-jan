@@ -48,7 +48,11 @@ static void usage(const char *program)
 // A repeated option's value (--bind-ro, --steam-runtime), up to its limit. 0: added, 2: too many.
 static int add_repeated(char **list, int *count, int limit, char **argv, int *index)
 {
-    if (*count >= limit) { usage(argv[0]); return 2; }
+    if (*count >= limit)
+    {
+        fprintf(stderr, "hf-sandbox: more than %d %s values\n", limit, argv[*index]);
+        return 2;
+    }
     list[(*count)++] = argv[++*index];
     return 0;
 }
@@ -153,7 +157,7 @@ int main(int argc, char **argv)
     if (parsed != 0) return 2;
     if (cli.self_test) return hf_run_self_test(cli.self_test_dir);
 
-    struct hf_sandbox sandbox;
+    static struct hf_sandbox sandbox; // megabytes of rule paths: not on the stack
     memset(&sandbox, 0, sizeof(sandbox));
     sandbox.command = cli.command;
     sandbox.command_count = cli.command_count;

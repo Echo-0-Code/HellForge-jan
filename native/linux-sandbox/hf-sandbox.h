@@ -53,10 +53,13 @@
 #define SYS_capget 125
 #endif
 
-#define HF_MAX_RULES 128
+// Every extra bind is one Landlock rule, beside the view's own paths (well under 100).
+#define HF_MAX_RULES 512
 #define HF_MAX_FILTER 128
 #define HF_MAX_COMMAND 256
-#define HF_MAX_EXTRA_BINDS 64
+// A session binds a folder and often a built DLL for each mod, and the loader takes 192 mods (MAX_MODS), so the cap
+// must hold twice that plus the loader and session host. SandboxProtocol.MaxReadOnlyBinds mirrors it.
+#define HF_MAX_EXTRA_BINDS 400
 #define HF_MAX_STEAM_RUNTIMES 4
 #define HF_RUNTIME_SOCKETS 8
 #define HF_MAX_CREDENTIAL_BYTES 65536
