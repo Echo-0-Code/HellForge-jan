@@ -277,7 +277,7 @@ void List(const ListOpts& o);
 /* ---- the page, navigation, search, changes (app_page.cpp) ---- */
 const catalog::Nav* NavOf(int cat);
 std::string Lower(std::string s);
-std::vector<Object*> Objects();
+const std::vector<Object*>& Objects();
 Object* Current();
 /* The page's items: categories and parts (collapsible headers) and rows, as the HD2R Editor's field_items lays them out. */
 struct Item
@@ -306,7 +306,7 @@ void SelectObject(int i);
 bool GotoObject(const Object* object);
 void Reveal(const Row* row);
 struct Result { Object* object; std::string sub; bool prefix; int order; };
-std::vector<Result> SearchResults(const std::string& text);
+const std::vector<Result>& SearchResults(const std::string& text);
 struct Change { const Row* row; double value; int state; bool reset; }; /* state 0 edited, 1 pending, 2 error */
 const std::vector<Change>& Changes();
 

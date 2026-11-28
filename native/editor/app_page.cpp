@@ -34,16 +34,26 @@ static bool Shown(const Object* o, const std::string& group, int level, const st
     return q.empty() || (Lower(o->name) + " " + Lower(o->subtitle) + " " + o->search).find(q) != std::string::npos;
 }
 
-std::vector<Object*> Objects()
+/* The category's objects the filters show. Several callers a frame ask, and matching lower-cases every object's
+ * names, so the list is kept while the category, the filters, the search text and the catalogue are the same. A
+ * difficulty filter reads live values: its list holds for the frame only. */
+const std::vector<Object*>& Objects()
 {
+    static std::vector<Object*> out;
+    static std::string shownFor;
+    static const std::vector<Object*> none;
     const catalog::Nav* nav = NavOf(g_cat);
-    if (nav == nullptr) return {};
-    std::vector<Object*> list = g_catalog.Of(nav->id), out;
+    if (nav == nullptr) return none;
     std::string group = g_group.count(nav->id) ? g_group[nav->id] : "All";
     int level = nav->levels && g_level.count(nav->id) ? g_level[nav->id] : 0;
     std::string q = Lower(g_search.text);
-    for (Object* o : list)
+    std::string key = nav->id + "\t" + group + "\t" + std::to_string(level) + "\t" + std::to_string(level > 0 ? g_frame : 0) + "\t" +
+        std::to_string(g_catalog.objects.size()) + "\t" + q;
+    if (key == shownFor) return out;
+    out.clear();
+    for (Object* o : g_catalog.Of(nav->id))
         if (Shown(o, group, level, q)) out.push_back(o);
+    shownFor = key;
     return out;
 }
 
@@ -65,7 +75,7 @@ bool AtLevel(const Object* object, int level)
 
 Object* Current()
 {
-    auto list = Objects();
+    const auto& list = Objects();
     return g_obj >= 0 && g_obj < (int)list.size() ? list[g_obj] : nullptr;
 }
 
@@ -467,9 +477,16 @@ static bool AllWords(const std::vector<std::string>& words, const std::string& h
     return true;
 }
 
-std::vector<Result> SearchResults(const std::string& text)
+/* Both the keys and the view ask every frame, and a search goes through every object's names and sorts: the results
+ * are kept while the text and the catalogue are the same. */
+const std::vector<Result>& SearchResults(const std::string& text)
 {
-    std::vector<Result> out;
+    static std::vector<Result> out;
+    static std::string foundFor;
+    static size_t foundIn = (size_t)-1;
+    if (text == foundFor && foundIn == g_catalog.objects.size()) return out;
+    foundFor = text; foundIn = g_catalog.objects.size();
+    out.clear();
     auto words = Words(text);
     if (words.empty()) return out;
     for (auto& nav : g_catalog.navs)

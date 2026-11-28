@@ -20,7 +20,7 @@ void DrawSearch(float y0, float h)
     searchOpts.shown = !empty;
     float tw = g_cv.Text(empty ? "Search every primary, secondary and throwable..." : g_gsearch.text, bx + 14, by + bh / 2, searchOpts);
     if (!empty && (int)(g_time * 2) % 2 == 0) g_cv.Rect(bx + 16 + tw, by + 10, 2, bh - 20, GOLD, 6);
-    auto results = SearchResults(g_gsearch.text);
+    const auto& results = SearchResults(g_gsearch.text);
     g_gsearch.index = std::clamp(g_gsearch.index, 0, std::max(0, (int)results.size() - 1));
     std::string info = empty ? Translated("Type to search. Every word must match, in any order.") :
         results.empty() ? Named("Nothing matches \"{1}\".", {g_gsearch.text}) : Translated(std::to_string(results.size()) + " results");

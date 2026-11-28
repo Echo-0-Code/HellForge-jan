@@ -172,7 +172,7 @@ static void SearchKeys(const std::vector<std::string>& chars)
     for (auto& c : chars) if (g_gsearch.text.size() < 40) { g_gsearch.text += c; g_gsearch.index = 0; }
     if (Pressed(ImGuiKey_Backspace)) { DropLast(g_gsearch.text); g_gsearch.index = 0; }
     if (Pressed(ImGuiKey_Delete)) { g_gsearch.text.clear(); g_gsearch.index = 0; }
-    auto results = SearchResults(g_gsearch.text);
+    const auto& results = SearchResults(g_gsearch.text);
     int n = std::max(1, (int)results.size());
     if (Pressed(ImGuiKey_UpArrow)) g_gsearch.index = std::max(0, g_gsearch.index - 1);
     if (Pressed(ImGuiKey_DownArrow)) g_gsearch.index = std::min(n - 1, g_gsearch.index + 1);

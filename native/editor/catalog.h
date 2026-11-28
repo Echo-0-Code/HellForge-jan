@@ -130,7 +130,9 @@ struct Catalog
      * page has ref's rows already or no page has base's. */
     bool AddOwnPart(Object* copy, const CopyNames& names, const OwnPart& part);
     Row* Setting(const std::string& component, uint64_t ref, uint16_t offset) const;
-    std::vector<Object*> Of(const std::string& nav) const;
+    /* A category's objects, in the catalogue's order. Asked for many times a frame, so they are indexed: objects are
+     * only ever added, and an object keeps its category, so the index takes in the ones added since. */
+    const std::vector<Object*>& Of(const std::string& nav) const;
     /* The object whose page holds the stratagem's settings row (StratagemDefinition of that type), or nullptr. */
     const Object* StratagemObject(uint64_t type) const;
     /* The first object whose page holds fields of the entity's records (an arsenal weapon's, in its loadout section), or
@@ -144,6 +146,10 @@ struct Catalog
         const std::function<bool(const Row&, uint64_t ref)>& keep = nullptr);
     const std::vector<Row*>& Siblings(const Row* row) const;
     Row* Entry(const std::string& category, const std::string& target, const std::string& key) const;
+
+private:
+    mutable std::map<std::string, std::vector<Object*>> byNav; /* Of's index */
+    mutable size_t indexed = 0;                                 /* how many of objects are in it */
 };
 
 /* The catalogue's files in the editor's folder: the index, which names a file per category (EditorCatalog.cs Files). */
