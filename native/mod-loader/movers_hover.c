@@ -257,10 +257,17 @@ static void HvLog(MvUnit* m, const MvDef* def, float dt)
         (double)m->speed, (double)m->throttle, (double)m->steer, m->driver);
 }
 
+/* Another machine moves it: the engine's copy here, whose flier thrust (SDK 56) is read from how it climbs. */
+static void HvCopy(MvUnit* m, const MvDef* def, float dt)
+{
+    m->status = HF_MOVER_REMOTE; m->engaged = 0;
+    if (MvFlier(def->def.mode)) FlCopyClimb(m, dt);
+}
+
 static void HvUnitTick(MvUnit* m, const MvDef* def, float dt)
 {
     if (!HvReady()) { m->status = HF_MOVER_WAITING; return; }
-    if (ApiIsAuthority(NULL, m->entity) != 1) { m->status = HF_MOVER_REMOTE; m->engaged = 0; return; }
+    if (ApiIsAuthority(NULL, m->entity) != 1) { HvCopy(m, def, dt); return; }
     if (!m->body || !g_hvResolves(m->body) || g_hvUnit(m->body) != m->unit)
     {
         m->body = HvChassis(m);

@@ -104,17 +104,38 @@ static uint32_t KitSeatOf(const HfFixedGunDef* d, const float w[16])
     return best;
 }
 
-/* One round along the nose, scattered and converged; 0 when spawn_projectile refused it (its log says why). */
+/* SDK 56: a turret's frame vector v turned by its aim: yaw degrees to the right about z, then pitch degrees up. */
+static void KitTurn(float yaw, float pitch, const float v[3], float out[3])
+{
+    const float cy = cosf(yaw * 0.0174533f), sy = sinf(yaw * 0.0174533f), cp = cosf(pitch * 0.0174533f), sp = sinf(pitch * 0.0174533f);
+    const float x = v[0], y = v[1] * cp - v[2] * sp, z = v[1] * sp + v[2] * cp; /* pitch: about x, nose up */
+    out[0] = x * cy + y * sy; out[1] = -x * sy + y * cy; out[2] = z;               /* yaw: about z, to the right */
+}
+
+/* One round along the nose (or, SDK 56, the turret's aim from its pivot), scattered and converged; 0 when
+ * spawn_projectile refused it (its log says why). */
 static int KitShot(MvUnit* m, const KitGun* g, const float w[16], float period)
 {
     const HfFixedGunDef* d = &g->def;
-    float dir[3] = {d->converge > 0 ? -d->muzzle[0] / d->converge : 0, 1, 0}, at[3], wd[3];
+    const int view = d->aim == HF_GUN_AIM_VIEW;
+    float dir[3] = {d->converge > 0 && !view ? -d->muzzle[0] / d->converge : 0, 1, 0}, at[3], wd[3], muzzle[3];
     if (d->spread > 0)
     {
         const float r = tanf(d->spread * 0.5f * 0.0174533f) * sqrtf(KitRandom()), a = 6.2831853f * KitRandom();
         dir[0] += r * cosf(a); dir[2] += r * sinf(a);
     }
-    KitToWorld(w, d->muzzle, 1, at);
+    memcpy(muzzle, d->muzzle, sizeof muzzle);
+    if (view)
+    {
+        const uint32_t s = g->slot;
+        const float arm[3] = {d->muzzle[0] - d->pivot[0], d->muzzle[1] - d->pivot[1], d->muzzle[2] - d->pivot[2]};
+        float turned[3], aimed[3];
+        KitTurn(m->gunYaw[s], m->gunPitch[s], arm, turned);
+        for (int k = 0; k < 3; k++) muzzle[k] = d->pivot[k] + turned[k];
+        KitTurn(m->gunYaw[s], m->gunPitch[s], dir, aimed);
+        memcpy(dir, aimed, sizeof dir);
+    }
+    KitToWorld(w, muzzle, 1, at);
     KitToWorld(w, dir, 0, wd);
     if (ApiSpawnProjectile(g->mod, d->projectile, at, wd) == 0) return 0;
     if (d->recoil > 0 && m->body)
@@ -133,29 +154,35 @@ static int KitShot(MvUnit* m, const KitGun* g, const float w[16], float period)
  * (its own player's or a joiner's) fires the gun. Fliers are physics bodies the engine replicates, so both machines
  * have the unit and its seats in the same place. */
 #define KIT_CHANNEL "@hellforge.guns"
-#define KIT_ASK_VERSION 2u
+#define KIT_ASK_VERSION 3u /* 3 (SDK 56): with the seat's wanted turret aim */
 #define KIT_ASK_S 0.2f
+#define KIT_ASK_AIM_S 0.1f   /* a VIEW gun's aim moved more than KIT_ASK_AIM_DEG: told again this soon */
+#define KIT_ASK_AIM_DEG 0.5f
 #define KIT_ASK_HOLD 0.5f
 #define KIT_INBOX 64
-typedef struct KitAsk { uint8_t version, slot, seat, held; uint32_t network; } KitAsk; /* seat 1 .., 0 left */
+typedef struct KitAsk { uint8_t version, slot, seat, held; uint32_t network; int16_t yaw, pitch; } KitAsk; /* seat 1 .., 0 left; aim centidegrees */
 static KitAsk g_kitInbox[KIT_INBOX];
 static uint32_t g_kitInboxCount;
 static SRWLOCK g_kitInboxLock = SRWLOCK_INIT;
 
-/* A joiner: this machine's seat and trigger on the gun, to the host. */
-static void KitAskHost(MvUnit* m, uint32_t slot, uint32_t seat, int held, float dt)
+/* A joiner: this machine's seat, trigger and (SDK 56) wanted turret aim on the gun, to the host. */
+static void KitAskHost(MvUnit* m, uint32_t slot, uint32_t seat, int held, const float aim[2], float dt)
 {
     const int same = seat == m->gunSentSeat[slot] && (held != 0) == m->gunSentHeld[slot];
-    if (same && (!seat || (m->gunSent[slot] -= dt) > 0)) return;
+    const int moved = seat && (fabsf(aim[0] - m->gunSentYaw[slot]) > KIT_ASK_AIM_DEG || fabsf(aim[1] - m->gunSentPitch[slot]) > KIT_ASK_AIM_DEG);
+    m->gunSent[slot] -= dt;
+    if (same && (!seat || m->gunSent[slot] > 0) && !(moved && m->gunSent[slot] <= KIT_ASK_S - KIT_ASK_AIM_S)) return;
     uint32_t unit = 0, network = WC_NO_NETWORK;
     if (!WcEntity(m->entity, &unit, &network) || network == WC_NO_NETWORK) return; /* no network id yet: asked again next update */
-    const KitAsk ask = {KIT_ASK_VERSION, (uint8_t)slot, (uint8_t)seat, (uint8_t)(held != 0), network};
+    const KitAsk ask = {KIT_ASK_VERSION, (uint8_t)slot, (uint8_t)seat, (uint8_t)(held != 0), network,
+        (int16_t)lroundf(MvClamp(aim[0], -180, 180) * 100), (int16_t)lroundf(MvClamp(aim[1], -90, 90) * 100)};
     char hex[sizeof ask * 2 + 1], line[64 + sizeof hex];
     ChannelHex((const uint8_t*)&ask, sizeof ask, hex);
     snprintf(line, sizeof line, "send\t%s\thost\t%s", KIT_CHANNEL, hex);
     LiveQueue(line);
     m->gunSentSeat[slot] = (uint8_t)seat;
     m->gunSentHeld[slot] = (uint8_t)(held != 0);
+    m->gunSentYaw[slot] = aim[0]; m->gunSentPitch[slot] = aim[1];
     m->gunSent[slot] = KIT_ASK_S;
 }
 
@@ -189,40 +216,88 @@ static void KitTake(void)
         if (m == NULL || in[k].seat == 0) continue;
         m->gunRemote[in[k].slot][in[k].seat - 1] = KIT_ASK_HOLD;
         m->gunRemoteHeld[in[k].slot][in[k].seat - 1] = in[k].held;
+        m->gunRemoteYaw[in[k].slot][in[k].seat - 1] = in[k].yaw / 100.0f;
+        m->gunRemotePitch[in[k].slot][in[k].seat - 1] = in[k].pitch / 100.0f;
     }
 }
 
-/* Whether the gun's trigger is held this update, by whoever sits in its highest-priority taken seat (m->gunSeat). A
- * joiner only knows its own seat; the host also has the joiners' (KitTake). */
-static int KitHeld(MvUnit* m, const KitGun* g, const float w[16], float dt, int joiner)
+/* SDK 56: where this machine's camera looks, as a VIEW gun's yaw and pitch from its pivot (degrees, its arc's
+ * clamp): the first thing the camera's ray hits within KIT_VIEW_REACH, so the rounds cross the view's line there
+ * rather than run parallel to it a camera's offset away. 0: no camera this frame. */
+#define KIT_VIEW_REACH 600.0f
+static int KitViewAim(const MvUnit* m, const HfFixedGunDef* d, const float w[16], float aim[2])
+{
+    float v[16], to[3], pivot[3], dir[3], local[3];
+    if (!TcamView(v)) return 0;
+    const float* f = v + 4;
+    for (int k = 0; k < 3; k++) to[k] = v[12 + k] + f[k] * KIT_VIEW_REACH;
+    HfSight how = {sizeof how, {m->unit, 0, 0, 0}, 0.5f, 0};
+    HfSightHit hit = {0};
+    if (ApiLineOfSight(&g_mvMod, v + 12, to, &how, &hit) == HF_SIGHT_BLOCKED) memcpy(to, hit.position, sizeof to);
+    KitToWorld(w, d->pivot, 1, pivot);
+    for (int k = 0; k < 3; k++) dir[k] = to[k] - pivot[k] + w[12 + k]; /* a direction, as a point off the root */
+    KitToLocal(w, dir, local);
+    const float h = sqrtf(local[0] * local[0] + local[1] * local[1]);
+    if (h < 1e-4f && fabsf(local[2]) < 1e-4f) return 0;
+    aim[0] = MvClamp(atan2f(local[0], local[1]) * 57.29578f, -d->aim_yaw, d->aim_yaw);
+    aim[1] = MvClamp(atan2f(local[2], h) * 57.29578f, d->aim_pitch_min, d->aim_pitch_max);
+    return 1;
+}
+
+/* Whether the gun's trigger is held this update, by whoever sits in its highest-priority taken seat (m->gunSeat), and
+ * (SDK 56) that seat's wanted aim for a VIEW gun. A joiner only knows its own seat; the host also has the joiners'
+ * (KitTake). */
+static int KitHeld(MvUnit* m, const KitGun* g, const float w[16], float dt, int joiner, float want[2])
 {
     const uint32_t s = g->slot, mine = KitSeatOf(&g->def, w);
     const int pressed = mine && KitTrigger(g->def.trigger);
-    if (joiner) KitAskHost(m, s, mine, pressed, dt);
+    float myAim[2] = {m->gunYaw[s], m->gunPitch[s]};
+    const int view = g->def.aim == HF_GUN_AIM_VIEW && mine && KitViewAim(m, &g->def, w, myAim);
+    if (joiner) KitAskHost(m, s, mine, pressed, myAim, dt);
     uint32_t top = 0;
     int held = 0;
+    want[0] = m->gunYaw[s]; want[1] = m->gunPitch[s];
     for (uint32_t i = MV_GUN_SEATS; i-- > 0;)
     {
         const int theirs = !joiner && m->gunRemote[s][i] > 0;
         if (theirs) m->gunRemote[s][i] -= dt;
-        if (mine == i + 1) top = i + 1, held = pressed;
-        else if (theirs) top = i + 1, held = m->gunRemoteHeld[s][i];
+        if (mine == i + 1) { top = i + 1, held = pressed; if (view) want[0] = myAim[0], want[1] = myAim[1]; }
+        else if (theirs) { top = i + 1, held = m->gunRemoteHeld[s][i]; want[0] = m->gunRemoteYaw[s][i]; want[1] = m->gunRemotePitch[s][i]; }
     }
     m->gunSeat[s] = (uint8_t)top;
     m->gunSeated[s] = top != 0;
     return held;
 }
 
+/* SDK 56: a VIEW gun slews toward the wanted aim at aim_speed (it stays where it is with nobody in its seats), and the
+ * barrels spin up over spool seconds while the trigger is held and down as fast when it isn't. */
+static void KitSlew(MvUnit* m, const HfFixedGunDef* d, uint32_t s, const float want[2], int held, float dt)
+{
+    if (d->aim == HF_GUN_AIM_VIEW)
+    {
+        const float step = (d->aim_speed > 0 ? d->aim_speed : 120.0f) * dt;
+        m->gunYaw[s] = MvToward(m->gunYaw[s], MvClamp(want[0], -d->aim_yaw, d->aim_yaw), step);
+        m->gunPitch[s] = MvToward(m->gunPitch[s], MvClamp(want[1], d->aim_pitch_min, d->aim_pitch_max), step);
+    }
+    const int turning = held && m->gunBurst[s] > 0 && m->gunRounds[s] > 0;
+    if (d->spool <= 0) m->gunSpin[s] = turning ? 1.0f : 0.0f;
+    else m->gunSpin[s] = MvClamp(m->gunSpin[s] + (turning ? dt : -dt) / d->spool, 0, 1);
+}
+
+#define KIT_SPIN_FIRES 0.05f /* the barrels' share of full speed from which a spooling gun fires */
+
 static void KitFire(MvUnit* m, const KitGun* g, const float w[16], float dt, int joiner)
 {
     const HfFixedGunDef* d = &g->def;
     const uint32_t s = g->slot;
+    float want[2];
     m->gunWait[s] = fmaxf(m->gunWait[s] - dt, -dt);
-    const int held = KitHeld(m, g, w, dt, joiner);
+    const int held = KitHeld(m, g, w, dt, joiner, want);
     if (held && !m->gunHeld[s]) m->gunBurst[s] = d->burst ? d->burst : 0xFFFFFFFFu; /* a new press */
     m->gunHeld[s] = (uint8_t)held;
-    m->gunFiring[s] = held && m->gunBurst[s] > 0 && m->gunRounds[s] > 0;
-    const float period = 60.0f / d->fire_rate;
+    KitSlew(m, d, s, want, held, dt);
+    m->gunFiring[s] = held && m->gunBurst[s] > 0 && m->gunRounds[s] > 0 && m->gunSpin[s] >= KIT_SPIN_FIRES;
+    const float period = 60.0f / (d->fire_rate * fmaxf(m->gunSpin[s], KIT_SPIN_FIRES));
     for (int shots = 0; m->gunFiring[s] && shots < KIT_MAX_SHOTS && m->gunWait[s] <= 0 && m->gunRounds[s] > 0 && m->gunBurst[s] > 0; shots++)
     {
         if (!joiner && !KitShot(m, g, w, period)) { m->gunWait[s] = 1.0f; return; }
@@ -360,6 +435,14 @@ static void KitTick(MvUnit* m, float dt)
     for (LONG i = 0; i < g_kitGunCount; i++) if (g_kitGuns[i].def.entity == resource) KitFire(m, &g_kitGuns[i], w, dt, joiner);
 }
 
+/* SDK 56: whether the mover carries a gun aimed by the camera (HF_GUN_AIM_VIEW): mouse_steer then leaves the view's
+ * pitch to the gun, and a helicopter's collective to Space and Control (movers_view.c). */
+static int KitViewGun(uint64_t resource)
+{
+    for (LONG i = 0; i < g_kitGunCount; i++) if (g_kitGuns[i].def.entity == resource && g_kitGuns[i].def.aim == HF_GUN_AIM_VIEW) return 1;
+    return 0;
+}
+
 /* A zone broke: its effect on the unit (the slowest sink of all broken zones, their spins added). */
 static void ZnBreak(MvUnit* m, const struct KitZone* z)
 {
@@ -454,11 +537,23 @@ static const char* KitPointsRefusal(const HfFixedGunDef* d)
     return NULL;
 }
 
+/* SDK 56: its spool and turret arc in range: NULL, or why not. */
+static const char* KitAimRefusal(const HfFixedGunDef* d)
+{
+    if (!AiIn(d->spool, 0, 30) || d->aim > HF_GUN_AIM_VIEW || !AiIn(d->aim_speed, 0, 1000))
+        return "spool 0 .. 30 s, aim NOSE or VIEW, aim_speed 0 .. 1000";
+    if (d->aim != HF_GUN_AIM_VIEW) return NULL;
+    if (!AiIn(d->aim_yaw, 0, 180) || !AiIn(d->aim_pitch_min, -90, 90) || !AiIn(d->aim_pitch_max, -90, 90) || d->aim_pitch_min > d->aim_pitch_max)
+        return "aim VIEW: aim_yaw 0 .. 180, aim_pitch_min <= aim_pitch_max within -90 .. 90";
+    for (int k = 0; k < 3; k++) if (!AiIn(d->pivot[k], -50, 50)) return "aim VIEW: pivot within 50 m of its root";
+    return NULL;
+}
+
 static const char* KitGunRefusal(const HfFixedGunDef* in, HfFixedGunDef* d)
 {
     if (in == NULL || in->size < offsetof(HfFixedGunDef, fallback_seats) || in->entity == 0) return "no HfFixedGunDef, its size or its entity";
     memset(d, 0, sizeof *d);
-    memcpy(d, in, in->size < sizeof *d ? in->size : sizeof *d); /* an SDK 47 mod's has no fallback seats */
+    memcpy(d, in, in->size < sizeof *d ? in->size : sizeof *d); /* an SDK 47 mod's has no fallback seats, an SDK 53 one's no spool or aim */
     d->size = sizeof *d;
     if (!d->trigger) d->trigger = HF_TRIGGER_FIRE;
     if (!d->rounds) d->rounds = 100;
@@ -467,7 +562,9 @@ static const char* KitGunRefusal(const HfFixedGunDef* in, HfFixedGunDef* d)
     if (d->trigger > HF_TRIGGER_ALT || d->projectile == 0 || !AiIn(d->fire_rate, 1, 6000) || d->rounds > 100000 || !AiIn(d->spread, 0, 30) ||
         !AiIn(d->converge, 0, 2000) || !AiIn(d->recoil, 0, 1e6f))
         return "trigger FIRE or ALT, a projectile, fire_rate 1 .. 6000, rounds up to 100000, spread 0 .. 30, converge 0 .. 2000, recoil 0 .. 1e6";
-    const char* where = KitPointsRefusal(d);
+    const char* where = KitAimRefusal(d);
+    if (where) return where;
+    where = KitPointsRefusal(d);
     if (where) return where;
     return KitSlot(d->entity, 0) >= MV_KIT_SLOTS ? "8 guns on that mover already" : NULL;
 }
@@ -493,13 +590,20 @@ static uint32_t ApiAddFixedGun(HfMod* mod, const HfFixedGunDef* in)
     if (taken) { ApiLog(mod, "add_fixed_gun: refused: that mover has all its guns already"); return 0; }
     ApiLog(mod, "add_fixed_gun(%016llx): gun %u, projectile %u, %.0f rpm, %u rounds, %s, at %.2f %.2f %.2f", (unsigned long long)d.entity, slot + 1,
         d.projectile, (double)d.fire_rate, d.rounds, d.trigger == HF_TRIGGER_ALT ? "aim button" : "fire button", (double)d.muzzle[0], (double)d.muzzle[1], (double)d.muzzle[2]);
+    if (d.spool > 0 || d.aim == HF_GUN_AIM_VIEW)
+        ApiLog(mod, "add_fixed_gun(%016llx): gun %u spools up in %.1f s; aim %s", (unsigned long long)d.entity, slot + 1, (double)d.spool,
+            d.aim == HF_GUN_AIM_VIEW ? "the camera's, within its arc" : "the nose");
+    if (d.aim == HF_GUN_AIM_VIEW)
+        ApiLog(mod, "add_fixed_gun(%016llx): gun %u turns %.0f deg either side, %.0f .. %.0f deg up, %.0f deg/s, pivot %.2f %.2f %.2f",
+            (unsigned long long)d.entity, slot + 1, (double)d.aim_yaw, (double)d.aim_pitch_min, (double)d.aim_pitch_max,
+            (double)(d.aim_speed > 0 ? d.aim_speed : 120.0f), (double)d.pivot[0], (double)d.pivot[1], (double)d.pivot[2]);
     return slot + 1;
 }
 
 static uint32_t ApiFixedGunState(HfMod* mod, uint32_t entity, uint32_t gun, HfFixedGunState* out)
 {
     (void)mod;
-    if (out == NULL || out->size < offsetof(HfFixedGunState, seat) || gun == 0 || gun > MV_KIT_SLOTS) return 0; /* SDK 47's has no seat */
+    if (out == NULL || out->size < offsetof(HfFixedGunState, seat) || gun == 0 || gun > MV_KIT_SLOTS) return 0; /* SDK 47's has no seat, SDK 53's no spin or aim */
     const uint32_t size = out->size < sizeof *out ? out->size : (uint32_t)sizeof *out;
     uint32_t found = 0;
     AcquireSRWLockShared(&g_mvLock);
@@ -510,7 +614,7 @@ static uint32_t ApiFixedGunState(HfMod* mod, uint32_t entity, uint32_t gun, HfFi
             {
                 const uint32_t s = gun - 1;
                 const HfFixedGunState state = {size, m->kitInit ? m->gunRounds[s] : g_kitGuns[i].def.rounds, g_kitGuns[i].def.rounds,
-                    m->gunFiring[s], m->gunSeated[s], m->gunSeat[s]};
+                    m->gunFiring[s], m->gunSeated[s], m->gunSeat[s], m->gunSpin[s], m->gunYaw[s], m->gunPitch[s]};
                 memcpy(out, &state, size);
                 found = 1;
             }

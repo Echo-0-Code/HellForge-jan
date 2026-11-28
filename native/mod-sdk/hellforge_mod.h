@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define HF_MOD_SDK_VERSION 55
+#define HF_MOD_SDK_VERSION 56
 #define HF_WEAPON_PAINTS 1 /* HfWeapon.paints exists */
 #define HF_MOD_EXPORT __declspec(dllexport)
 
@@ -1826,6 +1826,8 @@ typedef struct HfApi
      * of every machine (a local write, nothing is sent); HellForge puts 1 back when the mod is taken out. 1 done, 0 the
      * entity has no visibility record (or the call is refused; the log says why). */
     int (*set_visibility)(HfMod* mod, uint32_t entity, float scale);
+    /* SDK 56 adds no call: HfFixedGunDef (spool, a camera-aimed turret), HfFixedGunState and HfMoverState (a flier's
+     * thrust) grow in hellforge_move.h (docs/modding/movers.md). Check hf->version >= 56 before setting them. */
 } HfApi;
 
 /* SDK 6: an HfMod starts with the API, so these need only the mod. */

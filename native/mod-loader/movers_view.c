@@ -85,6 +85,7 @@ static void ViewSteer(MvUnit* m, const MvDef* def, float dt)
     m->viewSteer = ViewEase(m->viewSteer, fabsf(m->seatKeys) < 0.1f ? ViewTurn(m, d, e) : m->steer, roll, dt);
     if (fabsf(m->seatKeys) < 0.1f) m->steer = m->viewSteer;
     if (d->mode != HF_MOVE_PLANE && d->mode != HF_MOVE_HELI) return;
+    if (d->mode == HF_MOVE_HELI && KitViewGun(d->entity)) return; /* SDK 56: the view's pitch aims its chin gun */
     m->viewLift = ViewEase(m->viewLift, m->seatLift == 0 ? ViewLift(m, d, atan2f(f[2], h)) : m->lift, VW_LIFT_RATE, dt);
     if (m->seatLift == 0) m->lift = m->viewLift;
 }

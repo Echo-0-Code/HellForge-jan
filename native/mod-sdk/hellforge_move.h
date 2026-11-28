@@ -157,7 +157,20 @@ typedef struct HfFixedGunDef
      * climbs in takes it over. One gun, one rate and one magazine whichever seat fires it. Any player, host or not. */
     float fallback_seats[HF_GUN_FALLBACK_SEATS][3];
     uint32_t fallback_count; /* how many of fallback_seats are used, 0 .. HF_GUN_FALLBACK_SEATS */
+    /* SDK 56 (an SDK 53 size moves with the fields above) */
+    float spool;          /* seconds a rotary gun's barrels take from still to fire_rate; it fires as they speed up, slows
+                           * down as fast when let go, and fixed_gun_state's spin shows them (0: full rate at once) */
+    uint32_t aim;         /* HF_GUN_AIM_NOSE (default) or HF_GUN_AIM_VIEW: a chin turret that turns toward what the
+                           * firing seat's camera looks at, within the arc below */
+    float aim_yaw;        /* HF_GUN_AIM_VIEW: degrees it turns either side of the nose, 0 .. 180 */
+    float aim_pitch_min, aim_pitch_max; /* HF_GUN_AIM_VIEW: degrees down (negative) and up, -90 .. 90 */
+    float aim_speed;      /* HF_GUN_AIM_VIEW: degrees a second it slews, both axes (default 120) */
+    float pivot[3];       /* HF_GUN_AIM_VIEW: the turret's pivot in the mover's frame; the muzzle swings round it */
 } HfFixedGunDef;
+
+#define HF_GUN_AIM_NOSE 0u /* SDK 56: HfFixedGunDef.aim: along the nose (converge, as before) */
+#define HF_GUN_AIM_VIEW 1u /* SDK 56: toward the firing seat's camera, within aim_yaw and aim_pitch_min .. max */
+#define HF_FIXED_GUN_DEF_SIZE_53 ((uint32_t)offsetof(HfFixedGunDef, spool))
 
 /* fixed_gun_state's answer: one gun on one unit */
 typedef struct HfFixedGunState
@@ -168,7 +181,13 @@ typedef struct HfFixedGunState
     uint32_t firing;      /* 1 while it fires */
     uint32_t seated;      /* 1 while a Helldiver sits in a seat that fires it (the host sees joiners' too) */
     uint32_t seat;        /* SDK 53: the seat that fires it now: 1 `seat`, 2 .. fallback_seats[0 ..], 0 none */
+    /* SDK 56 (an SDK 53 size gets the fields above) */
+    float spin;           /* the barrels' speed, 0 still .. 1 at fire_rate (1 without spool while it fires) */
+    float aim_yaw, aim_pitch; /* HF_GUN_AIM_VIEW: degrees it points now, right and up of the nose (0 for NOSE): pose
+                           * the turret's joints with them. This machine's: its own seat's camera, the host also a joiner's */
 } HfFixedGunState;
+
+#define HF_FIXED_GUN_STATE_SIZE_53 ((uint32_t)offsetof(HfFixedGunState, spin))
 
 /* SDK 47: damage zones on a mover's units (add_damage_zone): spheres in its frame that take the hits landing in them
  * (HF_ON_DAMAGE_PRE's position, before armour) and break, with an effect. Host. */
@@ -262,7 +281,14 @@ typedef struct HfMoverState
     float boost_left;     /* seconds of boost left */
     uint32_t boosting;    /* 1 while it boosts */
     float strafe, lift;   /* the inputs it moves by now */
+    /* SDK 56 (an SDK 37 size gets the fields above) */
+    float thrust;         /* a flier: a helicopter's thrust over its weight now (0 .. thrust_max: 1 holds its height),
+                           * a plane's wing lift over its weight; 0 for the rest. Another machine's copy reads it from
+                           * how it climbs, smoothed: drive a wing beat or rotor sound with it on every machine */
+    float vertical_speed; /* m/s up (negative down) */
 } HfMoverState;
+
+#define HF_MOVER_STATE_SIZE_37 ((uint32_t)offsetof(HfMoverState, thrust))
 
 #define HF_MOVER_STATE_SIZE_36 ((uint32_t)offsetof(HfMoverState, pitch))
 

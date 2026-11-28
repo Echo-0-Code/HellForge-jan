@@ -73,6 +73,12 @@ typedef struct MvUnit
     /* SDK 48 (movers_view.c): mouse_steer's throttle lever, whether this machine's Helldiver drives it, and A/D */
     float seatLever, seatKeys, viewSteer, viewLift; /* viewSteer, viewLift: the view's asks, eased in */
     uint32_t seatLocal;
+    /* SDK 56: a flier's thrust over its weight and vertical speed (movers_fly.c; a copy's from its climb), and its guns'
+     * barrel spin and turret aim (movers_kit.c): this machine's, a joiner's wanted aim on the host, what a joiner sent */
+    float flThrust, vz, vzSeen, zSeen;
+    float gunSpin[MV_KIT_SLOTS], gunYaw[MV_KIT_SLOTS], gunPitch[MV_KIT_SLOTS];
+    float gunRemoteYaw[MV_KIT_SLOTS][MV_GUN_SEATS], gunRemotePitch[MV_KIT_SLOTS][MV_GUN_SEATS], gunSentYaw[MV_KIT_SLOTS], gunSentPitch[MV_KIT_SLOTS];
+    uint32_t zSeenOk;
 } MvUnit;
 
 static MvDef g_mvDefs[MV_DEFS];
@@ -1008,9 +1014,10 @@ static void MvSnapshot(const MvUnit* m, HfMoverState* s)
     s->yaw = m->yaw; s->speed = m->speed; s->turning = m->turning; s->throttle = m->throttle; s->steer = m->steer;
     s->height = m->height; s->water_depth = m->waterDepth; s->grade = m->grade; s->driven = m->driven;
     s->pitch = m->pitch; s->roll = m->roll; s->boost_left = m->boostLeft; s->boosting = m->boosting; s->strafe = m->strafe; s->lift = m->lift;
+    s->thrust = m->flThrust; s->vertical_speed = m->vz;
 }
 
-/* SDK 35, mover_state: how a mover's unit moves (HF_MOVER_...). Any thread; an SDK 35 size gets SDK 35's fields. */
+/* SDK 35, mover_state: how a mover's unit moves (HF_MOVER_...). Any thread; an older size gets its SDK's fields. */
 static uint32_t ApiMoverState(HfMod* mod, uint32_t entity, HfMoverState* state)
 {
     (void)mod;
@@ -1019,7 +1026,8 @@ static uint32_t ApiMoverState(HfMod* mod, uint32_t entity, HfMoverState* state)
     AcquireSRWLockShared(&g_mvLock);
     MvSnapshot(MvUnitOf(entity), &s);
     ReleaseSRWLockShared(&g_mvLock);
-    const uint32_t n = state == NULL ? 0 : state->size >= sizeof s ? (uint32_t)sizeof s : state->size >= HF_MOVER_STATE_SIZE_36 ? HF_MOVER_STATE_SIZE_36
+    const uint32_t n = state == NULL ? 0 : state->size >= sizeof s ? (uint32_t)sizeof s : state->size >= HF_MOVER_STATE_SIZE_37 ? HF_MOVER_STATE_SIZE_37
+        : state->size >= HF_MOVER_STATE_SIZE_36 ? HF_MOVER_STATE_SIZE_36
         : state->size >= HF_MOVER_STATE_SIZE_35 ? HF_MOVER_STATE_SIZE_35 : 0;
     s.size = n;
     if (n) memcpy(state, &s, n);

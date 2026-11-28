@@ -12,6 +12,10 @@ On `dev`, since 0.5.0-beta.
 
 ### Added
 
+- **Gun turrets and spin-up for fliers' fixed guns, and a flier's thrust (SDK 56).** `HfFixedGunDef.spool` gives a
+  rotary gun its spin-up. `aim` `HF_GUN_AIM_VIEW` makes it a chin turret that follows the firing seat's camera within
+  an arc, a joiner's included. `mover_state` gives a flier's `thrust` and `vertical_speed`, so a mod can animate rotors
+  or wings with them on every machine.
 - **Weapon paints without code.** A mod lists its paints under `paints` in `hellforge-data.json`: a base paint, a
   colour table edit and camo shapes by name. HellForge builds the colour tables and adds the paints, so a paint mod
   needs no C.

@@ -84,6 +84,7 @@ static float FlHeliHeave(MvUnit* m, const HfMoverDef* d, const float p[3], float
     const int flatten = down && low && (fabsf(vz) < 0.25f || m->flPitch < 1.0f); /* once begun, a gear bounce can't stop it */
     m->flPitch = MvClamp(m->flPitch + (flatten ? -dt : dt) / FL_PITCH_S, 0, 1);
     const float thrust = m->flPitch * fminf(expf((m->flWant - alt) / scale), d->thrust_max); /* times its weight */
+    m->flThrust = thrust * (1.0f - h->carried); /* SDK 56: mover_state's thrust, the share its rotor carries */
     float az = (1.0f - h->carried) * MV_G * thrust - 2 * h->damping * wn * vz;
     if (m->znSink > 0) az = fmaxf(fminf(az, (1.0f - h->carried) * MV_G + 2.0f * (-m->znSink - vz)), 0); /* sinks at znSink */
     return az;
@@ -129,6 +130,25 @@ static void FlUp(const HfMoverDef* d, const float fl[2], const float v[3], const
     n[0] /= l; n[1] /= l; n[2] /= l;
 }
 
+/* SDK 56: another machine's flier, a physics body the engine replicates: its vertical speed from its root's height and
+ * its thrust over its weight from its climb's change, (g + dvz/dt) / g, both eased over FL_COPY_S so a frame's jitter
+ * doesn't flicker a wing beat or a rotor sound. */
+#define FL_COPY_S 0.3f
+static void FlCopyClimb(MvUnit* m, float dt)
+{
+    float p[3];
+    if (dt <= 0 || !m->unit || !EvpUnitPosition(m->unit, p) || !isfinite(p[2])) { m->zSeenOk = 0; return; }
+    const float k = fminf(1.0f, dt / FL_COPY_S);
+    if (m->zSeenOk)
+    {
+        const float vz = (p[2] - m->zSeen) / dt, was = m->vz;
+        m->vz += (MvClamp(vz, -80, 80) - m->vz) * k;
+        m->flThrust += (MvClamp(1.0f + (m->vz - was) / (dt * MV_G), 0, 3) - m->flThrust) * k;
+    }
+    m->zSeen = p[2];
+    m->zSeenOk = 1;
+}
+
 /* One update of a flier on the machine that simulates it. */
 static void FlControl(MvUnit* m, const MvDef* def, float dt)
 {
@@ -136,7 +156,8 @@ static void FlControl(MvUnit* m, const MvDef* def, float dt)
     float w[16], v[3] = {0}, om[3] = {0};
     if (!HvRead(m, w, v, om)) return;
     const float gap = FlGap(m, def, w + 12, dt), mass = d->hover.mass;
-    if (!m->engaged) { m->status = HF_MOVER_WAITING; return; }
+    m->vz = v[2];
+    if (!m->engaged) { m->status = HF_MOVER_WAITING; m->flThrust = 0; return; }
     m->status = HF_MOVER_MOVING;
     float fl[2] = {-sinf(m->yaw), cosf(m->yaw)}, a[2] = {0, 0}, yawRate = 0, n[3];
     const int plane = d->mode == HF_MOVE_PLANE, onGround = gap < d->hover.height_min + FL_GEAR;
@@ -147,6 +168,7 @@ static void FlControl(MvUnit* m, const MvDef* def, float dt)
     {
         FlTarget(m, &d->hover, w[14] - gap - m->flDatum, dt, vf >= d->stall_speed);
         az = FlHeave(m, &d->hover, gap, v[2], onGround ? 1.0f : wing);
+        m->flThrust = az / MV_G; /* SDK 56: what its wings carry, times its weight */
         FlPlaneDrive(m, def, fl, v, dt, a, &yawRate);
     }
     else { az = FlHeliHeave(m, d, w + 12, gap, v[2], dt); HvDrive(m, def, fl, v, dt, a, &yawRate); }

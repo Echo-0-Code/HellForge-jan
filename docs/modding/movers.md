@@ -253,6 +253,33 @@ uint32_t id = api->add_fixed_gun(mod, &gun);
 - Points are metres in the mover's frame: x right, y forward, z up.
 - `fixed_gun_state` reads a unit's rounds. `fixed_gun_refill` adds rounds, 0 for full.
 
+### Spin-up and a chin turret (SDK 56)
+
+`spool` gives a rotary gun its spin-up: the seconds its barrels take from still to `fire_rate`. It fires as they speed
+up, from a twentieth of the rate, and slows down as fast when the trigger is let go.
+
+`aim` `HF_GUN_AIM_VIEW` makes the gun a chin turret that turns toward what the firing seat's camera looks at:
+
+```c
+gun.spool = 0.5f;
+gun.aim = HF_GUN_AIM_VIEW;
+gun.aim_yaw = 100.0f;                          /* either side of the nose */
+gun.aim_pitch_min = -60.0f; gun.aim_pitch_max = 15.0f;
+gun.aim_speed = 120.0f;                        /* degrees a second */
+gun.pivot[1] = 2.75f; gun.pivot[2] = 1.45f;    /* the turret's pivot; the muzzle swings round it */
+```
+
+- It aims at the first thing the camera's line hits within 600 m, so its rounds cross that line there.
+- It slews at `aim_speed` and stops at the edge of its arc. With nobody in its seats it stays where it points.
+- A joiner's camera aims it too: the joiner's machine sends its aim to the host, which fires the shot.
+- `converge` doesn't apply. `spread` and `recoil` do.
+- A `mouse_steer` helicopter with a turret like this turns toward the view, but the view's pitch aims the gun.
+  Space and Control move its collective.
+
+`fixed_gun_state` gives `spin` (0 still, 1 at `fire_rate`) and `aim_yaw`, `aim_pitch` (degrees right and up of the
+nose). Pose the turret's joints and turn its barrels with them in an `on_render` callback ([world.md](world.md)). The
+host sees each seat's aim; another joiner's machine sees only its own.
+
 ## Damage zones
 
 SDK 47's `add_damage_zone` puts a sphere on a mover that takes the hits landing in it.
@@ -440,6 +467,12 @@ the same animation code works there.
 | `throttle`, `steer` | The inputs it moves by now |
 | `height`, `water_depth`, `grade`, `driven` | SDK 36: a hover's height, the water there, the slope ahead, the axles pushing |
 | `pitch`, `roll`, `boost_left`, `boosting`, `strafe`, `lift` | SDK 37: its tilt in radians, its boost, the two new inputs |
+| `thrust`, `vertical_speed` | SDK 56: a flier's thrust over its weight, and m/s up (see below) |
+
+SDK 56's `thrust` is a helicopter's thrust over its weight now: 1 holds its height, more climbs, `thrust_max` at
+most, near 0 with its blades flat on its gear. A plane's is what its wings carry over its weight. Other movers give 0.
+On the other players' machines a flier is the engine's copy, so `thrust` there comes from how it climbs, eased over
+0.3 s. Drive a rotor's pitch, a wing beat or an engine sound with it on every machine.
 
 ## Change it live
 
