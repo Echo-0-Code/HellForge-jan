@@ -49,24 +49,41 @@ public sealed class StatsSync
         foreach (var (category, targets) in root)
         {
             if (targets is not JsonObject byTarget || StatsSchema.Current.Targets.GetValueOrDefault(category) is not { } section) continue;
+            var renamed = StatsSchema.Current.TargetAliases.GetValueOrDefault(category);
             foreach (var (name, entry) in byTarget)
             {
-                if (entry is not JsonObject fields || section.GetValueOrDefault(name) is not { } target) continue;
-                ReadTarget(fields, target, values, ref bootOnly);
+                if (entry is not JsonObject fields) continue;
+                // A target only a session start resolves (a mod's row by name, an explosion by type) is counted, not lost.
+                if (section.GetValueOrDefault(renamed?.GetValueOrDefault(name, name) ?? name) is not { } target) { bootOnly += fields.Count; continue; }
+                ReadTarget(category, fields, target, values, ref bootOnly);
             }
         }
     }
 
     // One target's values. An "own" entry's apply from a session start, as do fields live editing does not reach: counted
     // in bootOnly.
-    static void ReadTarget(JsonObject fields, StatsTarget target, Dictionary<string, (StatsField Field, uint Bits)> values, ref int bootOnly)
+    // "spread" and "armorPenetration" name several fields, as StatsData reads them. A value that cannot go live (an
+    // unknown key, a reference by name) is counted too, so the log never says less than what stays this machine's.
+    static void ReadTarget(string category, JsonObject fields, StatsTarget target, Dictionary<string, (StatsField Field, uint Bits)> values, ref int bootOnly)
     {
         if (fields["own"] is JsonValue own && own.TryGetValue(out bool isOwn) && isOwn) { bootOnly += fields.Count - 1; return; }
         foreach (var (key, value) in fields)
         {
-            if (value == null || !target.Fields.TryGetValue(target.Aliases.GetValueOrDefault(key, key), out var field)) continue;
-            if (LiveApplies.Of(field) == null && !PipeOnly(field)) { bootOnly++; continue; }
-            if (StatsCatalog.TryParse(field, value.ToJsonString(), out _, out var bits, out _)) values[field.AddressKey] = (field, bits);
+            if (key == "own") continue;
+            var names = key switch
+            {
+                "spread" => new[] { "weapon.horizontal_spread", "weapon.vertical_spread" },
+                "armorPenetration" when category == "damage" => ["ap_direct", "ap_slight", "ap_large", "ap_extreme"],
+                _ => new[] { target.Aliases.GetValueOrDefault(key, key) }
+            };
+            for (var i = 0; i < names.Length; i++)
+            {
+                var one = key == "armorPenetration" && names.Length == 4 ? (value as JsonArray is { Count: 4 } four ? four[i] : null) : value;
+                if (one == null || !target.Fields.TryGetValue(names[i], out var field)) { bootOnly++; continue; }
+                if (LiveApplies.Of(field) == null && !PipeOnly(field)) { bootOnly++; continue; }
+                if (StatsCatalog.TryParse(field, one.ToJsonString(), out _, out var bits, out _)) values[field.AddressKey] = (field, bits);
+                else bootOnly++;
+            }
         }
     }
 
