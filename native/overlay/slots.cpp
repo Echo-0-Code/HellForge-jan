@@ -67,14 +67,14 @@ void FreeSlotLater(int slot)
 
 void ReleaseLater(IUnknown* object)
 {
-    if (object == NULL) return;
-    if (g_device12 == NULL) object->Release(); /* D3D11 keeps what its context still uses */
-    else g_later.push_back({object, -1, g_fenceValue});
+    if (object != NULL) g_later.push_back({object, -1, g_fenceValue});
 }
 
 void SweepLater()
 {
-    UINT64 done = CompletedFence();
+    /* D3D11 has no frames in flight (its context keeps what it still uses), only this frame's draw list, which names
+     * views without holding them: there the sweep comes after the list is drawn, and all of it is due. */
+    UINT64 done = g_device12 != NULL ? CompletedFence() : ~(UINT64)0;
     size_t kept = 0;
     for (const Later& l : g_later)
     {

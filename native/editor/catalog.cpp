@@ -25,11 +25,12 @@ int Category::Count() const
     return n;
 }
 
-std::vector<Object*> Catalog::Of(const std::string& nav) const
+const std::vector<Object*>& Catalog::Of(const std::string& nav) const
 {
-    std::vector<Object*> out;
-    for (auto& o : objects) if (o->category == nav) out.push_back(o.get());
-    return out;
+    static const std::vector<Object*> none;
+    for (; indexed < objects.size(); indexed++) byNav[objects[indexed]->category].push_back(objects[indexed].get());
+    auto found = byNav.find(nav);
+    return found != byNav.end() ? found->second : none;
 }
 
 const std::vector<Row*>& Catalog::Siblings(const Row* row) const

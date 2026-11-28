@@ -20,7 +20,7 @@ void DrawSearch(float y0, float h)
     searchOpts.shown = !empty;
     float tw = g_cv.Text(empty ? "Search every primary, secondary and throwable..." : g_gsearch.text, bx + 14, by + bh / 2, searchOpts);
     if (!empty && (int)(g_time * 2) % 2 == 0) g_cv.Rect(bx + 16 + tw, by + 10, 2, bh - 20, GOLD, 6);
-    auto results = SearchResults(g_gsearch.text);
+    const auto& results = SearchResults(g_gsearch.text);
     g_gsearch.index = std::clamp(g_gsearch.index, 0, std::max(0, (int)results.size() - 1));
     std::string info = empty ? Translated("Type to search. Every word must match, in any order.") :
         results.empty() ? Named("Nothing matches \"{1}\".", {g_gsearch.text}) : Translated(std::to_string(results.size()) + " results");
@@ -46,7 +46,7 @@ void DrawSearch(float y0, float h)
 void DrawChanges(float y0, float h)
 {
     float W = PANEL_W;
-    auto list = Changes();
+    const auto& list = Changes();
     g_change = std::clamp(g_change, 0, std::max(0, (int)list.size() - 1));
     g_cv.Rect(0, y0, W, h, PANEL, 1);
     g_cv.Text("CHANGES", 20, y0 + 24, T(20, TEXT, ui::TITLE));
@@ -80,7 +80,8 @@ void DrawChanges(float y0, float h)
         g_cv.Text(e.row->label, x + 330, cy, T(SZ_SMALL, TEXT, ui::BODY, ui::LEFT, lw - 330 - 450));
         LiveState& live = Live(e.row);
         g_cv.Text(live.read ? Format(e.row, live.base) : "\xE2\x80\x94", x + lw - 420, cy, T(SZ_SMALL, FAINT, ui::BODY, ui::RIGHT, 150));
-        g_cv.Text(e.reset && !live.read ? "\xE2\x80\x94" : Format(e.row, e.value), x + lw - 250, cy, T(SZ_LABEL, e.state == 1 ? PENDING : GOLD, ui::BODY, ui::RIGHT, 160));
+        /* a pending reset holds no value of its own: it goes back to the default */
+        g_cv.Text(e.reset && !live.read ? "\xE2\x80\x94" : Format(e.row, e.reset ? live.base : e.value), x + lw - 250, cy, T(SZ_LABEL, e.state == 1 ? PENDING : GOLD, ui::BODY, ui::RIGHT, 160));
         if (e.state == 1) Chip(e.reset ? "PENDING RESET" : "PENDING", x + lw - 112, cy, PENDING, PENDING_SOFT, true);
         else if (e.state == 2) Chip("ERROR", x + lw - 112, cy, ERROR_, ERROR_SOFT, true);
         else Chip(e.row->Live() || LiveStat(e.row) ? "EDITED" : "NEXT BOOT", x + lw - 112, cy, GOLD, GOLD_WASH, true);

@@ -36,47 +36,61 @@ void LogFilter()
     g_logs.index = std::clamp(g_logs.index, 0, std::max(0, (int)g_logs.shown.size() - 1));
 }
 
-/* The log's lines and their kinds (cut: the text starts within a line, which is left out; empty lines too). */
-static void LogLines(const std::string& text, bool cut)
+/* The lines of text from `start` on (text[0] is the file's byte `at`) and their kinds, after the ones held; empty lines
+ * are left out. A last line without its end is shown, and read again from its start once the log has grown. */
+static void LogAppend(const std::string& text, size_t start, uint64_t at)
 {
-    g_logs.lines.clear();
-    g_logs.kinds.clear();
-    size_t start = cut ? text.find('\n') + 1 : 0;
+    g_logs.partial = false;
     while (start < text.size())
     {
         size_t end = text.find('\n', start);
         std::string line = text.substr(start, end == std::string::npos ? std::string::npos : end - start);
         if (!line.empty() && line.back() == '\r') line.pop_back();
         if (!line.empty()) { g_logs.kinds.push_back(LogKind(line)); g_logs.lines.push_back(line); }
-        if (end == std::string::npos) break;
+        if (end == std::string::npos) { g_logs.partial = !line.empty(); break; }
         start = end + 1;
     }
+    g_logs.parsed = at + start;
 }
 
+/* A log that only grew is read from where the last read ended: reading and classifying megabytes again every second
+ * on the render thread shows as hitches. Its last LOG_KEEP bytes are read whole when asked to, when it is another file
+ * or a shorter one, and when the lines held have grown to twice that. */
 void LogRead(bool force)
 {
+    const uint64_t LOG_KEEP = 4u << 20;
     ULONGLONG now = GetTickCount64();
     if (!force && now - g_logs.checked < 1000) return;
     g_logs.checked = now;
     std::wstring path = LogPath(g_logs.source);
     HANDLE file = path.empty() ? INVALID_HANDLE_VALUE :
         CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, 0, nullptr);
-    if (file == INVALID_HANDLE_VALUE) { if (force) { g_logs.lines.clear(); g_logs.kinds.clear(); g_logs.path = path; LogFilter(); } return; }
+    if (file == INVALID_HANDLE_VALUE)
+    {
+        /* nothing of the file read before is held: when it is there again it is read from its start */
+        if (force) { g_logs.lines.clear(); g_logs.kinds.clear(); g_logs.path = path; g_logs.size = g_logs.from = g_logs.parsed = 0; g_logs.partial = false; LogFilter(); }
+        return;
+    }
     LARGE_INTEGER size;
     GetFileSizeEx(file, &size);
-    if (!force && path == g_logs.path && (uint64_t)size.QuadPart == g_logs.size) { CloseHandle(file); return; }
-    uint64_t keep = std::min<uint64_t>((uint64_t)size.QuadPart, 4u << 20); /* the last 4 MB */
+    uint64_t end = (uint64_t)size.QuadPart;
+    if (!force && path == g_logs.path && end == g_logs.size) { CloseHandle(file); return; }
+    bool grew = !force && path == g_logs.path && end > g_logs.size && end - g_logs.parsed <= LOG_KEEP && end - g_logs.from <= 2 * LOG_KEEP;
+    uint64_t from = grew ? g_logs.parsed : end - std::min(end, LOG_KEEP);
     LARGE_INTEGER at;
-    at.QuadPart = size.QuadPart - (LONGLONG)keep;
+    at.QuadPart = (LONGLONG)from;
     SetFilePointerEx(file, at, nullptr, FILE_BEGIN);
-    std::string text((size_t)keep, '\0');
+    std::string text((size_t)(end - from), '\0');
     DWORD read = 0;
-    ReadFile(file, &text[0], (DWORD)keep, &read, nullptr);
+    ReadFile(file, &text[0], (DWORD)text.size(), &read, nullptr);
     CloseHandle(file);
     text.resize(read);
     g_logs.path = path;
-    g_logs.size = (uint64_t)size.QuadPart;
-    LogLines(text, at.QuadPart > 0);
+    g_logs.size = from + read;
+    if (!grew) { g_logs.lines.clear(); g_logs.kinds.clear(); g_logs.from = from; }
+    else if (g_logs.partial) { g_logs.lines.pop_back(); g_logs.kinds.pop_back(); }
+    /* the last LOG_KEEP bytes start within a line, which is left out */
+    LogAppend(text, !grew && from > 0 ? text.find('\n') + 1 : 0, from);
     LogFilter();
 }
 

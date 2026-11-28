@@ -711,7 +711,8 @@ static double InRange(const Row* row, double next)
 
 void Nudge(const Row* row, int direction, bool shift, bool ctrl)
 {
-    if (!row->pick.empty() || !LockOf(row).empty() || !SlotBlock(row).empty()) return;
+    /* a packed input code is not a quantity: one step up or down is another code, or none */
+    if (row->code || !row->pick.empty() || !LockOf(row).empty() || !SlotBlock(row).empty()) return;
     RowView v = ViewOf(row);
     if (row->unlimited && NudgeUses(row, v.value, direction)) return;
     if (!row->choice.empty() || row->Valued()) { NudgeOption(row, v.value, direction); return; }

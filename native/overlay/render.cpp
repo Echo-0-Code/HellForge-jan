@@ -324,6 +324,7 @@ void Draw11(IDXGISwapChain3* chain)
     g_context11->OMGetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, saved.views, &saved.depth);
     g_context11->OMSetRenderTargets(1, &view, NULL);
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+    SweepLater(); /* what a screen freed while it drew this frame was still in the draw list */
     view->Release();
     PutBack(saved);
 }

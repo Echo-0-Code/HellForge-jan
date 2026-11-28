@@ -277,7 +277,7 @@ void List(const ListOpts& o);
 /* ---- the page, navigation, search, changes (app_page.cpp) ---- */
 const catalog::Nav* NavOf(int cat);
 std::string Lower(std::string s);
-std::vector<Object*> Objects();
+const std::vector<Object*>& Objects();
 Object* Current();
 /* The page's items: categories and parts (collapsible headers) and rows, as the HD2R Editor's field_items lays them out. */
 struct Item
@@ -306,7 +306,7 @@ void SelectObject(int i);
 bool GotoObject(const Object* object);
 void Reveal(const Row* row);
 struct Result { Object* object; std::string sub; bool prefix; int order; };
-std::vector<Result> SearchResults(const std::string& text);
+const std::vector<Result>& SearchResults(const std::string& text);
 struct Change { const Row* row; double value; int state; bool reset; }; /* state 0 edited, 1 pending, 2 error */
 const std::vector<Change>& Changes();
 
@@ -326,7 +326,9 @@ struct LogView
     int source = 0, filter = 0, index = 0;
     bool follow = true;
     std::wstring path;
-    uint64_t size = 0;
+    uint64_t size = 0; /* the file's, as last read */
+    uint64_t from = 0, parsed = 0; /* where in the file the lines held begin, and where the next ones do */
+    bool partial = false; /* the last line had no end yet */
     ULONGLONG checked = 0;
     std::vector<std::string> lines;
     std::vector<int> kinds; /* 0 info, 1 warning, 2 error */

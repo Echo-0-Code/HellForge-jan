@@ -89,11 +89,20 @@ static void PickerKeys(const std::vector<std::string>& chars, bool ctrl)
     if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) || Pressed(ImGuiKey_Delete)) { g_picker.on = false; Sound(sounds::BACK); }
 }
 
-/* The number being typed: digits and a decimal point (the first replaces a fresh buffer), and Backspace. */
+/* Whether the value being typed takes the character: a number's, or for an input code a direction's letter and what
+ * may stand between two. */
+static bool EditTakes(const std::string& c)
+{
+    return strchr(g_edit.row->code ? "UuRrDdLl ,-" : "0123456789.,-+eE", c[0]) != nullptr;
+}
+
+/* The value being typed: its characters (the first replaces a fresh buffer), and Backspace. An input code is longer
+ * than a number: ten arrows of three bytes with a space between two. */
 static void EditTyping(const std::vector<std::string>& chars)
 {
+    size_t room = g_edit.row->code ? 40 : 24;
     for (auto& c : chars)
-        if (strchr("0123456789.,-+eE", c[0]) && g_edit.buffer.size() < 24)
+        if (EditTakes(c) && g_edit.buffer.size() < room)
         {
             if (g_edit.fresh) { g_edit.buffer.clear(); g_edit.fresh = false; }
             g_edit.buffer += c;
@@ -101,14 +110,31 @@ static void EditTyping(const std::vector<std::string>& chars)
     if (Pressed(ImGuiKey_Backspace)) { if (g_edit.fresh) g_edit.buffer.clear(); else DropLast(g_edit.buffer); g_edit.fresh = false; }
 }
 
-/* A value being typed: Enter or Tab confirms it, Up and Down confirm and move, Del or Esc cancels. */
+/* An input code is made of the arrows, so there they are typed (as Format shows them) and do not leave the field. */
+static void CodeArrows()
+{
+    static const struct { ImGuiKey key; const char* arrow; } kArrows[] = {
+        {ImGuiKey_UpArrow, "\xE2\x86\x91"}, {ImGuiKey_RightArrow, "\xE2\x86\x92"},
+        {ImGuiKey_DownArrow, "\xE2\x86\x93"}, {ImGuiKey_LeftArrow, "\xE2\x86\x90"}};
+    for (auto& a : kArrows)
+    {
+        if (!Pressed(a.key) || g_edit.buffer.size() >= 40) continue;
+        if (g_edit.fresh) { g_edit.buffer.clear(); g_edit.fresh = false; }
+        if (!g_edit.buffer.empty()) g_edit.buffer += " ";
+        g_edit.buffer += a.arrow;
+    }
+}
+
+/* A value being typed: Enter or Tab confirms it, Up and Down confirm and move (in an input code they are typed),
+ * Del or Esc cancels. */
 static void EditKeys(const std::vector<std::string>& chars)
 {
     EditTyping(chars);
     if (Pressed(ImGuiKey_Enter) || Pressed(ImGuiKey_KeypadEnter) || Pressed(ImGuiKey_Tab)) CommitEdit();
+    else if (Pressed(ImGuiKey_Delete) || Pressed(ImGuiKey_Escape)) g_edit.on = false;
+    else if (g_edit.row->code) CodeArrows();
     else if (Pressed(ImGuiKey_UpArrow)) { CommitEdit(); g_field = std::max(0, g_field - 1); }
     else if (Pressed(ImGuiKey_DownArrow)) { CommitEdit(); g_field++; }
-    else if (Pressed(ImGuiKey_Delete) || Pressed(ImGuiKey_Escape)) g_edit.on = false;
 }
 
 /* BROWSE's search box: typing filters the objects, Tab or Enter is done, Esc clears and leaves it. */
@@ -146,7 +172,7 @@ static void SearchKeys(const std::vector<std::string>& chars)
     for (auto& c : chars) if (g_gsearch.text.size() < 40) { g_gsearch.text += c; g_gsearch.index = 0; }
     if (Pressed(ImGuiKey_Backspace)) { DropLast(g_gsearch.text); g_gsearch.index = 0; }
     if (Pressed(ImGuiKey_Delete)) { g_gsearch.text.clear(); g_gsearch.index = 0; }
-    auto results = SearchResults(g_gsearch.text);
+    const auto& results = SearchResults(g_gsearch.text);
     int n = std::max(1, (int)results.size());
     if (Pressed(ImGuiKey_UpArrow)) g_gsearch.index = std::max(0, g_gsearch.index - 1);
     if (Pressed(ImGuiKey_DownArrow)) g_gsearch.index = std::min(n - 1, g_gsearch.index + 1);
@@ -158,7 +184,7 @@ static void SearchKeys(const std::vector<std::string>& chars)
 
 static void ChangesKeys()
 {
-    auto list = Changes();
+    const auto& list = Changes();
     int n = std::max(1, (int)list.size());
     if (Pressed(ImGuiKey_UpArrow)) g_change = std::max(0, g_change - 1);
     if (Pressed(ImGuiKey_DownArrow)) g_change = std::min(n - 1, g_change + 1);
@@ -263,16 +289,17 @@ static void RowKeys(const Row* row, const std::vector<std::string>& chars, bool 
     if (Pressed(ImGuiKey_RightArrow)) Nudge(row, 1, shift, ctrl);
     if (Pressed(ImGuiKey_Enter) || Pressed(ImGuiKey_KeypadEnter)) { BeginEdit(row, "", true); Sound(sounds::CLICK); }
     if (Pressed(ImGuiKey_Delete)) { Revert(row); Sound(sounds::CLICK); }
-    /* digits start a value: everything typed this frame */
+    /* digits (an input code's direction letters) start a value: everything typed this frame */
     std::string typed;
-    for (auto& c : chars) if (strchr("0123456789.,-", c[0]) && (typed.size() || c[0] != ',')) typed += c;
+    const char* starts = row->code ? "UuRrDdLl" : "0123456789.,-";
+    for (auto& c : chars) if (strchr(starts, c[0]) && (typed.size() || c[0] != ',')) typed += c;
     if (!typed.empty() && row->choice.empty() && row->pick.empty() && !row->toggle) BeginEdit(row, typed, false);
 }
 
 static void FieldKeys(const std::vector<std::string>& chars, bool ctrl, bool shift)
 {
     Object* object = Current();
-    auto items = Items(object);
+    const auto& items = Items(object);
     if (items.empty()) { if (Pressed(ImGuiKey_LeftArrow)) g_focus = OBJECTS; return; }
     g_field = std::clamp(g_field, 0, (int)items.size() - 1);
     if (ctrl && Pressed(ImGuiKey_UpArrow)) { SetPageOpen(object, false); return; }

@@ -463,7 +463,7 @@ void DrawFields(float y0, float h)
     g_cv.Text("DEFAULT", x0 + FX_DEFAULT_RIGHT, hy + 11, T(SZ_TINY, FAINT, ui::TITLE, ui::RIGHT));
     g_cv.Text("VALUE", x0 + FX_BOX + FX_BOX_W - 8, hy + 11, T(SZ_TINY, FAINT, ui::TITLE, ui::RIGHT));
     g_cv.Text("SOURCE", x0 + w + FX_BADGE_RIGHT, hy + 11, T(SZ_TINY, FAINT, ui::TITLE, ui::RIGHT));
-    auto items = Items(object);
+    const auto& items = Items(object);
     g_field = std::clamp(g_field, 0, std::max(0, (int)items.size() - 1));
     bool focused = g_focus == FIELDS;
     float ly = hy + 24, rh = ROW_H;
@@ -580,7 +580,7 @@ static void StatusField(const Row* row, float cy, float maxw)
 /* BROWSE's status bar: about the focused field (or note), or how to pick one. */
 static void StatusBrowse(float cy, float maxw)
 {
-    auto items = Items(Current());
+    const auto& items = Items(Current());
     const Row* row = g_focus == FIELDS && g_field < (int)items.size() ? items[g_field].row : nullptr;
     if (row == nullptr && g_focus == FIELDS && g_field < (int)items.size() && !items[g_field].note.empty())
     { g_cv.Text(items[g_field].note, 18, cy, T(SZ_SMALL, PENDING, ui::BODY, ui::LEFT, maxw)); return; }
@@ -626,8 +626,9 @@ void DrawStatus(float y, float h)
 /* The footer's keys for what has the focus. */
 static const char* FooterHint()
 {
-    auto items = g_view == BROWSE ? Items(Current()) : std::vector<Item>{};
-    bool header = g_focus == FIELDS && g_field < (int)items.size() && items[g_field].header;
+    const std::vector<Item>* items = g_view == BROWSE ? &Items(Current()) : nullptr;
+    bool header = items != nullptr && g_focus == FIELDS && g_field < (int)items->size() && (*items)[g_field].header;
+    if (g_edit.on && g_edit.row->code) return "Type U D L R or the arrows   Backspace erase   Tab / Enter confirm   Del cancel";
     if (g_edit.on) return "Type a number   Backspace erase   Tab / \xE2\x86\x91\xE2\x86\x93 confirm   Del cancel";
     if (g_search.active) return "Type to filter   Backspace erase   Tab done   Del clear";
     if (g_view == SEARCH) return "Type to search   \xE2\x86\x91\xE2\x86\x93 select   Enter open   Backspace erase   Del clear";
