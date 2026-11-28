@@ -364,6 +364,14 @@ static void PassPacket(BrokerBridge* b, BrokerChannel* ch, const uint8_t* packet
     } while (head.offset < size);
 }
 
+/* Whether the ring has a slot for every piece of a packet of that size. One over BRIDGE_P2P_MAX is dropped once read,
+ * so it needs none. */
+static bool RoomFor(const BrokerChannel* ch, uint32_t size)
+{
+    uint32_t pieces = size == 0 ? 1 : (size + BRIDGE_P2P_PIECE - 1) / BRIDGE_P2P_PIECE;
+    return size > BRIDGE_P2P_MAX || BrokerChannelFree(ch) >= pieces;
+}
+
 /* Packets waiting for the game, from its co-op peers, into the ring in pieces (BridgeP2PPiece). Others are read and
  * dropped, so they never pile up in Steam. A packet the ring has no room for stays in Steam for a later pump: once
  * read it could only be thrown away, and a reliable packet lost that way is never sent again. */
@@ -383,9 +391,8 @@ static void PollP2P(BrokerBridge* b, BrokerChannel* ch)
         {
             uint32_t size = 0;
             uint64_t remote = 0;
-            if (!available(networking, &size, channel)) break;
-            if (size <= BRIDGE_P2P_MAX && BrokerChannelFree(ch) < (size + BRIDGE_P2P_PIECE - 1) / BRIDGE_P2P_PIECE + (size == 0)) break;
-            if (!read(networking, packet, sizeof packet, &size, &remote, channel)) break;
+            if (!available(networking, &size, channel) || !RoomFor(ch, size) ||
+                !read(networking, packet, sizeof packet, &size, &remote, channel)) break;
             if (DropUnwanted(b, size, sizeof packet, remote, channel)) continue;
             PassPacket(b, ch, packet, size, remote, channel);
         }
