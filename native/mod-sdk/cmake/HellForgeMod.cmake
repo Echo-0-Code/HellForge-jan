@@ -37,13 +37,18 @@ function(hellforge_add_mod name)
         endif()
         get_filename_component(folder "${CMAKE_CURRENT_SOURCE_DIR}" NAME)
         set(target "${HELLFORGE_INSTALL}/mods/${folder}")
-        add_custom_command(TARGET ${name} POST_BUILD
+        # A target of its own, always run: a POST_BUILD step of the DLL would skip a build that changed only the
+        # manifest or data/, and the session would load the old ones.
+        set(data_copy "")
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/data")
+            set(data_copy COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/data" "${target}/data")
+        endif()
+        add_custom_target(${name}-copy ALL
             COMMAND ${CMAKE_COMMAND} -E make_directory "${target}"
             COMMAND ${CMAKE_COMMAND} -E copy_if_different "${manifest}" "$<TARGET_FILE:${name}>" "${target}"
-            COMMENT "Copying the mod into ${target}")
-        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/data")
-            add_custom_command(TARGET ${name} POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/data" "${target}/data")
-        endif()
+            ${data_copy}
+            COMMENT "Copying the mod into ${target}"
+            VERBATIM)
+        add_dependencies(${name}-copy ${name})
     endif()
 endfunction()
