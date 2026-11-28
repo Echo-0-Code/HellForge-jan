@@ -105,9 +105,10 @@ void Release(HfImage* image)
 {
     for (size_t i = g_uploads.size(); i-- > 0;)
         if (g_uploads[i].image == image) { ReleaseLater(g_uploads[i].buffer); g_uploads.erase(g_uploads.begin() + (long)i); }
-    if (image->view11 != NULL) image->view11->Release();
-    if (image->texture11 != NULL) image->texture11->Release();
-    ReleaseLater(image->texture12); /* a frame in flight may still draw it */
+    /* this frame's draw list, or on D3D12 a frame in flight, may still draw it */
+    ReleaseLater(image->view11);
+    ReleaseLater(image->texture11);
+    ReleaseLater(image->texture12);
     FreeSlotLater(image->slot);
     delete image;
 }

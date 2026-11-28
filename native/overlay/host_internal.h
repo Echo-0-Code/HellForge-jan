@@ -86,7 +86,7 @@ void FreeSlotLater(int slot);       /* once the frame being recorded is done */
 int SlotOf(D3D12_CPU_DESCRIPTOR_HANDLE cpu);
 D3D12_CPU_DESCRIPTOR_HANDLE SlotCpu(int slot);
 D3D12_GPU_DESCRIPTOR_HANDLE SlotGpu(int slot);
-void ReleaseLater(IUnknown* object); /* released once the frame being recorded is done */
+void ReleaseLater(IUnknown* object); /* released once the frame being recorded is done (D3D11: drawn) */
 void SweepLater();                   /* what the GPU is done with, released */
 
 /* ---- images.cpp ---- */
