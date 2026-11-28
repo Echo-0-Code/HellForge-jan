@@ -54,7 +54,8 @@ Then your mod may be set up after the game has started, and taken out before it 
   HF_MOD_EXPORT int hellforge_mod_unload(const HfApi* api, HfMod* mod, uint32_t reason); /* HF_UNLOAD_REMOVE or _REPLACE */
   ```
 
-  Return 0 once your threads and timers are stopped. Without the export, HellForge takes the mod out only when none of
+  It runs on the loader's change thread, not the game thread: stop your own work there, and call nothing of the
+  game's. Return 0 once your threads and timers are stopped. Without the export, HellForge takes the mod out only when none of
   its own threads still runs. Your DLL is never unloaded (a thread may still be returning into it), so a new version is
   a new file (HellForge loads each build from its own path).
 - **What the game has already built stays.** `add_pattern`, `place_stratagem`, `place_mod_stratagem` and
