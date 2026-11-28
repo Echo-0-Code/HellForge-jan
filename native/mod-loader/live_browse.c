@@ -142,6 +142,14 @@ static void BrowseClear(void)
     ReleaseSRWLockExclusive(&g_browseLock);
 }
 
+/* A mod taken out live gives the browser back, as if it had released it. */
+static void BrowseForget(const HfMod* mod)
+{
+    AcquireSRWLockExclusive(&g_browseLock);
+    if (g_browseOwner == mod) g_browseOwner = NULL;
+    ReleaseSRWLockExclusive(&g_browseLock);
+}
+
 /* HF_BROWSE_CLAIM and HF_BROWSE_RELEASE: the first mod to claim the browser holds it until it releases it. */
 static int BrowseClaim(HfMod* mod, int claim)
 {

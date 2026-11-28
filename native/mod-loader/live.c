@@ -480,7 +480,8 @@ static uint64_t StratagemTypeOf(uint32_t stable)
  * the earlier's); the address holds the highest, and taking one away shows the one under it. */
 #define LIVE_EXTRA_MAX 2048
 typedef struct LiveExtraLayer { int held; uint32_t bits; HfMod* mod; } LiveExtraLayer;
-typedef struct LiveExtra { uintptr_t address; uint32_t before; LiveExtraLayer layer[RANK_EDITOR + 1]; } LiveExtra;
+/* bytes: the field's size (1 or 4), so a restore writes back no more than the field */
+typedef struct LiveExtra { uintptr_t address; uint32_t before; uint32_t bytes; LiveExtraLayer layer[RANK_EDITOR + 1]; } LiveExtra;
 static LiveExtra g_liveExtra[LIVE_EXTRA_MAX];
 static int g_liveExtraCount;
 
@@ -599,6 +600,7 @@ static int LiveExtraApply(const LiveExtraEdit* c, uintptr_t at, uint32_t now, ui
         memset(&g_liveExtra[slot], 0, sizeof g_liveExtra[slot]);
         g_liveExtra[slot].address = at;
         g_liveExtra[slot].before = now;
+        g_liveExtra[slot].bytes = c->bytes;
     }
     LiveExtra* x = &g_liveExtra[slot];
     if (!LiveExtraLayerSet(&x->layer[c->rank], c, set)) return LIVE_EXTRA_KEPT;

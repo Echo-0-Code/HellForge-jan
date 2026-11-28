@@ -134,6 +134,17 @@ static void FnHooksTick(void)
     ReleaseSRWLockExclusive(&g_fnLock);
 }
 
+/* A mod taken out live: its hooks by name leave the queue (hooks.c removes the hooks themselves), so the mod's next
+ * version, loaded at the same address, is not refused as asking twice with one detour. */
+static void FnHooksForget(const HfMod* mod)
+{
+    AcquireSRWLockExclusive(&g_fnLock);
+    int kept = 0;
+    for (int i = 0; i < g_fnHookCount; i++) if (g_fnHooks[i].mod != mod) g_fnHooks[kept++] = g_fnHooks[i];
+    g_fnHookCount = kept;
+    ReleaseSRWLockExclusive(&g_fnLock);
+}
+
 /* Why a hook by name is refused before it is queued, or NULL. */
 static const char* FnHookRefusal(const FnEntry* e, const char* name, void* detour, void** original)
 {

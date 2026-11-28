@@ -152,7 +152,14 @@ static void UiClosed(int screen)
     UiRelease(s->element);
     s->element = NULL;
     s->state = 2;
-    if (s->closed != NULL) s->closed(s->mod, screen, "", s->closedUser);
+    if (s->closed != NULL && !ModGone(s->mod)) s->closed(s->mod, screen, "", s->closedUser);
+}
+
+/* A mod taken out live: none of its callbacks is called again (its unload may have freed what they use). */
+static void UiForget(const HfMod* mod)
+{
+    for (int i = 0; i < g_uiCommandCount; i++) if (g_uiCommands[i].mod == mod) g_uiCommands[i].callback = NULL;
+    for (int i = 0; i < (int)(sizeof g_uiScreens / sizeof g_uiScreens[0]); i++) if (g_uiScreens[i].mod == mod) g_uiScreens[i].closed = NULL;
 }
 
 /* ui::Root's Containers grid, or NULL before the UI is up. */
@@ -195,7 +202,7 @@ static const char* UiSetString(void* element, const char* name, const char* text
 static int UiExecute(UiCommand* c, void* parameter)
 {
     (void)parameter;
-    if (c->callback != NULL && g_uiScreens[c->screen].state == 1) c->callback(c->mod, c->screen, c->element, c->user);
+    if (c->callback != NULL && !ModGone(c->mod) && g_uiScreens[c->screen].state == 1) c->callback(c->mod, c->screen, c->element, c->user);
     return 1;
 }
 static int UiCanExecute(UiCommand* c, void* parameter) { (void)c; (void)parameter; return 1; }

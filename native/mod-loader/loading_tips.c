@@ -13,6 +13,7 @@ static int g_tipsState; /* 0 not yet, 1 hooked, -1 off */
 static SRWLOCK g_tipsLock = SRWLOCK_INIT;
 static uint32_t g_tipsVanilla[TIPS_VANILLA]; /* the game's list, read once at the install */
 static uint32_t g_tipsAdded[TIPS_MAX], g_tipsAddedCount;
+static const HfMod* g_tipsOwner[TIPS_MAX]; /* who added each of g_tipsAdded */
 static uint32_t g_tipsRemoved[TIPS_VANILLA], g_tipsRemovedCount;
 static uint32_t g_tipsLast;
 static uint64_t g_tipsRandom;
@@ -106,6 +107,17 @@ static uint32_t TipTakeOut(HfMod* mod, uint32_t id)
     return room ? id : 0;
 }
 
+/* A mod taken out live: the tips it added leave the pool. */
+static void TipsForget(const HfMod* mod)
+{
+    AcquireSRWLockExclusive(&g_tipsLock);
+    uint32_t kept = 0;
+    for (uint32_t i = 0; i < g_tipsAddedCount; i++)
+        if (g_tipsOwner[i] != mod) { g_tipsOwner[kept] = g_tipsOwner[i]; g_tipsAdded[kept++] = g_tipsAdded[i]; }
+    g_tipsAddedCount = kept;
+    ReleaseSRWLockExclusive(&g_tipsLock);
+}
+
 /* SDK 51, add_tip: a new tip (its text id), a vanilla tip's new text (replaces), or a vanilla tip taken out. 0 refused. */
 static uint32_t ApiAddTip(HfMod* mod, const HfTipDef* def)
 {
@@ -117,7 +129,7 @@ static uint32_t ApiAddTip(HfMod* mod, const HfTipDef* def)
     char key[160];
     snprintf(key, sizeof key, "%s/tip/%u", mod->id, g_tipsAddedCount);
     const uint32_t id = g_tipsAddedCount < TIPS_MAX ? AddText(def->text, key, 0x52) : 0;
-    if (id) g_tipsAdded[g_tipsAddedCount++] = id;
+    if (id) { g_tipsOwner[g_tipsAddedCount] = mod; g_tipsAdded[g_tipsAddedCount++] = id; }
     ReleaseSRWLockExclusive(&g_tipsLock);
     if (!id) ApiLog(mod, "add_tip: refused: no room for more tips");
     else HookText();

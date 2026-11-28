@@ -279,6 +279,8 @@ static int (*g_liveOnGameThread)(void (*fn)(void*), void* arg) = LiveOnGameThrea
 
 static void VisForget(const HfMod* mod); /* visibility.c */
 static void LfForget(const HfMod* mod);  /* list_filter.c */
+static void AtForget(const HfMod* mod);  /* menu_tabs.c */
+static void UiForget(const HfMod* mod);  /* ui.c */
 
 /* On the game thread: its game-thread callbacks, listeners, queued actions and shot rules, its visibility scales, and
  * its list rules, filters and bands. */
@@ -287,6 +289,10 @@ static void ForgetOnGameThread(void* arg)
     const HfMod* mod = (const HfMod*)arg;
     VisForget(mod);
     LfForget(mod);
+    AtForget(mod);
+    TipsForget(mod);
+    BrowseForget(mod);
+    UiForget(mod);
     /* in place: TickDetour, which reads the table without the lock, runs on this thread and not now */
     AcquireSRWLockExclusive(&g_lock);
     TickTable* ticks = g_ticks;
@@ -338,7 +344,7 @@ static void ExtrasForget(const HfMod* mod)
         if (!touched) continue;
         uint32_t want = x->before;
         for (int r = RANK_CODE; r <= RANK_EDITOR; r++) if (x->layer[r].held) want = x->layer[r].bits;
-        ApiWrite(x->address, &want, 4);
+        ApiWrite(x->address, &want, x->bytes == 1 ? 1 : 4); /* a one-byte stat's neighbours are other fields */
     }
     ReleaseSRWLockExclusive(&g_statsLock);
 }
@@ -461,6 +467,7 @@ static int CodeRemove(HfMod* mod, uint32_t reason)
     CallbacksForget(mod);
     OverlayForget(mod);
     int hooks = HookRemoveMod(mod);
+    FnHooksForget(mod);
     if (mod->unload != NULL)
     {
         Note("%s: hellforge_mod_unload (%s)", mod->id, reason == HF_UNLOAD_REPLACE ? "replaced" : "removed");

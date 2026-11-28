@@ -627,7 +627,7 @@ static int ApiOn(HfMod* mod, HfEvent event, HfEventCallback callback, void* user
     int ok = g_callbackCount < MAX_CALLBACKS;
     if (ok) g_callbacks[g_callbackCount++] = (Callback){mod, event, callback, user};
     ReleaseSRWLockExclusive(&g_callbacksLock);
-    if (!ok) return 1;
+    if (!ok) { ApiLog(mod, "on(%d): refused: %d event callbacks are registered already", (int)event, MAX_CALLBACKS); return 1; }
     /* an event that fired already calls back at once, but not inside a live set-up: its replay delivers them in order */
     if (event != HF_EVENT_MODS_CHANGED && g_fired[event] && mod != g_liveSetup) callback(mod, event, user);
     return 0;

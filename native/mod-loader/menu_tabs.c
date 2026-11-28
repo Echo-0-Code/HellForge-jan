@@ -169,6 +169,18 @@ static int AtGameIndex(int bar, uintptr_t at, uint32_t index)
     return list < 0 || index < kAtLists[list].count || g_atCalls > 0;
 }
 
+#define AT_KIND_GONE 0xFFFFFFFFu /* a tab whose mod was taken out: listed on no bar, never called */
+
+/* A mod taken out live: its tabs leave the bars and are not called again. The slots stay, since a tab's handle is its
+ * place in the table. */
+static void AtForget(const HfMod* mod)
+{
+    AcquireSRWLockExclusive(&g_atLock);
+    for (uint32_t i = 0; i < g_atCount; i++)
+        if (g_atTabs[i].mod == mod) { g_atTabs[i].callback = NULL; g_atTabs[i].kind = AT_KIND_GONE; }
+    ReleaseSRWLockExclusive(&g_atLock);
+}
+
 /* The callbacks when a bar's selection moved onto or off a mod's tab (at 0: no bar of ours is shown). */
 static void AtFollow(int bar, uintptr_t at)
 {
@@ -186,8 +198,8 @@ static void AtFollow(int bar, uintptr_t at)
     ReleaseSRWLockShared(&g_atLock);
     g_atActive = want;
     InterlockedIncrement(&g_atCalls);
-    if (was.callback) was.callback(was.mod, was.handle, 0, was.user);
-    if (now.callback) now.callback(now.mod, now.handle, 1, now.user);
+    if (was.callback && !ModGone(was.mod)) was.callback(was.mod, was.handle, 0, was.user);
+    if (now.callback && !ModGone(now.mod)) now.callback(now.mod, now.handle, 1, now.user);
     InterlockedDecrement(&g_atCalls);
 }
 

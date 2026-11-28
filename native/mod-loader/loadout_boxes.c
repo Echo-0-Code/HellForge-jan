@@ -217,7 +217,7 @@ static void LbSetUpBox(uintptr_t o, uint32_t k, uint32_t slot)
 {
     uintptr_t box = LbBoxAt(k);
     LbBox b = g_lbBoxes[k];
-    uint32_t item = b.itemFn ? b.itemFn(b.mod, b.handle, b.user) : 0, id = 0;
+    uint32_t item = b.itemFn && !ModGone(b.mod) ? b.itemFn(b.mod, b.handle, b.user) : 0, id = 0;
     *(uint32_t*)(box + LB_BOX_TYPE) = 0x100u + k; /* no game type: 0x14570B0 and the grid never see it */
     memcpy(&id, (void*)(box + LB_BOX_ID), 4);
     LB_CALL(LbOFn, 0x1446D10u)(box);
