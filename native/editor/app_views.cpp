@@ -80,7 +80,8 @@ void DrawChanges(float y0, float h)
         g_cv.Text(e.row->label, x + 330, cy, T(SZ_SMALL, TEXT, ui::BODY, ui::LEFT, lw - 330 - 450));
         LiveState& live = Live(e.row);
         g_cv.Text(live.read ? Format(e.row, live.base) : "\xE2\x80\x94", x + lw - 420, cy, T(SZ_SMALL, FAINT, ui::BODY, ui::RIGHT, 150));
-        g_cv.Text(e.reset && !live.read ? "\xE2\x80\x94" : Format(e.row, e.value), x + lw - 250, cy, T(SZ_LABEL, e.state == 1 ? PENDING : GOLD, ui::BODY, ui::RIGHT, 160));
+        /* a pending reset holds no value of its own: it goes back to the default */
+        g_cv.Text(e.reset && !live.read ? "\xE2\x80\x94" : Format(e.row, e.reset ? live.base : e.value), x + lw - 250, cy, T(SZ_LABEL, e.state == 1 ? PENDING : GOLD, ui::BODY, ui::RIGHT, 160));
         if (e.state == 1) Chip(e.reset ? "PENDING RESET" : "PENDING", x + lw - 112, cy, PENDING, PENDING_SOFT, true);
         else if (e.state == 2) Chip("ERROR", x + lw - 112, cy, ERROR_, ERROR_SOFT, true);
         else Chip(e.row->Live() || LiveStat(e.row) ? "EDITED" : "NEXT BOOT", x + lw - 112, cy, GOLD, GOLD_WASH, true);
