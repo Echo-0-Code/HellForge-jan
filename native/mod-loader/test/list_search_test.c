@@ -93,6 +93,9 @@ static void LstSkinsPage(void)
     assert(LfArmoryTab((uintptr_t)screen) == LF_TAB_SKINS);
     screen[0x34] = 0; /* the overview: no list */
     assert(LfArmoryTab((uintptr_t)screen) == -1);
+    /* the state line is logged again for another tab or another band, and not for the same state */
+    assert(LfSeenKey(3, LF_TAB_SKINS, 56) != LfSeenKey(3, 2, 56) && LfSeenKey(3, LF_TAB_SKINS, 56) != LfSeenKey(3, LF_TAB_SKINS, 0));
+    assert(LfSeenKey(0, -1, 0) == 0 && LfSeenKey(3, LF_TAB_SKINS, 56) == LfSeenKey(3, LF_TAB_SKINS, 56) && LfSeenKey(1, 0, 0) != LfSeenKey(0, -1, 0));
 
     const uint32_t handle = g_atCount + 1;
     g_atTabs[g_atCount++] = (AtTab){&mod, LstTab, NULL, HF_MENU_TABS_ARMORY_SKINS, 1, handle};

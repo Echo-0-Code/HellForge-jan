@@ -598,21 +598,28 @@ static int LfInstall(void)
     return 1;
 }
 
+/* What LfTick's state line says, as one number: it is logged when this changes. */
+static int LfSeenKey(int flags, int tab, int band) { return (flags & 15) | (tab + 1) << 4 | band << 8; }
+
 static void LfTick(HfMod* mod, float dt, void* user)
 {
     (void)mod, (void)dt, (void)user;
     if (!g_fired[HF_EVENT_GAME_LOADED] || ((g_lfArmory == 0 || g_lfPicker == 0) && !LfInstall())) return;
     /* open follows the screen each update both ways: a tab change can pass a frame or two without a list */
     const uintptr_t screen = LfArmoryScreen();
-    const int armoryPage = g_lfArmory == 1 && LfArmoryTab(screen) >= 0, pickerPage = g_lfPicker == 1 && LfPickerOpen();
+    const int tab = g_lfArmory == 1 ? LfArmoryTab(screen) : -1;
+    const int armoryPage = tab >= 0, pickerPage = g_lfPicker == 1 && LfPickerOpen();
     const int armory = armoryPage && LfShown(screen + LF_ARMORY_GRID), picker = pickerPage && LfShown((uintptr_t)g_lfPickerArgs[0]);
-    static int seen = -1;
-    const int now = armoryPage | armory << 1 | pickerPage << 2 | picker << 3;
-    if (now != seen) Note("lists: Armory page %d shown %d, picker page %d shown %d", armoryPage, armory, pickerPage, picker), seen = now;
     g_lfState[0].open = (uint32_t)armory, g_lfState[1].open = (uint32_t)picker;
     LfRebuildNow();
     if (armory) LfBandApply(HF_LIST_ARMORY_WEAPONS, screen + LF_ARMORY_GRID);
     if (picker) LfBandApply(HF_LIST_STRATAGEMS, (uintptr_t)g_lfPickerArgs[0]);
+    /* the tab and the band given say, without a screenshot, whether a mod's box had a place on that tab */
+    static int seen = -1;
+    const int band = armory ? (int)g_lfBandAt[0].applied : 0;
+    const int now = LfSeenKey(armoryPage | armory << 1 | pickerPage << 2 | picker << 3, tab, band);
+    if (now != seen)
+        Note("lists: Armory page %d shown %d (tab %d, band %d units), picker page %d shown %d", armoryPage, armory, tab, band, pickerPage, picker), seen = now;
 }
 
 static void LfStartTick(void)

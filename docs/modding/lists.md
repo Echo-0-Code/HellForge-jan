@@ -121,5 +121,7 @@ if (hf->list_state(mod, HF_LIST_ARMORY_WEAPONS, &state) && state.open && state.b
 - **Stratagem picker.** Before the walk over the types, HellForge decides which held types to hide. The walk's "held?"
   call points at HellForge, which answers no for those. Empty headings hide themselves. A rebuild calls the picker's
   builder again with the arguments of its last build, while the picker is up.
+- `modloader.log` has a `lists: Armory page ... shown ...` line each time a list opens, closes or changes tab. Its
+  `tab` is 0 to 3 on the weapons page, 4 on the SKINS page and -1 with no list; `band` is the units given.
 - Both are refused on another game build or other code at those places. `modloader.log` then says why, and the lists
   stay as the game builds them.
