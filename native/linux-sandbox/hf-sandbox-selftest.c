@@ -986,7 +986,7 @@ int hf_run_self_test(const char *directory)
         clean_up(&paths);
         return 1;
     }
-    struct hf_sandbox sandbox;
+    static struct hf_sandbox sandbox; // megabytes of rule paths: not on the stack
     memset(&sandbox, 0, sizeof(sandbox));
     char allowed_bind[PATH_MAX] = "";
     char nested_folder_bind[PATH_MAX] = "";

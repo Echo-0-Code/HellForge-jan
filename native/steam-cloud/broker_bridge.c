@@ -60,6 +60,21 @@ static int OwnLobby(const BrokerApi* api, uint64_t lobby)
     return 0;
 }
 
+/* A lobby the game made or entered, for the ownLobby checks. Nothing tells the broker a lobby is over, so a full table
+ * gives up its oldest: the game is in one lobby at a time, and refusing the new one would end co-op for the session. */
+static void RememberLobby(BrokerBridge* b, uint64_t lobby, int32_t asked)
+{
+    if (b->lobbyCount == BROKER_MAX_LOBBIES)
+    {
+        fprintf(stderr, "broker: %d lobbies remembered; the oldest, %llu, is forgotten\n", BROKER_MAX_LOBBIES, (unsigned long long)b->lobbies[0]);
+        memmove(b->lobbies, b->lobbies + 1, sizeof b->lobbies[0] * (BROKER_MAX_LOBBIES - 1));
+        memmove(b->lobbyAsked, b->lobbyAsked + 1, sizeof b->lobbyAsked[0] * (BROKER_MAX_LOBBIES - 1));
+        b->lobbyCount--;
+    }
+    b->lobbyAsked[b->lobbyCount] = asked;
+    b->lobbies[b->lobbyCount++] = lobby;
+}
+
 static uint32_t Refuse(const BrokerApi* api, const char* why)
 {
     Of(api)->refusals++;
@@ -249,9 +264,8 @@ static void RememberEntered(BrokerBridge* b, const uint8_t* data, uint32_t size)
     uint32_t response;
     memcpy(&lobby, data, 8);
     memcpy(&response, data + LOBBY_ENTER_RESPONSE, 4);
-    if (response != ENTER_SUCCESS || !lobby || OwnLobby(&b->api, lobby) || b->lobbyCount >= BROKER_MAX_LOBBIES) return;
-    b->lobbyAsked[b->lobbyCount] = -1;
-    b->lobbies[b->lobbyCount++] = lobby;
+    if (response != ENTER_SUCCESS || !lobby || OwnLobby(&b->api, lobby)) return;
+    RememberLobby(b, lobby, -1);
     fprintf(stderr, "broker: the game entered lobby %llu\n", (unsigned long long)lobby);
 }
 
@@ -330,7 +344,8 @@ static bool DropUnwanted(BrokerBridge* b, uint32_t size, uint32_t capacity, uint
     return true;
 }
 
-/* A co-op peer's packet into the ring, in pieces (BridgeP2PPiece); a full ring loses the rest of it. */
+/* A co-op peer's packet into the ring, in pieces (BridgeP2PPiece). PollP2P reads a packet only when the ring has room
+ * for all of it, so a push that fails here is the game moving its read position back. */
 static void PassPacket(BrokerBridge* b, BrokerChannel* ch, const uint8_t* packet, uint32_t size, uint64_t remote, int32_t channel)
 {
     uint8_t piece[BRIDGE_RING_DATA_SIZE];
@@ -349,8 +364,17 @@ static void PassPacket(BrokerBridge* b, BrokerChannel* ch, const uint8_t* packet
     } while (head.offset < size);
 }
 
+/* Whether the ring has a slot for every piece of a packet of that size. One over BRIDGE_P2P_MAX is dropped once read,
+ * so it needs none. */
+static bool RoomFor(const BrokerChannel* ch, uint32_t size)
+{
+    uint32_t pieces = size == 0 ? 1 : (size + BRIDGE_P2P_PIECE - 1) / BRIDGE_P2P_PIECE;
+    return size > BRIDGE_P2P_MAX || BrokerChannelFree(ch) >= pieces;
+}
+
 /* Packets waiting for the game, from its co-op peers, into the ring in pieces (BridgeP2PPiece). Others are read and
- * dropped, so they never pile up in Steam. */
+ * dropped, so they never pile up in Steam. A packet the ring has no room for stays in Steam for a later pump: once
+ * read it could only be thrown away, and a reliable packet lost that way is never sent again. */
 static void PollP2P(BrokerBridge* b, BrokerChannel* ch)
 {
     typedef bool (*AvailableFn)(void*, uint32_t*, int32_t);
@@ -367,7 +391,8 @@ static void PollP2P(BrokerBridge* b, BrokerChannel* ch)
         {
             uint32_t size = 0;
             uint64_t remote = 0;
-            if (!available(networking, &size, channel) || !read(networking, packet, sizeof packet, &size, &remote, channel)) break;
+            if (!available(networking, &size, channel) || !RoomFor(ch, size) ||
+                !read(networking, packet, sizeof packet, &size, &remote, channel)) break;
             if (DropUnwanted(b, size, sizeof packet, remote, channel)) continue;
             PassPacket(b, ch, packet, size, remote, channel);
         }
@@ -423,11 +448,7 @@ static void PassCallResult(BrokerBridge* b, BrokerChannel* ch, uint64_t call, in
             memcpy(&eResult, slot + BRIDGE_CALL_RESULT_HEADER, 4);
             memcpy(&lobby, slot + BRIDGE_CALL_RESULT_HEADER + 8, 8);
         }
-        if (eResult == RESULT_OK && lobby && b->lobbyCount < BROKER_MAX_LOBBIES)
-        {
-            b->lobbyAsked[b->lobbyCount] = asked;
-            b->lobbies[b->lobbyCount++] = lobby;
-        }
+        if (eResult == RESULT_OK && lobby) RememberLobby(b, lobby, asked);
     }
     else if (id == LOBBY_ENTER && !failed) RememberEntered(b, slot + BRIDGE_CALL_RESULT_HEADER, resultSize);
     BrokerChannelPushCallback(ch, (uint32_t)id | BRIDGE_CALL_RESULT_FLAG, slot, BRIDGE_CALL_RESULT_HEADER + resultSize);
@@ -447,7 +468,7 @@ static void PassCallback(BrokerBridge* b, BrokerChannel* ch, const CallbackMsg* 
 static void PassLocalResults(BrokerBridge* b, BrokerChannel* ch)
 {
     BrokerLocalResult local;
-    while (b->localLobbies && BrokerLobbiesNext(b->localLobbies, &local))
+    while (b->localLobbies && BrokerChannelFree(ch) > 0 && BrokerLobbiesNext(b->localLobbies, &local))
     {
         uint8_t slot[BRIDGE_CALL_RESULT_HEADER + sizeof local.data];
         memset(slot, 0, sizeof slot);
@@ -463,14 +484,20 @@ static void Pump(void* context, BrokerChannel* ch)
     NextFn next = (NextFn)b->next;
     b->runFrame(b->hPipe);
     CallbackMsg msg;
-    static uint32_t reportedDrops;
-    while (next(b->hPipe, &msg))
+    static uint32_t reportedFull;
+    /* Each callback takes at most one slot. With none free it stays in Steam: taken out, a call result the game waits
+     * for (LobbyCreated_t, LobbyEnter_t) would be gone for good. */
+    while (BrokerChannelFree(ch) > 0 && next(b->hPipe, &msg))
     {
         PassCallback(b, ch, &msg);
         b->freeLast(b->hPipe);
     }
     PassLocalResults(b, ch);
-    if (ch->dropped > 0 && reportedDrops == 0) { fprintf(stderr, "broker: the ring is full; callbacks are being dropped\n"); reportedDrops = 1; }
+    if (BrokerChannelFree(ch) == 0 && reportedFull == 0)
+    {
+        fprintf(stderr, "broker: the ring is full; Steam's callbacks and packets wait until the game reads it\n");
+        reportedFull = 1;
+    }
     PollP2P(b, ch);
     CheckStrangers(b, 0);
     DWORD now = GetTickCount();
@@ -543,7 +570,6 @@ static void PublishSnapshot(BridgeSnapshot* s, const BridgeSnapshot* next)
     __atomic_store_n(&s->version, version | 1, __ATOMIC_RELEASE);
     __atomic_thread_fence(__ATOMIC_SEQ_CST);
     memcpy((uint8_t*)s + sizeof s->version, (const uint8_t*)next + sizeof next->version, sizeof *next - sizeof next->version);
-    s->ready = 1;
     __atomic_store_n(&s->version, (version | 1) + 1, __ATOMIC_RELEASE);
 }
 
@@ -552,6 +578,7 @@ void BrokerBridgeSnapshot(BrokerBridge* b, BrokerChannel* ch)
     BridgeSnapshot* s = BridgeSnapshotOf(ch->ring);
     BridgeSnapshot next;
     memset(&next, 0, sizeof next);
+    next.ready = 1; /* copied in with the rest: the game reads it outside the seqlock, so it must never go back to 0 */
     void* user = Self(&b->api, "SteamAPI_SteamUser_v021");
     void* friends = Self(&b->api, "SteamAPI_SteamFriends_v017");
     void* utils = Self(&b->api, "SteamAPI_SteamUtils_v010");

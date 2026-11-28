@@ -442,17 +442,18 @@ void ApplyRemote(const hellforge::Frame& frame)
     else ApplyLobbyEvent(frame, reader);
 }
 
-// Frames from the backend become state changes. If the backend went away, every waiting request fails and every lobby
-// is disconnected, once.
+// Frames from the backend become state changes. If the backend went away, every lobby is disconnected, once, and every
+// waiting request fails: those made after the loss too, or the game would wait for their completion forever.
 void ProcessRemote()
 {
     for (const hellforge::Frame& frame : link.Drain()) ApplyRemote(frame);
-    if (!link.Broken() || remoteLost) return;
-    remoteLost = true;
-    hellforge::Note("lobby link: the backend went away");
+    if (!link.Broken()) return;
     std::map<std::string, Operation> failed;
     failed.swap(waiting);
     for (auto& entry : failed) Finish(entry.second, lobbyNotFound);
+    if (remoteLost) return;
+    remoteLost = true;
+    hellforge::Note("lobby link: the backend went away");
     for (Lobby* lobby : lobbies) Disconnect(lobby, PFLobbyDisconnectingReason::ConnectionInterruption);
 }
 

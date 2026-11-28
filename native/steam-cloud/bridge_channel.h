@@ -42,6 +42,8 @@ int BrokerChannelSend(BrokerChannel* ch, uint32_t type, const void* body, uint32
 
 /* Push a callback into the ring. Returns 0 when the ring is full (counted in ch->dropped) or the data exceeds a slot. */
 int BrokerChannelPushCallback(BrokerChannel* ch, uint32_t callbackId, const void* data, uint32_t dataSize);
+/* The ring's free slots now: what the pump may take from Steam, since what does not fit a full ring is lost. */
+uint32_t BrokerChannelFree(const BrokerChannel* ch);
 
 /* --- Game (client) side: synchronous, calls serialized by a lock --- */
 
