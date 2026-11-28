@@ -162,6 +162,21 @@ static void DrawNotice()
         g_cv.Text(lines[i], x + 24, y + 74 + 24.0f * (float)i, Raw(T(SZ_LABEL, Faded(i < lead ? TEXT : DIM, alpha), ui::BODY, ui::LEFT, w - 48, 15)));
 }
 
+/* The toast again over the lobby browser and mod sync's dialog: they cover the status bar that shows it, and with the
+ * window closed they are all that is drawn. Above the browser's strip of keys. */
+static void DrawToastOver()
+{
+    if (g_toast.on && g_time - g_toast.time > 3.2f) g_toast.on = false;
+    if (!g_toast.on || !(g_lobbies.on || g_sync.on)) return;
+    float W = g_cv.width, H = g_cv.height, h = 40;
+    float w = std::min(g_cv.Measure(g_toast.text, SZ_LABEL) + 56, W - 96);
+    float x = -g_cv.ox + (W - w) / 2, y = -g_cv.oy + H - std::max(56.0f, H * 0.07f) - h - 16;
+    g_cv.Rect(x, y, w, h, PANEL_ALT, 14);
+    g_cv.Frame(x, y, w, h, LINE_STRONG, 15);
+    g_cv.Rect(x, y, 3, h, g_toast.colour, 15);
+    g_cv.Text(g_toast.text, x + w / 2, y + h / 2, T(SZ_LABEL, g_toast.colour, ui::BODY, ui::CENTER, w - 40, 15));
+}
+
 static void Draw()
 {
     g_cv.Rect(-4, -4, PANEL_W + 8, g_panelH + 8, SHADOW, 0);
@@ -802,6 +817,7 @@ void Frame(ImDrawList* list, float width, float height, float dt)
     if (g_catalogOk || g_sync.on || g_lobbies.on) HandleKeys();
     else if (ImGui::IsKeyPressed(ImGuiKey_Escape)) g_host.close();
     Draw();
+    DrawToastOver();
     DrawNotice();
     if (g_cv.Clicked()) Sound(sounds::CLICK);
     g_cv.End();
@@ -832,6 +848,7 @@ void Modal(ImDrawList* list, float width, float height, float dt)
     else if (g_lobbies.on) LobbyKeys();
     DrawLobbies();
     DrawSync();
+    DrawToastOver();
     DrawNotice();
     if (g_cv.Clicked()) Sound(sounds::CLICK);
     g_cv.End();
