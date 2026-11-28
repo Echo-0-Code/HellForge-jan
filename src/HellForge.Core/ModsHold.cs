@@ -93,6 +93,9 @@ public sealed class ModsHold : IDisposable
 
     public sealed record Planted(List<string> Files, List<string> DisabledMods);
 
+    // The full paths of the files that appeared (Check fills it).
+    readonly List<string> appeared = [];
+
     // After Release: the files and folders that appeared during the session, but for HellForge's own (Writable, and a
     // Local Stats folder made by its editor), with every mod they appeared in switched off (a new folder, or a file added
     // to a mod's folder, such as a data patch it would load). Null when nothing appeared.
@@ -101,6 +104,7 @@ public sealed class ModsHold : IDisposable
         if (!Directory.Exists(root)) return null;
         var files = new List<string>();
         var touched = new HashSet<string>(StringComparer.OrdinalIgnoreCase); // the top-level folders things appeared in
+        appeared.Clear();
         AddNewFolders(files, touched);
         AddNewFiles(files, touched);
         if (files.Count == 0) return null;
@@ -133,6 +137,7 @@ public sealed class ModsHold : IDisposable
             if (relative.Equals(ModCatalog.LocalStatsId + "/" + ModCatalog.ManifestName, StringComparison.OrdinalIgnoreCase) &&
                 EditorMadeLocalStats(Path.GetDirectoryName(full)!)) continue;
             files.Add(relative);
+            appeared.Add(full);
             if (relative.Contains('/')) touched.Add(TopFolder(relative));
         }
     }
@@ -142,11 +147,15 @@ public sealed class ModsHold : IDisposable
     List<string> SwitchOff(HashSet<string> touched, Action<string> say)
     {
         var disabled = new List<string>();
-        if (touched.Count == 0) return disabled;
+        if (touched.Count == 0 && appeared.Count == 0) return disabled;
         try
         {
             var (mods, _) = ModCatalog.Load(root);
-            foreach (var mod in mods.Where(m => m.Enabled && m.Archive == null && touched.Any(top => LocalInstall.Within(m.Folder, top))))
+            // A zipped mod counts too: its zip appeared at the mods root, or its unpacked copy gained a file.
+            bool Planted(ModManifest m) => m.Archive == null
+                ? touched.Any(top => LocalInstall.Within(m.Folder, top))
+                : appeared.Any(file => file.Equals(Path.GetFullPath(m.Archive), StringComparison.OrdinalIgnoreCase) || LocalInstall.Within(file, m.Folder));
+            foreach (var mod in mods.Where(m => m.Enabled && Planted(m)))
             {
                 ModSettings.SetEnabled(root, mod.Id, false);
                 disabled.Add(mod.Id);

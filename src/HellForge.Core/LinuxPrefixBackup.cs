@@ -1,3 +1,4 @@
+using System.Text;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
@@ -213,11 +214,27 @@ public static class LinuxPrefixBackup
         }
         foreach (var entry in list)
             if (entry.Kind == 'l' && CheckLink(entry, top!) is { } linkProblem) return Refuse(linkProblem);
-        var links = list.Where(entry => entry.Kind == 'l').ToList();
+        // Each name is normalised once and its parent paths looked up among the links: a prefix holds over a
+        // thousand links, so comparing every entry with every link took millions of string joins.
+        var links = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var link in list.Where(entry => entry.Kind == 'l'))
+        {
+            var name = string.Join('/', NormalizedParts(link.Name));
+            links[name] = links.GetValueOrDefault(name) + 1;
+        }
         foreach (var entry in list)
-            foreach (var link in links)
-                if (!ReferenceEquals(entry, link) && SameOrUnder(entry.Name, link.Name))
-                    return Refuse("an entry is under a link in the same archive: " + entry.Name);
+        {
+            var parts = NormalizedParts(entry.Name);
+            var path = new StringBuilder();
+            for (var i = 0; i < parts.Count; i++)
+            {
+                if (i > 0) path.Append('/');
+                path.Append(parts[i]);
+                if (!links.TryGetValue(path.ToString(), out var named)) continue;
+                var itself = i == parts.Count - 1 && entry.Kind == 'l' && named == 1;
+                if (!itself) return Refuse("an entry is under a link in the same archive: " + entry.Name);
+            }
+        }
         return new(true, "", top!, bytes);
     }
 
@@ -341,13 +358,6 @@ public static class LinuxPrefixBackup
             stack.Add(part);
         }
         return stack;
-    }
-
-    static bool SameOrUnder(string name, string link)
-    {
-        var path = string.Join('/', NormalizedParts(name));
-        var root = string.Join('/', NormalizedParts(link));
-        return path.Equals(root, StringComparison.Ordinal) || path.StartsWith(root + "/", StringComparison.Ordinal);
     }
 
     static IReadOnlyList<string> NormalizedParts(string name) =>

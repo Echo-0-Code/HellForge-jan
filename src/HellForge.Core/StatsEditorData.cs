@@ -209,8 +209,15 @@ public static class StatsEditorData
     {
         var folder = Path.Combine(modsFolder, ModId);
         if (!Directory.Exists(folder)) return (Empty, "missing");
-        CheckOwner(folder);
         var path = Path.Combine(folder, StatsData.FileName);
+        // A folder without the stats file is what a cut-short save or clear leaves: read as no edits, so the next
+        // save repairs it.
+        if (!File.Exists(path))
+        {
+            if (File.Exists(Path.Combine(folder, ModCatalog.ManifestName))) CheckOwner(folder);
+            return (Empty, "missing");
+        }
+        CheckOwner(folder);
         var bytes = File.ReadAllBytes(path);
         var document = JsonNode.Parse(bytes) as JsonObject ?? throw new InvalidDataException("Editor stats file must be an object.");
         StatsData.Parse(document.ToJsonString(), EntityProfile.Current);
@@ -230,7 +237,7 @@ public static class StatsEditorData
         if (revision != expectedRevision) throw new InvalidDataException("The editor mod changed on disk. Reload it before saving.");
         if (empty)
         {
-            if (revision == "missing") return "missing";
+            if (!Directory.Exists(folder)) return "missing";
             File.Delete(Path.Combine(folder, StatsData.FileName));
             File.Delete(Path.Combine(folder, ModCatalog.ManifestName));
             if (!Directory.EnumerateFileSystemEntries(folder).Any()) Directory.Delete(folder);
@@ -241,14 +248,15 @@ public static class StatsEditorData
         var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
-            File.WriteAllText(temporary, text);
-            File.Move(temporary, path, overwrite: true);
+            // The manifest first: a save cut short leaves a folder Load reads as no edits, never one it refuses.
             if (revision == "missing")
             {
                 var manifest = new JsonObject { ["format"] = 1, ["id"] = ModId, ["name"] = "Local Stats", ["version"] = "1.0.0",
                     ["description"] = "Stats saved by the HellForge arsenal editor.", ["gameplay"] = true, ["editor"] = Marker };
                 File.WriteAllText(Path.Combine(folder, ModCatalog.ManifestName), manifest.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n");
             }
+            File.WriteAllText(temporary, text);
+            File.Move(temporary, path, overwrite: true);
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
         return Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));

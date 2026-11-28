@@ -92,6 +92,58 @@ public sealed class GameDataReader : IDisposable
 
     public bool HasArchive(string archive) => items.ContainsKey(archive);
 
+    // Every table entry by key, in the order TableEntries gives them, built by the second lookup: one lookup stops at
+    // its last hit as before, and more of them (one per data mod, per map, per parent) stop decompressing every table.
+    readonly record struct Slot(int Archive, ulong MainOffset, uint MainSize, ulong StreamOffset, uint StreamSize, ulong GpuOffset, uint GpuSize);
+    Dictionary<ResourceKey, (int First, int Last)>? byKey;
+    readonly List<Slot> slots = [];
+    readonly List<int> nextSlot = [];
+    readonly List<string> slotArchives = [];
+    int lookups;
+
+    bool Indexed()
+    {
+        if (byKey != null) return true;
+        if (lookups++ == 0) return false;
+        var index = new Dictionary<ResourceKey, (int First, int Last)>();
+        string? current = null;
+        foreach (var (archive, table, at) in TableEntries())
+        {
+            if (archive != current) slotArchives.Add(current = archive);
+            var e = table.AsSpan(at, 80);
+            var key = new ResourceKey(BinaryPrimitives.ReadUInt64LittleEndian(e[8..]), BinaryPrimitives.ReadUInt64LittleEndian(e));
+            var at0 = LocationOf(archive, e);
+            var slot = slots.Count;
+            slots.Add(new(slotArchives.Count - 1, at0.MainOffset, at0.MainSize, at0.StreamOffset, at0.StreamSize, at0.GpuOffset, at0.GpuSize));
+            nextSlot.Add(-1);
+            if (index.TryGetValue(key, out var ends))
+            {
+                nextSlot[ends.Last] = slot;
+                index[key] = (ends.First, slot);
+            }
+            else index[key] = (slot, slot);
+        }
+        byKey = index;
+        return true;
+    }
+
+    Location At(int slot)
+    {
+        var s = slots[slot];
+        return new(slotArchives[s.Archive], s.MainOffset, s.MainSize, s.StreamOffset, s.StreamSize, s.GpuOffset, s.GpuSize);
+    }
+
+    List<Location> Copies(int first)
+    {
+        var copies = new List<Location>();
+        for (var slot = first; slot >= 0; slot = nextSlot[slot]) copies.Add(At(slot));
+        return copies;
+    }
+
+    // The wanted keys the index has, in the order a scan of the tables meets them.
+    IEnumerable<(ResourceKey Key, int First)> Hits(HashSet<ResourceKey> wanted) =>
+        wanted.Where(byKey!.ContainsKey).Select(key => (key, byKey![key].First)).OrderBy(hit => hit.First);
+
     // Where each wanted resource is. Archives are searched in name order and the first that has a resource wins (as
     // hd2_game_data.Data.find); the search stops once every resource is found. Missing resources are left out.
     public Dictionary<ResourceKey, Location> Find(IEnumerable<ResourceKey> wanted)
@@ -99,6 +151,11 @@ public sealed class GameDataReader : IDisposable
         var set = wanted.ToHashSet();
         var found = new Dictionary<ResourceKey, Location>();
         if (set.Count == 0) return found;
+        if (Indexed())
+        {
+            foreach (var (key, first) in Hits(set)) found[key] = At(first);
+            return found;
+        }
         foreach (var (archive, table, at) in TableEntries())
         {
             var e = table.AsSpan(at, 80);
@@ -117,6 +174,11 @@ public sealed class GameDataReader : IDisposable
         var set = wanted.ToHashSet();
         var found = new Dictionary<ResourceKey, List<Location>>();
         if (set.Count == 0) return found;
+        if (Indexed())
+        {
+            foreach (var (key, first) in Hits(set)) found[key] = Copies(first);
+            return found;
+        }
         foreach (var (archive, table, at) in TableEntries())
         {
             var e = table.AsSpan(at, 80);
@@ -132,6 +194,11 @@ public sealed class GameDataReader : IDisposable
     public Dictionary<ulong, List<Location>> Every(ulong type)
     {
         var found = new Dictionary<ulong, List<Location>>();
+        if (Indexed())
+        {
+            foreach (var (key, ends) in byKey!.Where(k => k.Key.Type == type).OrderBy(k => k.Value.First)) found[key.Name] = Copies(ends.First);
+            return found;
+        }
         foreach (var (archive, table, at) in TableEntries())
         {
             var e = table.AsSpan(at, 80);
@@ -147,6 +214,11 @@ public sealed class GameDataReader : IDisposable
     public Dictionary<ulong, Location> All(ulong type)
     {
         var found = new Dictionary<ulong, Location>();
+        if (Indexed())
+        {
+            foreach (var (key, ends) in byKey!.Where(k => k.Key.Type == type).OrderBy(k => k.Value.First)) found[key.Name] = At(ends.First);
+            return found;
+        }
         foreach (var (archive, table, at) in TableEntries())
         {
             var e = table.AsSpan(at, 80);
