@@ -57,6 +57,9 @@ On `dev`, since 0.5.0-beta.
 
 ### Fixed
 
+- **Armory previews with a fit no longer show too big at first.** On a pick, the camera framed the new item with the
+  last item's box, or with the box of a unit still loading, for about half a second. An item with `set_preview_fit` now
+  shows its last fitted box until it is framed again.
 - **Several mods can add camouflage shapes.** Every mod's layers on a game array texture now stack in load order,
   instead of the top mod's copy replacing the others. A paint names its layer by PNG (`[r, g, b, "<png>"]` in a
   `lut` cell), and HellForge writes the number that layer has on each player's machine.

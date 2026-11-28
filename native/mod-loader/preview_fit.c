@@ -2,7 +2,10 @@
  * The Armory preview's update (0x18EA830) fits its camera to a box (+0x890 size, +0x87C centre; +0x88C/+0x83C the box
  * it blends from) only when the item's kind changes, so every support card kept the first one's fit. A new item (+0x7E4,
  * its loadout id) zeroes the size for a few updates, which makes the game fit that item's own box; fits then scale it.
- * Grid thumbnails (0x1392D10, a weapon or throwable request) fit to that same box query, so their box takes the fit too. */
+ * Grid thumbnails (0x1392D10, a weapon or throwable request) fit to that same box query, so their box takes the fit too.
+ * Until its refits are done a new item would show at the last item's box, or at the box of a unit still streaming in
+ * (smaller, so the camera comes closer): an item with a fit shows its last fitted box meanwhile, and a refit never
+ * shrinks it, as a box only grows while its parts stream in. The first view of an item in a session can still jump. */
 #define PREVIEW_FIT_UPDATE 0x18EA830u
 #define PREVIEW_FIT_ITEM 0x7E4u
 #define PREVIEW_FIT_UNIT 0x7F8u /* the item's row: +8 its unit resource */
@@ -27,6 +30,9 @@ static uint8_t* g_previewFitObject;
 static uint32_t g_previewFitItem;
 static int g_previewFitRefits;
 static int g_previewFitLogs;
+typedef struct PreviewFitSeen { uint32_t item; float size, centre[3]; } PreviewFitSeen;
+static PreviewFitSeen g_previewFitSeen[PREVIEW_FIT_MAX]; /* the game thread's: each fitted item's last box */
+static uint32_t g_previewFitSeenCount;
 typedef void (*PreviewFitThumbFn)(uintptr_t manager, int32_t* request, uint64_t target, uint32_t layer);
 static PreviewFitThumbFn g_previewFitThumbOriginal;
 static _Thread_local uint32_t g_previewFitThumbItem; /* the thumbnail being framed on this thread, or 0 */
@@ -89,6 +95,40 @@ static void PreviewFitScale(uint8_t* preview, uint32_t item)
     memcpy(preview + PREVIEW_FIT_PREV_CENTRE, centre, 3 * sizeof(float));
 }
 
+static PreviewFitSeen* PreviewFitSeenOf(uint32_t item, int create)
+{
+    for (uint32_t i = 0; i < g_previewFitSeenCount; i++) if (g_previewFitSeen[i].item == item) return &g_previewFitSeen[i];
+    if (!create || g_previewFitSeenCount == PREVIEW_FIT_MAX) return NULL;
+    g_previewFitSeen[g_previewFitSeenCount] = (PreviewFitSeen){item, 0, {0, 0, 0}};
+    return &g_previewFitSeen[g_previewFitSeenCount++];
+}
+
+/* The box the camera fits and the one it blends from, both this one: no blend. */
+static void PreviewFitShow(uint8_t* preview, float size, const float centre[3])
+{
+    *(float*)(preview + PREVIEW_FIT_SIZE) = size;
+    *(float*)(preview + PREVIEW_FIT_PREV_SIZE) = size;
+    memcpy(preview + PREVIEW_FIT_CENTRE, centre, 3 * sizeof(float));
+    memcpy(preview + PREVIEW_FIT_PREV_CENTRE, centre, 3 * sizeof(float));
+}
+
+/* While the refits run: an item with a fit shows its last box, and a refit's box never comes out smaller. Once they
+ * are done, the box is kept for the item's next view. */
+static void PreviewFitHold(uint8_t* preview, uint32_t item, int fitted)
+{
+    PreviewFitRow fit;
+    if (!item || !PreviewFitFind(item, &fit)) return;
+    PreviewFitSeen* seen = PreviewFitSeenOf(item, fitted && g_previewFitRefits == 0);
+    float* size = (float*)(preview + PREVIEW_FIT_SIZE);
+    if (seen != NULL && seen->size > 0 && (!fitted || *size < seen->size))
+        PreviewFitShow(preview, seen->size, fitted ? (const float*)(preview + PREVIEW_FIT_CENTRE) : seen->centre);
+    if (seen != NULL && fitted && g_previewFitRefits == 0)
+    {
+        seen->size = *size;
+        memcpy(seen->centre, preview + PREVIEW_FIT_CENTRE, sizeof seen->centre);
+    }
+}
+
 static void PreviewFitDetour(uint8_t* preview, uint32_t unit, float dt)
 {
     if (!preview) { g_previewFitOriginal(preview, unit, dt); return; }
@@ -101,10 +141,15 @@ static void PreviewFitDetour(uint8_t* preview, uint32_t unit, float dt)
     const int refit = g_previewFitRefits > 0 && item && *(float*)(preview + PREVIEW_FIT_DELAY) <= 0;
     if (refit) *size = 0;
     g_previewFitOriginal(preview, unit, dt);
-    if (!refit) return;
-    if (*size == 0) { *size = kept; return; } /* the unit is not up yet: the update stopped before its fit */
-    g_previewFitRefits--;
-    PreviewFitScale(preview, item);
+    if (refit && *size != 0)
+    {
+        g_previewFitRefits--;
+        PreviewFitScale(preview, item);
+        PreviewFitHold(preview, item, 1);
+        return;
+    }
+    if (refit) *size = kept; /* the unit is not up yet: the update stopped before its fit */
+    if (g_previewFitRefits > 0) PreviewFitHold(preview, item, 0);
 }
 
 /* Request: +0x18 the item's 64-bit id, whose high half is its loadout id; +0x64 its kind (0 weapon, 1 throwable: the
@@ -209,6 +254,8 @@ static int ApiSetPreviewFit(HfMod* mod, uint32_t weapon, const HfPreviewFit* fit
     AcquireSRWLockExclusive(&g_previewFitLock);
     int full = PreviewFitStore(weapon, fit && fit->scale > 0 ? fit : NULL);
     ReleaseSRWLockExclusive(&g_previewFitLock);
+    PreviewFitSeen* seen = PreviewFitSeenOf(weapon, 0);
+    if (seen != NULL) seen->size = 0; /* its last box had the old fit */
     g_previewFitRefits = PREVIEW_FIT_REFITS; /* the shown item takes it now */
     if (full) ApiLog(mod, "set_preview_fit: refused: %u fits already", PREVIEW_FIT_MAX);
     return full;
