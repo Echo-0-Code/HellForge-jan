@@ -380,7 +380,11 @@ static int LuaCodeRestore(int slot)
     if (slot < 0) return HF_APPLIES_NOW;
     LuaCode* c = &g_luaCodes[slot];
     if (ApiWrite(c->row + 0x48, &c->count, 4) || ApiWrite(c->row + 0x40, &c->pointer, 8)) return 0;
-    g_luaCodes[slot] = g_luaCodes[--g_luaCodeCount]; /* its array stays: the game may still hold it */
+    /* The slot is marked free, never moved: another stratagem's row points at the code array inside its own slot,
+       and the game may still hold this one's array for a moment. */
+    c->type = 0;
+    c->row = 0;
+    c->mod = NULL;
     return HF_APPLIES_NOW;
 }
 
@@ -388,13 +392,18 @@ static int LuaCodeRestore(int slot)
  * not read. */
 static int LuaCodeAdd(uint32_t type, uintptr_t row)
 {
-    if (g_luaCodeCount == LUA_CODE_MAX) return -1;
-    LuaCode* c = &g_luaCodes[g_luaCodeCount];
-    memset(c, 0, sizeof *c);
-    if (SafeRead(row + 0x40, &c->pointer, 8) || SafeRead(row + 0x48, &c->count, 4)) return -2;
-    c->type = type;
-    c->row = row;
-    return g_luaCodeCount++;
+    /* a fresh slot while there is one; a freed one (type 0) only once the table is full */
+    int slot = g_luaCodeCount < LUA_CODE_MAX ? g_luaCodeCount : -1;
+    for (int i = 0; slot < 0 && i < g_luaCodeCount; i++) if (g_luaCodes[i].type == 0) slot = i;
+    if (slot < 0) return -1;
+    LuaCode fresh;
+    memset(&fresh, 0, sizeof fresh);
+    if (SafeRead(row + 0x40, &fresh.pointer, 8) || SafeRead(row + 0x48, &fresh.count, 4)) return -2;
+    fresh.type = type;
+    fresh.row = row;
+    g_luaCodes[slot] = fresh;
+    if (slot == g_luaCodeCount) g_luaCodeCount++;
+    return slot;
 }
 
 /* The code into its slot's array, and the row pointed at it. HF_APPLIES_NOW, or 0. */

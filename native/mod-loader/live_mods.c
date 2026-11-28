@@ -70,6 +70,7 @@ static struct
     volatile LONG committing; /* the change runs on its worker; the pipe takes no line of it meanwhile */
     char id[40];
     int sync;
+    int wide; /* the change needs the ship or the title, checked again when it is made */
     char digest[80];
     char order[MAX_MODS][80];
     int orderCount;
@@ -241,13 +242,15 @@ static const char* TxnOrderCheck(char* why, size_t size)
 static const char* TxnCheck(char* why, size_t size)
 {
     const char* gate = TxnGate();
-    if (gate == NULL && (g_txn.dataCount > 0 || g_txn.resCount > 0)) gate = TxnGateWide(); /* game data, whoever's */
+    g_txn.wide = g_txn.dataCount > 0 || g_txn.resCount > 0;
+    if (gate == NULL && g_txn.wide) gate = TxnGateWide(); /* game data, whoever's */
     if (gate != NULL) return gate;
     for (int i = 0; i < g_txn.modCount; i++)
     {
         HfMod* running = TxnSessionMod(g_txn.mods[i].id);
         /* more than stats: what the change brings (its kinds), or what a running version takes with it (code, field types) */
         int wide = (g_txn.mods[i].kinds & ~(unsigned)TXN_STATS) || ModRunsCode(running) || NetAsksOf(running);
+        g_txn.wide |= wide;
         const char* refused = wide ? TxnGateWide() : NULL;
         if (refused == NULL) refused = TxnModCheck(&g_txn.mods[i], why, size);
         if (refused != NULL) return refused;
@@ -540,6 +543,8 @@ static const char* TxnMake(char* why, size_t size)
     AcquireSRWLockExclusive(&g_fieldsLock);
     AcquireSRWLockExclusive(&g_statsLock);
     const char* refused = TxnGate(); /* again: a friend may have joined meanwhile */
+    /* and the ship or title again for a wide change: the waits since the check can outlast a mission's loading */
+    if (refused == NULL && g_txn.wide) refused = TxnGateWide();
     if (refused == NULL) refused = TxnStatsCheck(why, size);
     if (refused == NULL) refused = LiveNumbersCheck(why, size);
     ReleaseSRWLockExclusive(&g_statsLock);
