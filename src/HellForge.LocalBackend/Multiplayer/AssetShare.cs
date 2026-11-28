@@ -89,7 +89,24 @@ public sealed class AssetShare : IAsyncDisposable
     // separated, "-" none. The weapon is the one whose shots it changes (an ammunition's swap: the weapon it belongs to),
     // and the suffix tells the loader where that weapon's round is (StatsSchema.ProjectileSwaps); a programmable
     // round ("/f") is a swap of its own beside the weapon's normal one.
-    public static string Swaps(string? stats)
+    // The first max entries; what is past the cap is not shared with friends, and said (leftOut) instead of dropped
+    // without a word.
+    static List<string> Capped(IEnumerable<string> entries, int max, string what, Action<string>? leftOut)
+    {
+        var all = entries.ToList();
+        if (all.Count <= max) return all;
+        leftOut?.Invoke($"{all.Count - max} of your {all.Count} {what} are past the {max} a player can share: friends keep their own values for those.");
+        return all.GetRange(0, max);
+    }
+
+    // Each line about left-out entries once, until it changes.
+    readonly HashSet<string> saidLeftOut = new(StringComparer.Ordinal);
+    void SayLeftOut(string line)
+    {
+        if (saidLeftOut.Add(line)) log("Assets: " + line);
+    }
+
+    public static string Swaps(string? stats, Action<string>? leftOut = null)
     {
         if (string.IsNullOrWhiteSpace(stats)) return "-";
         try
@@ -104,9 +121,8 @@ public sealed class AssetShare : IAsyncDisposable
                 .GroupBy(s => (s.Site.Weapon, Round: s.Site.Native is "" or "/r" ? "" : s.Site.Native)).Select(g => g.Last())
                 .OrderBy(s => s.Site.Weapon).ThenBy(s => s.Site.Native, StringComparer.Ordinal)
                 .Select(s => s.Site.Weapon.ToString("x", System.Globalization.CultureInfo.InvariantCulture) + "=" +
-                    s.Edit.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) + s.Site.Native)
-                .Take(MaxPerPlayer);
-            var text = string.Join(',', swaps);
+                    s.Edit.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) + s.Site.Native);
+            var text = string.Join(',', Capped(swaps, MaxPerPlayer, "projectile swaps", leftOut));
             return text.Length == 0 ? "-" : text;
         }
         catch (Exception error) when (error is InvalidDataException or System.Text.Json.JsonException) { return "-"; }
@@ -115,7 +131,7 @@ public sealed class AssetShare : IAsyncDisposable
     // A player's changes of projectile and damage rows from their Local Stats file: "P<type>+<offset hex>=<bits hex>"
     // (ProjectileSettings) or "D<id>+<offset hex>=<bits hex>" (DamageInfo) semicolon separated, at most MaxRounds, "-"
     // none. Four-byte fields only, never a row's own id at +0 (the loader keeps the stock type).
-    public static string Rounds(string? stats)
+    public static string Rounds(string? stats, Action<string>? leftOut = null)
     {
         if (string.IsNullOrWhiteSpace(stats)) return "-";
         try
@@ -126,9 +142,8 @@ public sealed class AssetShare : IAsyncDisposable
                     (e.Storage is "u32" or "f32" or "i32"))
                 .GroupBy(e => (e.Kind, e.Record, e.Offset)).Select(g => g.Last())
                 .OrderBy(e => e.Kind, StringComparer.Ordinal).ThenBy(e => e.Record).ThenBy(e => e.Offset)
-                .Select(e => (e.Kind == "DamageInfo" ? "D" : "P") + e.Record.ToString(inv) + "+" + e.Offset.ToString("x", inv) + "=" + e.Value.ToString("x", inv))
-                .Take(MaxRounds);
-            var text = string.Join(';', entries);
+                .Select(e => (e.Kind == "DamageInfo" ? "D" : "P") + e.Record.ToString(inv) + "+" + e.Offset.ToString("x", inv) + "=" + e.Value.ToString("x", inv));
+            var text = string.Join(';', Capped(entries, MaxRounds, "projectile and damage changes", leftOut));
             return text.Length == 0 ? "-" : text;
         }
         catch (Exception error) when (error is InvalidDataException or System.Text.Json.JsonException) { return "-"; }
@@ -151,7 +166,7 @@ public sealed class AssetShare : IAsyncDisposable
 
     // A player's changes of those records from their Local Stats file: "E<resource hex>/<S|H|O|B>+<offset hex>=<bits hex>"
     // semicolon separated, at most MaxDeploys, "-" none. Four-byte fields.
-    public static string Deploys(string? stats)
+    public static string Deploys(string? stats, Action<string>? leftOut = null)
     {
         if (string.IsNullOrWhiteSpace(stats)) return "-";
         try
@@ -162,9 +177,8 @@ public sealed class AssetShare : IAsyncDisposable
                     e.Offset >= 0 && e.Offset % 4 == 0 && (e.Storage is "u32" or "f32" or "i32"))
                 .GroupBy(e => (e.Resource, e.Component, e.Offset)).Select(g => g.Last())
                 .OrderBy(e => e.Resource).ThenBy(e => DeployRecords[e.Component]).ThenBy(e => e.Offset)
-                .Select(e => "E" + e.Resource.ToString("x", inv) + "/" + DeployRecords[e.Component] + "+" + e.Offset.ToString("x", inv) + "=" + e.Value.ToString("x", inv))
-                .Take(MaxDeploys);
-            var text = string.Join(';', entries);
+                .Select(e => "E" + e.Resource.ToString("x", inv) + "/" + DeployRecords[e.Component] + "+" + e.Offset.ToString("x", inv) + "=" + e.Value.ToString("x", inv));
+            var text = string.Join(';', Capped(entries, MaxDeploys, "deployable changes", leftOut));
             return text.Length == 0 ? "-" : text;
         }
         catch (Exception error) when (error is InvalidDataException or System.Text.Json.JsonException) { return "-"; }
@@ -295,11 +309,11 @@ public sealed class AssetShare : IAsyncDisposable
     {
         if (stats == swapsFrom) return;
         swapsFrom = stats;
-        var swaps = Swaps(stats);
+        var swaps = Swaps(stats, SayLeftOut);
         if (swaps != mineSwaps) (mineSwaps, mineVersion) = (swaps, mineVersion + 1);
-        var changes = Rounds(stats);
+        var changes = Rounds(stats, SayLeftOut);
         if (changes != mineRounds) (mineRounds, mineVersion) = (changes, mineVersion + 1);
-        var deploys = Deploys(stats);
+        var deploys = Deploys(stats, SayLeftOut);
         if (deploys != mineDeploys) (mineDeploys, mineVersion) = (deploys, mineVersion + 1);
     }
 
@@ -321,10 +335,14 @@ public sealed class AssetShare : IAsyncDisposable
     {
         foreach (var gone in friends.Keys.Where(f => !hosted.Contains(f)).ToList()) friends.Remove(gone);
         foreach (var gone in lobbySent.Keys.Where(f => !hosted.Contains(f)).ToList()) lobbySent.Remove(gone);
-        var lobbyNow = new SortedSet<ulong>(mine.Concat(friends.Values.SelectMany(f => f.Ids)).Take(MaxLobby));
-        var swapsNow = string.Join(',', new[] { (Peer: transport.LocalId, Swaps: mineSwaps) }.Concat(friends.Select(f => (Peer: f.Key, f.Value.Swaps)))
+        var lobbyAll = mine.Concat(friends.Values.SelectMany(f => f.Ids)).Distinct().ToList();
+        if (lobbyAll.Count > MaxLobby) SayLeftOut($"the lobby holds {lobbyAll.Count} packages, {lobbyAll.Count - MaxLobby} past the {MaxLobby} that are shared.");
+        var lobbyNow = new SortedSet<ulong>(lobbyAll.Take(MaxLobby));
+        var swapsAll = new[] { (Peer: transport.LocalId, Swaps: mineSwaps) }.Concat(friends.Select(f => (Peer: f.Key, f.Value.Swaps)))
             .Where(p => p.Swaps != "-").OrderBy(p => p.Peer)
-            .SelectMany(p => p.Swaps.Split(',').Select(s => p.Peer.ToString("x", System.Globalization.CultureInfo.InvariantCulture) + ":" + s)).Take(MaxLobby));
+            .SelectMany(p => p.Swaps.Split(',').Select(s => p.Peer.ToString("x", System.Globalization.CultureInfo.InvariantCulture) + ":" + s)).ToList();
+        var swapsNow = string.Join(',', swapsAll.Take(MaxLobby));
+        if (swapsAll.Count > MaxLobby) SayLeftOut($"the lobby holds {swapsAll.Count} projectile swaps, {swapsAll.Count - MaxLobby} past the {MaxLobby} that are shared.");
         if (swapsNow.Length == 0) swapsNow = "-";
         var roundsNow = ByPlayer(mineRounds, f => f.Rounds);
         var deploysNow = ByPlayer(mineDeploys, f => f.Deploys);
@@ -348,7 +366,11 @@ public sealed class AssetShare : IAsyncDisposable
                      .Where(p => p.List != "-").OrderBy(p => p.Peer))
         {
             var group = peer.ToString("x", System.Globalization.CultureInfo.InvariantCulture) + "=" + list;
-            if (roundsNow.Length + group.Length + 1 > MaxRoundsText) break;
+            if (roundsNow.Length + group.Length + 1 > MaxRoundsText)
+            {
+                SayLeftOut($"the changes of {LobbyService.EntityId(peer)} and any player after do not fit the {MaxRoundsText} characters one line holds: they are not shared.");
+                break;
+            }
             roundsNow += (roundsNow.Length > 0 ? "," : "") + group;
         }
         return roundsNow.Length == 0 ? "-" : roundsNow;

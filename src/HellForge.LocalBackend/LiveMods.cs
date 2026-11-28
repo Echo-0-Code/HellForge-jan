@@ -23,6 +23,8 @@ public sealed class LiveMods
     public static readonly TimeSpan PrepareTimeout = TimeSpan.FromMinutes(5);
     // The loader waits up to 90 s for a hot package to load (live_data.c), then reports.
     public static readonly TimeSpan DataResultTimeout = TimeSpan.FromSeconds(120);
+    // How long a change may stay unsettled before the session stops waiting for the game's result.
+    public static readonly TimeSpan SettleTimeout = TimeSpan.FromMinutes(10);
     readonly LiveEditServer live;
     readonly string modsFolder, sessionFile, modSetFile;
     readonly string? cli;
@@ -170,7 +172,17 @@ public sealed class LiveMods
     {
         try
         {
-            var done = await result;
+            string[] done;
+            // A game that dropped the pipe never reports: without a bound the one-change lock and the "mods are
+            // changing" refusal of joins would last the session.
+            try { done = await result.WaitAsync(SettleTimeout); }
+            catch (TimeoutException)
+            {
+                lock (gate) waiting.Remove(change.Txn);
+                log($"Live mods {change.Txn}: the game never reported its result; the session keeps the mods it had on record.");
+                Changing?.Invoke(false);
+                return new(false, false, change.Described, ["The game did not report the change."], "Restart the session to be sure of its mods.", "");
+            }
             if (done[2] is not ("ok" or "failed"))
             {
                 Changing?.Invoke(false);
@@ -221,22 +233,27 @@ public sealed class LiveMods
             "--target", target, "--seed", txn + ":" + digest + ":" + DateTime.UtcNow.Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture) })
             start.ArgumentList.Add(argument);
         string output;
+        Process? process = null;
         try
         {
-            using var process = Process.Start(start) ?? throw new InvalidOperationException("mods-live did not start");
-            var errors = process.StandardError.ReadToEndAsync(cancel);
-            output = await process.StandardOutput.ReadToEndAsync(cancel);
+            process = Process.Start(start) ?? throw new InvalidOperationException("mods-live did not start");
+            // One time limit over the reads and the wait: a hung mods-live keeps its output open, so the reads hang first.
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancel);
             timeout.CancelAfter(PrepareTimeout);
+            var errors = process.StandardError.ReadToEndAsync(timeout.Token);
+            output = await process.StandardOutput.ReadToEndAsync(timeout.Token);
             await process.WaitForExitAsync(timeout.Token);
             foreach (var line in (await errors).Split('\n', StringSplitOptions.RemoveEmptyEntries)) log($"Live mods {txn} (mods-live): {line.TrimEnd()}");
             if (process.ExitCode != 0) return (null, "The change's mods could not be built or packaged (live-mods.log).");
         }
         catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception or IOException or OperationCanceledException)
         {
+            try { if (process is { HasExited: false }) process.Kill(entireProcessTree: true); }
+            catch (Exception gone) when (gone is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException) { }
             log($"Live mods {txn}: mods-live failed: {error.Message}");
             return (null, "The change's mods could not be built or packaged.");
         }
+        finally { process?.Dispose(); }
         return Prepared(output, txn);
     }
 
